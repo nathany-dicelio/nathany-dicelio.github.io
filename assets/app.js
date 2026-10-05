@@ -12,6 +12,8 @@ const ETAPAS = {
   desenho: [['desenho', 'Desenho'], ['conferido', 'Conferido'], ['sisplan', 'Sisplan'], ['isa', 'ISA']],
   consumo: [['consumo', 'Consumo'], ['sisplan', 'Sisplan'], ['foto', 'Foto'], ['isa', 'ISA']],
 };
+// etapas feitas depois do finalizado: não mudam o "Finalizado"
+const POS_ETAPAS = { desenho: [['tabela', 'Tabela']], consumo: [] };
 const TIPO = {
   desenho: { nome: 'Desenho', plural: 'Desenhos', rota: 'desenhos', novo: 'Novo desenho', icone: 'pen' },
   consumo: { nome: 'Consumo', plural: 'Consumos', rota: 'consumos', novo: 'Novo consumo', icone: 'scissors' },
@@ -462,9 +464,73 @@ async function hidratarFotos(el = document) {
       Object.entries(m).forEach(([p, u]) => { S.urls[p] = { u, exp: agora + 50 * 60e3 }; });
     } catch (e) { console.warn('Fotos:', e); }
   }
+  const aj = mapaAjustes();
   els.forEach(e => {
     const c = S.urls[e.dataset.foto];
-    if (c) { e.style.backgroundImage = `url("${c.u}")`; e.dataset.ok = '1'; }
+    if (!c) return;
+    let img = e.querySelector(':scope > img.ft');
+    if (!img) { img = document.createElement('img'); img.className = 'ft'; img.alt = ''; img.decoding = 'async'; e.prepend(img); }
+    img.src = c.u;
+    aplicarAjuste(img, aj[e.dataset.foto]);
+    e.dataset.ok = '1';
+  });
+}
+/* ajuste de cada foto: m = cover (preencher) | contain (inteira), z = zoom, x/y = deslocamento em % do quadro */
+function mapaAjustes() {
+  const m = {};
+  S.db.pecas.forEach(pc => { if (pc.foto_ajustes) Object.assign(m, pc.foto_ajustes); });
+  return m;
+}
+function aplicarAjuste(img, a) {
+  a = a || {};
+  img.style.objectFit = a.m === 'contain' ? 'contain' : 'cover';
+  const z = +a.z || 1, x = +a.x || 0, y = +a.y || 0;
+  img.style.transform = (z !== 1 || x || y) ? `translate(${x}%, ${y}%) scale(${z})` : '';
+}
+function ajustarFoto(pc, path) {
+  const PADRAO = { m: 'cover', z: 1, x: 0, y: 0 };
+  const a = { ...PADRAO, ...((pc.foto_ajustes || {})[path] || {}) };
+  const lim = (v, min, max) => Math.min(max, Math.max(min, v));
+  modal({
+    titulo: 'Ajustar imagem', tamanho: 'sm',
+    corpo: `<div class="ajuste">
+      <div class="aj-frame th" data-foto="${esc(path)}">${ic('dress')}</div>
+      <div class="muted small" style="text-align:center">Arraste a imagem para posicionar · use o zoom para aproximar.<br>O ajuste vale para o catálogo, as listas e a ficha.</div>
+      <div class="chips" style="justify-content:center"><button type="button" class="chip" data-m="cover">Preencher o quadro</button><button type="button" class="chip" data-m="contain">Mostrar inteira</button></div>
+      <label class="fld"><span>Zoom</span><input type="range" min="0.5" max="3" step="0.05" name="z"></label>
+      <div style="text-align:center"><button type="button" class="link-btn" data-reset>Voltar ao padrão</button></div>
+    </div>`,
+    rodape: '<button type="button" class="btn" data-cancelar>Cancelar</button><button type="button" class="btn primary" data-salvar>Salvar ajuste</button>',
+    aoAbrir: m => {
+      const fr = m.$('.aj-frame'), zoom = m.$('[name=z]');
+      const aplica = () => {
+        const img = fr.querySelector('img.ft'); if (img) aplicarAjuste(img, a);
+        m.$$('[data-m]').forEach(b => b.classList.toggle('on', b.dataset.m === a.m));
+        zoom.value = a.z;
+      };
+      hidratarFotos(m.el).then(aplica); aplica();
+      fr.addEventListener('pointerdown', e => {
+        e.preventDefault(); fr.setPointerCapture(e.pointerId); fr.classList.add('arrastando');
+        const sx = e.clientX, sy = e.clientY, ox = a.x, oy = a.y, w = fr.clientWidth, h = fr.clientHeight;
+        const mv = ev => { a.x = Math.round(lim(ox + (ev.clientX - sx) / w * 100, -150, 150) * 10) / 10; a.y = Math.round(lim(oy + (ev.clientY - sy) / h * 100, -150, 150) * 10) / 10; aplica(); };
+        const up = () => { fr.classList.remove('arrastando'); fr.removeEventListener('pointermove', mv); fr.removeEventListener('pointerup', up); fr.removeEventListener('pointercancel', up); };
+        fr.addEventListener('pointermove', mv); fr.addEventListener('pointerup', up); fr.addEventListener('pointercancel', up);
+      });
+      fr.addEventListener('wheel', e => { e.preventDefault(); a.z = Math.round(lim(a.z * (e.deltaY < 0 ? 1.08 : 1 / 1.08), 0.5, 3) * 100) / 100; aplica(); }, { passive: false });
+      zoom.addEventListener('input', () => { a.z = +zoom.value; aplica(); });
+      m.el.addEventListener('click', async e => {
+        const bm = e.target.closest('[data-m]');
+        if (bm) { a.m = bm.dataset.m; aplica(); return; }
+        if (e.target.closest('[data-reset]')) { Object.assign(a, PADRAO); aplica(); return; }
+        const bs = e.target.closest('[data-salvar]');
+        if (!bs) return;
+        const novo = { ...(pc.foto_ajustes || {}) };
+        if (a.m === 'cover' && a.z === 1 && !a.x && !a.y) delete novo[path]; else novo[path] = { m: a.m, z: a.z, x: a.x, y: a.y };
+        ocupado(bs, true);
+        try { await salvarReg('pecas', { foto_ajustes: novo }, pc.id); m.fechar(); toast('Ajuste da imagem salvo.'); rerender(); }
+        catch (err) { ocupado(bs, false); toast(msgErro(err), 'erro'); }
+      });
+    },
   });
 }
 const ehPdf = p => /\.pdf$/i.test(String(p || ''));
@@ -836,6 +902,7 @@ async function acoesGlobais(e) {
   const id = a.dataset.id;
   switch (a.dataset.acao) {
     case 'etapa': return alternarEtapa(id, a.dataset.k, a);
+    case 'pos': return alternarPos(id, a.dataset.k, a);
     case 'editar-pedido': { const p = byId('pedidos', id); return p && formPedido(p.tipo, p); }
     case 'excluir-pedido': return excluirPedido(id);
     case 'editar-tarefa': return formTarefa(byId('tarefas', id));
@@ -1015,12 +1082,17 @@ function viewPedidos(tipo) {
       if (qn && !norm([pc.ref, p.op, pc.op, (pessoa(p.de_id) || {}).nome, (pessoa(p.para_id) || {}).nome, p.obs, pc.descricao, (cliente(pc.cliente_id) || {}).nome].join(' ')).includes(qn)) return false;
       return true;
     });
-    const n = { todos: base.length, andamento: base.filter(p => !p.finalizado_em).length, ok: base.filter(p => p.finalizado_em).length };
-    $('#st').innerHTML = [['todos', 'Todos'], ['andamento', 'Em andamento'], ['ok', 'Finalizados']]
-      .map(([v, t]) => `<button class="chip${f.st === v ? ' on' : ''}" data-st="${v}">${t}<span class="n">${n[v]}</span></button>`).join('');
-    const lista = base.filter(p => f.st === 'todos' || (f.st === 'ok') === !!p.finalizado_em).sort((a, b) => new Date(b.pedido_em) - new Date(a.pedido_em));
-    $('#lista').innerHTML = lista.length ? `<table class="tbl"><thead><tr>
-        <th>Pedido</th><th>Referência</th><th>De</th><th>Para</th><th>Etapas</th><th>Finalizado</th><th></th></tr></thead>
+    const pos = POS_ETAPAS[tipo];
+    const posPendente = p => p.finalizado_em && pos.some(([k]) => !(p.etapas || {})[k]);
+    const filtros = { todos: () => true, andamento: p => !p.finalizado_em, ok: p => !!p.finalizado_em, pos: posPendente };
+    const n = Object.fromEntries(Object.entries(filtros).map(([k, fn]) => [k, base.filter(fn).length]));
+    const chips = [['todos', 'Todos'], ['andamento', 'Em andamento'], ['ok', 'Finalizados']];
+    if (pos.length) chips.push(['pos', `${pos.map(([, l]) => l).join(' / ')} a fazer`]);
+    if (!filtros[f.st]) f.st = 'todos';
+    $('#st').innerHTML = chips.map(([v, t]) => `<button class="chip${f.st === v ? ' on' : ''}" data-st="${v}">${t}<span class="n">${n[v]}</span></button>`).join('');
+    const lista = base.filter(filtros[f.st]).sort((a, b) => new Date(b.pedido_em) - new Date(a.pedido_em));
+    $('#lista').innerHTML = lista.length ? `<table class="tbl tbl-ped"><thead><tr>
+        <th>Pedido</th><th>Referência</th><th>De</th><th>Para</th><th>Etapas</th><th>Finalizado</th>${pos.map(([, l]) => `<th>${l}</th>`).join('')}<th></th></tr></thead>
       <tbody>${lista.map(p => linhaPedido(p)).join('')}</tbody></table>`
       : vazio(T.icone, S.db.pedidos.some(p => p.tipo === tipo) ? 'Nada encontrado com esses filtros' : `Nenhum ${T.nome.toLowerCase()} cadastrado ainda`,
         '', `<button class="btn primary" data-novo="${tipo}">${ic('plus')}${T.novo}</button>`);
@@ -1031,11 +1103,23 @@ function viewPedidos(tipo) {
   desenhar();
 }
 
-function etapasHtml(p, mini = true) {
+function etapasHtml(p, mini = true, comPos = false) {
   return `<div class="etapas${mini ? ' mini' : ''}">${ETAPAS[p.tipo].map(([k, l]) => {
     const on = !!(p.etapas || {})[k];
     return `<button type="button" class="etp${on ? ' on' : ''}" data-acao="etapa" data-id="${p.id}" data-k="${k}" title="${on ? 'Desmarcar' : 'Marcar'} ${l}"><span class="bx">${ic('check')}</span>${l}</button>`;
-  }).join('')}</div>`;
+  }).join('')}${comPos && POS_ETAPAS[p.tipo].length ? `<span class="etp-sep" title="Depois de finalizado"></span>${POS_ETAPAS[p.tipo].map(([k, l]) => botaoPos(p, k, l)).join('')}` : ''}</div>`;
+}
+function botaoPos(p, k, l, curto = false) {
+  const on = !!(p.etapas || {})[k];
+  return `<button type="button" class="etp pos${on ? ' on' : ''}${!on && !p.finalizado_em ? ' cedo' : ''}" data-acao="pos" data-id="${p.id}" data-k="${k}" title="${on ? `Desmarcar ${l}` : `Marcar ${l} como feita`}"><span class="bx">${ic('check')}</span>${on ? (curto ? 'Feita' : `${l} feita`) : (curto ? 'Fazer' : l)}</button>`;
+}
+async function alternarPos(id, k, btn) {
+  const p = byId('pedidos', id);
+  if (!p) return;
+  const etapas = { ...(p.etapas || {}), [k]: !(p.etapas || {})[k] };
+  btn.classList.toggle('on', etapas[k]); btn.disabled = true;
+  try { await salvarReg('pedidos', { etapas }, id); rerender(); }
+  catch (e) { btn.classList.toggle('on'); btn.disabled = false; toast(msgErro(e), 'erro'); }
 }
 function linhaPedido(p) {
   const pc = peca(p.peca_id) || { fotos: [] };
@@ -1043,15 +1127,16 @@ function linhaPedido(p) {
   const op = p.op || pc.op;
   return `<tr>
     <td data-l="Pedido"><div class="when"><b>${fDia(p.pedido_em)}</b><small>${fHora(p.pedido_em)}</small></div></td>
-    <td class="c-ref"><div class="ref">${capa(pc) ? `<button type="button" class="th" style="border:0;padding:0;cursor:zoom-in;width:40px;height:50px;border-radius:8px" data-acao="fotos" data-id="${pc.id}" data-foto="${esc(capa(pc))}" title="Ver fotos">${ic('dress')}</button>` : thumb(null)}
+    <td class="c-ref"><div class="ref">${capa(pc) ? `<button type="button" class="th zoom" data-acao="fotos" data-id="${pc.id}" data-foto="${esc(capa(pc))}" title="Ver fotos">${ic('dress')}</button>` : thumb(null)}
       <div style="min-width:0"><a href="#/peca/${pc.id}">${esc(pc.ref || '—')}</a><div class="meta">${cbadge(pc.cliente_id)}${op ? `<span>OP ${esc(op)}</span>` : ''}${pdfs(pc).length ? `<span class="tag brand sem" style="height:18px;font-size:10.5px">PDF</span>` : ''}</div>
-      ${pc.descricao ? `<div class="small" style="color:var(--ink);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(pc.descricao)}">${esc(pc.descricao)}</div>` : ''}
-      ${p.obs ? `<div class="small" style="color:var(--ink-2);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(p.obs)}">${ic('note', 'i obs-ic')} ${esc(p.obs)}</div>` : ''}</div></div></td>
+      ${pc.descricao ? `<div class="small" style="color:var(--ink);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(pc.descricao)}">${esc(pc.descricao)}</div>` : ''}
+      ${p.obs ? `<div class="small" style="color:var(--ink-2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(p.obs)}">${ic('note', 'i obs-ic')} ${esc(p.obs)}</div>` : ''}</div></div></td>
     <td data-l="De">${pchip(p.de_id)}</td>
     <td data-l="Para">${pchip(p.para_id)}</td>
     <td class="full" data-l="Etapas">${etapasHtml(p)}</td>
     <td class="full" data-l="Finalizado"><div class="fim">${p.finalizado_em ? `<b>${fQuando(p.finalizado_em)}</b><small>${duracao(p.pedido_em, p.finalizado_em)}</small>`
       : `<div class="prog"><i style="width:${n / tot * 100}%"></i></div><small>${n} de ${tot}</small>`}</div></td>
+    ${POS_ETAPAS[p.tipo].map(([k, l]) => `<td data-l="${l}">${botaoPos(p, k, l, true)}</td>`).join('')}
     <td class="c-acts"><div class="acts"><button class="icon-btn" data-acao="editar-pedido" data-id="${p.id}" title="Editar">${ic('edit')}</button><button class="icon-btn danger" data-acao="excluir-pedido" data-id="${p.id}" title="Excluir">${ic('trash')}</button></div></td>
   </tr>`;
 }
@@ -1100,6 +1185,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
       <div class="fld"><span class="lbl">Etapas</span><div class="etapas">${ETAPAS[tipo].map(([k, l]) => `<label class="etp"><input type="checkbox" name="et_${k}"${(p.etapas || {})[k] ? ' checked' : ''}><span class="bx">${ic('check')}</span>${l}</label>`).join('')}</div></div>
       <div class="grid2">
         <label class="fld"><span>Finalizado em</span><input type="datetime-local" name="fim" value="${inDT(p.finalizado_em)}"><span class="hint">Preenchido sozinho quando todas as etapas são marcadas.</span></label>
+        ${POS_ETAPAS[tipo].length ? `<div class="fld"><span class="lbl">Depois de finalizado</span><div class="etapas">${POS_ETAPAS[tipo].map(([k, l]) => `<label class="etp"><input type="checkbox" name="pos_${k}"${(p.etapas || {})[k] ? ' checked' : ''}><span class="bx">${ic('check')}</span>${l}</label>`).join('')}</div></div>` : ''}
       </div>
       <label class="fld"><span>Observação <span class="hint">· deste pedido</span></span><textarea name="obs" rows="2" placeholder="Ex.: pedido de bordado">${esc(p.obs || '')}</textarea></label>
       <div class="fld"><span class="lbl">Fotos e PDFs da peça <span class="hint">· aparecem no catálogo</span></span><div class="fotos-edit" id="fotos"></div></div>
@@ -1164,7 +1250,9 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
             pc = await salvarReg('pecas', { fotos: (pc.fotos || []).filter(x => !rem.includes(x)).concat(novas) }, pc.id);
             if (rem.length) S.api.removerArquivos(rem).catch(() => {});
           }
-          const etapas = Object.fromEntries(ETAPAS[tipo].map(([k]) => [k, !!fd.get(`et_${k}`)]));
+          const etapas = { ...(p.etapas || {}),
+            ...Object.fromEntries(ETAPAS[tipo].map(([k]) => [k, !!fd.get(`et_${k}`)])),
+            ...Object.fromEntries(POS_ETAPAS[tipo].map(([k]) => [k, !!fd.get(`pos_${k}`)])) };
           const todas = ETAPAS[tipo].every(([k]) => etapas[k]);
           const fimTxt = form.fim.value;
           const row = {
@@ -1400,7 +1488,7 @@ function viewPeca(id) {
   };
   view().innerHTML = `<div class="ficha">
     <div class="card galeria">
-      <div class="principal th"${fotos.length ? ` data-foto="${esc(fotos[0])}"` : ''} id="principal">${ic('dress')}</div>
+      <div class="principal th"${fotos.length ? ` data-foto="${esc(fotos[0])}"` : ''} id="principal">${ic('dress')}${fotos.length ? `<button type="button" class="aj-btn" id="aj-foto" title="Ajustar a posição e o zoom desta imagem">${ic('sliders')}Ajustar imagem</button>` : ''}</div>
       <div class="mini" id="mini">${fotos.map((f, i) => `<button type="button" class="th${i === 0 ? ' on' : ''}" data-i="${i}" data-foto="${esc(f)}" aria-label="Foto ${i + 1}">${ic('dress')}</button>`).join('')}
         <label class="add" title="Adicionar fotos ou PDFs" style="aspect-ratio:1;border-radius:9px;cursor:pointer">${ic('camera')}<input type="file" accept="image/*,application/pdf,.pdf" multiple hidden id="add-foto"></label></div>
       ${docs.length ? `<div class="docs">${docs.map(d => `<button type="button" class="doc" data-pdf="${esc(d)}"><span class="pdf-ic">PDF</span><span class="pdf-nm">${esc(nomePdf(d))}</span>${ic('external')}</button>`).join('')}</div>` : ''}
@@ -1429,12 +1517,16 @@ function viewPeca(id) {
   const principal = $('#principal');
   const mostrar = i => {
     sel = i;
-    principal.dataset.foto = fotos[i]; delete principal.dataset.ok; principal.style.backgroundImage = '';
+    principal.dataset.foto = fotos[i]; delete principal.dataset.ok;
+    const velha = principal.querySelector('img.ft'); if (velha) velha.remove();
     $$('#mini [data-i]').forEach(b => b.classList.toggle('on', +b.dataset.i === i));
     hidratarFotos(principal.parentNode);
   };
   $('#mini').addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) mostrar(+b.dataset.i); });
-  principal.addEventListener('click', () => { if (fotos.length) lightbox(fotos, sel); });
+  principal.addEventListener('click', e => {
+    if (e.target.closest('#aj-foto')) { ajustarFoto(pc, fotos[sel]); return; }
+    if (fotos.length) lightbox(fotos, sel);
+  });
   $('#add-foto').addEventListener('change', async e => {
     const files = [...e.target.files].filter(f => f.type.startsWith('image/') || ehPdfArq(f));
     if (!files.length) return;
@@ -1452,7 +1544,7 @@ function itemHistPedido(p) {
     <div class="hd"><b>${TIPO[p.tipo].nome}</b>${p.op ? `<span class="muted small">OP ${esc(p.op)}</span>` : ''}${pchip(p.de_id)}${p.para_id ? `<span class="muted">${ic('arrowR')}</span>${pchip(p.para_id)}` : ''}
       <span style="margin-left:auto;display:flex"><button class="icon-btn" data-acao="editar-pedido" data-id="${p.id}" title="Editar">${ic('edit')}</button><button class="icon-btn danger" data-acao="excluir-pedido" data-id="${p.id}" title="Excluir">${ic('trash')}</button></span></div>
     <div class="ds">Pedido ${fQuando(p.pedido_em)} · ${p.finalizado_em ? `finalizado ${fQuando(p.finalizado_em)} (${duracao(p.pedido_em, p.finalizado_em)})` : `${n} de ${tot} etapas`}${p.obs ? ` · ${esc(p.obs)}` : ''}</div>
-    ${etapasHtml(p)}</div></div>`;
+    ${etapasHtml(p, true, true)}</div></div>`;
 }
 function itemHistTarefa(t) {
   const st = estadoPrazo(t);
