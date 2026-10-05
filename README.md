@@ -54,6 +54,9 @@ supabase/schema.sql      tabelas, regras de acesso (RLS) e bucket de fotos
 1. Em `assets/config.js`, mude `permitirCadastro` para `false`.
 2. No Supabase: **Authentication → Sign In / Providers → desligar "Allow new users to sign up"**.
 
-### Ao publicar (GitHub Pages ou outro)
+## Publicação
 
-No Supabase: **Authentication → URL Configuration** → coloque o endereço do site em **Site URL** e em **Redirect URLs** (para os links de confirmação e de "esqueci minha senha" funcionarem).
+- Site: **https://nathany-dicelio.github.io/** (demonstração: `https://nathany-dicelio.github.io/?demo`).
+- GitHub Pages da organização `nathany-dicelio`, repositório `nathany-dicelio.github.io`, ramo `main`. Basta dar `git push` que o site atualiza em cerca de 1 minuto.
+- Ao mudar CSS/JS, troque o `?v=` em `index.html` para o navegador não usar a versão antiga.
+- Supabase → Authentication → URL Configuration: Site URL `https://nathany-dicelio.github.io/` e Redirect URL `https://nathany-dicelio.github.io/**` (já configurados).
