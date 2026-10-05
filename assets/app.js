@@ -9,7 +9,7 @@ const CFG = window.ND_CONFIG || {};
 const DEMO = !(CFG.supabaseUrl && CFG.supabaseAnonKey) || new URLSearchParams(location.search).has('demo');
 
 const ETAPAS = {
-  desenho: [['desenho', 'Desenho'], ['conferido', 'Conferido'], ['sisplan', 'Sisplan'], ['isa', 'ISA'], ['tabela', 'Tabela'], ['foto', 'Foto']],
+  desenho: [['desenho', 'Desenho'], ['conferido', 'Conferido'], ['sisplan', 'Sisplan'], ['isa', 'ISA']],
   consumo: [['consumo', 'Consumo'], ['sisplan', 'Sisplan'], ['foto', 'Foto'], ['isa', 'ISA']],
 };
 const TIPO = {
@@ -411,10 +411,13 @@ async function excluirReg(tab, id) {
 /* referência: "BL115546 CeA" → ref BL115546 + cliente C&A */
 function separarSufixo(texto) {
   const ref = normRef(texto);
+  const ja = S.db.pecas.find(x => x.ref === ref);
+  if (ja) return { ref, cliente: cliente(ja.cliente_id) };
   const partes = ref.split(' ');
   if (partes.length > 1) {
     const ult = partes[partes.length - 1];
-    const c = S.db.clientes.find(x => x.sigla && x.sigla.toUpperCase() === ult);
+    const so = t => norm(t).replace(/[^a-z0-9]/g, '');
+    const c = S.db.clientes.find(x => (x.sigla && x.sigla.toUpperCase() === ult) || (so(x.nome) && so(x.nome) === so(ult)));
     if (c) return { ref: partes.slice(0, -1).join(' '), cliente: c };
   }
   return { ref, cliente: null };
@@ -464,9 +467,27 @@ async function hidratarFotos(el = document) {
     if (c) { e.style.backgroundImage = `url("${c.u}")`; e.dataset.ok = '1'; }
   });
 }
+const ehPdf = p => /\.pdf$/i.test(String(p || ''));
+const ehPdfArq = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '');
+const imagens = pc => ((pc && pc.fotos) || []).filter(p => !ehPdf(p));
+const pdfs = pc => ((pc && pc.fotos) || []).filter(ehPdf);
+const capa = pc => imagens(pc)[0] || null;
+const nomePdf = p => { const b = String(p).split('/').pop(); const i = b.indexOf('-', 36); return i > 0 ? b.slice(i + 1) : 'documento.pdf'; };
+async function abrirArquivo(path) {
+  const w = window.open('', '_blank');
+  try { const u = await S.api.urlArquivo(path); if (w) w.location = u; else location.href = u; }
+  catch (e) { if (w) w.close(); toast(msgErro(e), 'erro'); }
+}
 async function enviarFotos(pecaId, files) {
   const paths = [];
   for (const f of files) {
+    if (ehPdfArq(f)) {
+      if (f.size > 15 * 1048576) throw new Error(`O PDF ${f.name} passa de 15 MB.`);
+      const path = `pecas/${pecaId}/${uid()}-${nomeSeguro(f.name).replace(/\.pdf$/, '')}.pdf`;
+      await S.api.enviar(path, f.type ? f : new Blob([f], { type: 'application/pdf' }));
+      paths.push(path);
+      continue;
+    }
     const b = await comprimir(f);
     const path = `pecas/${pecaId}/${uid()}.${extDe(b, f.name)}`;
     await S.api.enviar(path, b);
@@ -562,19 +583,27 @@ function novaPessoaRapida(cb) {
 function editorFotos(box, inicial = []) {
   let exist = [...inicial], novas = [], rem = [];
   const draw = () => {
-    box.innerHTML = exist.map((p, i) => `<div class="f th" data-foto="${esc(p)}">${ic('dress')}<button type="button" data-rm-e="${i}" title="Remover foto">${ic('x')}</button></div>`).join('')
-      + novas.map((n, i) => `<div class="f th" data-ok="1" style="background-image:url('${n.url}')"><button type="button" data-rm-n="${i}" title="Remover foto">${ic('x')}</button></div>`).join('')
-      + `<label class="add">${ic('camera')}<span>Adicionar</span><input type="file" accept="image/*" multiple></label>`;
+    const tilePdf = nome => `<span class="pdf-ic">PDF</span><span class="pdf-nm">${esc(nome)}</span>`;
+    box.innerHTML = exist.map((p, i) => (ehPdf(p)
+      ? `<div class="f pdf" title="${esc(nomePdf(p))}">${tilePdf(nomePdf(p))}<button type="button" data-rm-e="${i}" title="Remover PDF">${ic('x')}</button></div>`
+      : `<div class="f th" data-foto="${esc(p)}">${ic('dress')}<button type="button" data-rm-e="${i}" title="Remover foto">${ic('x')}</button></div>`)).join('')
+      + novas.map((n, i) => (n.pdf
+        ? `<div class="f pdf" title="${esc(n.file.name)}">${tilePdf(n.file.name)}<button type="button" data-rm-n="${i}" title="Remover PDF">${ic('x')}</button></div>`
+        : `<div class="f th" data-ok="1" style="background-image:url('${n.url}')"><button type="button" data-rm-n="${i}" title="Remover foto">${ic('x')}</button></div>`)).join('')
+      + `<label class="add">${ic('camera')}<span>Foto ou PDF</span><input type="file" accept="image/*,application/pdf,.pdf" multiple></label>`;
     hidratarFotos(box);
   };
   box.addEventListener('click', e => {
     const a = e.target.closest('[data-rm-e]'), b = e.target.closest('[data-rm-n]');
     if (a) { rem.push(exist.splice(+a.dataset.rmE, 1)[0]); draw(); }
-    if (b) { URL.revokeObjectURL(novas[+b.dataset.rmN].url); novas.splice(+b.dataset.rmN, 1); draw(); }
+    if (b) { const n = novas[+b.dataset.rmN]; if (n.url) URL.revokeObjectURL(n.url); novas.splice(+b.dataset.rmN, 1); draw(); }
   });
   box.addEventListener('change', e => {
     if (e.target.type !== 'file') return;
-    [...e.target.files].forEach(file => { if (file.type.startsWith('image/')) novas.push({ file, url: URL.createObjectURL(file) }); });
+    [...e.target.files].forEach(file => {
+      if (ehPdfArq(file)) novas.push({ file, pdf: true });
+      else if (file.type.startsWith('image/')) novas.push({ file, url: URL.createObjectURL(file) });
+    });
     draw();
   });
   draw();
@@ -755,7 +784,7 @@ function ligarBuscaGlobal() {
     const q = inp.value.trim();
     if (!q) return fechar();
     lista = pecasQue(q).slice(0, 7);
-    box.innerHTML = lista.length ? lista.map((pc, i) => `<a href="#/peca/${pc.id}" class="${i === sel ? 'sel' : ''}">${thumb(pc.fotos[0])}<div class="tx"><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${opsDaPeca(pc).length ? 'OP ' + esc(opsDaPeca(pc).join(', ')) : 'Sem OP'}${pc.descricao ? ' · ' + esc(pc.descricao) : ''}</small></div></a>`).join('')
+    box.innerHTML = lista.length ? lista.map((pc, i) => `<a href="#/peca/${pc.id}" class="${i === sel ? 'sel' : ''}">${thumb(capa(pc))}<div class="tx"><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${opsDaPeca(pc).length ? 'OP ' + esc(opsDaPeca(pc).join(', ')) : 'Sem OP'}${pc.descricao ? ' · ' + esc(pc.descricao) : ''}</small></div></a>`).join('')
       + `<a href="#/busca/${encodeURIComponent(q)}" class="${sel === lista.length ? 'sel' : ''}"><div class="tx"><b>${ic('search')} Ver todos os resultados para “${esc(q)}”</b></div></a>`
       : `<div class="vazio-s">Nada encontrado para “${esc(q)}”.</div><a href="#/busca/${encodeURIComponent(q)}"><div class="tx"><b>Abrir pesquisa</b></div></a>`;
     box.classList.remove('hidden');
@@ -812,7 +841,7 @@ async function acoesGlobais(e) {
     case 'editar-tarefa': return formTarefa(byId('tarefas', id));
     case 'excluir-tarefa': return excluirTarefa(id);
     case 'entregar': return entregarTarefa(byId('tarefas', id));
-    case 'fotos': { const pc = peca(id); return pc && lightbox(pc.fotos, +(a.dataset.i || 0)); }
+    case 'fotos': { const pc = peca(id); return pc && lightbox(imagens(pc), +(a.dataset.i || 0)); }
     default:
   }
 }
@@ -870,7 +899,7 @@ function viewInicio() {
   const abertas = S.db.tarefas.filter(t => !t.entregue_em);
   const atrasadas = abertas.filter(t => t.prazo && new Date(t.prazo) < agora).length;
   const paraHoje = abertas.filter(t => t.prazo && new Date(t.prazo) >= agora && mesmoDia(new Date(t.prazo), agora)).length;
-  const comFoto = S.db.pecas.filter(p => (p.fotos || []).length).length;
+  const comFoto = S.db.pecas.filter(p => capa(p)).length;
   const nomePer = { tudo: 'desde o início', mes: 'neste mês', ano: 'neste ano', 30: 'nos últimos 30 dias' }[per];
 
   // gráfico por mês
@@ -951,7 +980,7 @@ function viewInicio() {
         </div>
         <div class="card">
           <div class="card-h"><h3>Peças recentes</h3><div class="r"><a class="link-btn" href="#/catalogo">Catálogo</a></div></div>
-          <div class="card-b">${recentes.length ? `<div class="strip">${recentes.map(pc => `<a href="#/peca/${pc.id}">${thumb(pc.fotos[0])}${esc(pc.ref)}</a>`).join('')}</div>` : vazio('dress', 'Nenhuma peça ainda')}</div>
+          <div class="card-b">${recentes.length ? `<div class="strip">${recentes.map(pc => `<a href="#/peca/${pc.id}">${thumb(capa(pc))}${esc(pc.ref)}</a>`).join('')}</div>` : vazio('dress', 'Nenhuma peça ainda')}</div>
         </div>
       </div>
     </div>`;
@@ -1014,8 +1043,9 @@ function linhaPedido(p) {
   const op = p.op || pc.op;
   return `<tr>
     <td data-l="Pedido"><div class="when"><b>${fDia(p.pedido_em)}</b><small>${fHora(p.pedido_em)}</small></div></td>
-    <td class="c-ref"><div class="ref">${(pc.fotos || []).length ? `<button type="button" class="th" style="border:0;padding:0;cursor:zoom-in;width:40px;height:50px;border-radius:8px" data-acao="fotos" data-id="${pc.id}" data-foto="${esc(pc.fotos[0])}" title="Ver fotos">${ic('dress')}</button>` : thumb(null)}
-      <div style="min-width:0"><a href="#/peca/${pc.id}">${esc(pc.ref || '—')}</a><div class="meta">${cbadge(pc.cliente_id)}${op ? `<span>OP ${esc(op)}</span>` : ''}</div>
+    <td class="c-ref"><div class="ref">${capa(pc) ? `<button type="button" class="th" style="border:0;padding:0;cursor:zoom-in;width:40px;height:50px;border-radius:8px" data-acao="fotos" data-id="${pc.id}" data-foto="${esc(capa(pc))}" title="Ver fotos">${ic('dress')}</button>` : thumb(null)}
+      <div style="min-width:0"><a href="#/peca/${pc.id}">${esc(pc.ref || '—')}</a><div class="meta">${cbadge(pc.cliente_id)}${op ? `<span>OP ${esc(op)}</span>` : ''}${pdfs(pc).length ? `<span class="tag brand sem" style="height:18px;font-size:10.5px">PDF</span>` : ''}</div>
+      ${pc.descricao ? `<div class="small" style="color:var(--ink);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(pc.descricao)}">${esc(pc.descricao)}</div>` : ''}
       ${p.obs ? `<div class="small" style="color:var(--ink-2);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(p.obs)}">${ic('note', 'i obs-ic')} ${esc(p.obs)}</div>` : ''}</div></div></td>
     <td data-l="De">${pchip(p.de_id)}</td>
     <td data-l="Para">${pchip(p.para_id)}</td>
@@ -1062,6 +1092,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
         <label class="fld"><span>Cliente</span><select name="cliente">${opClientes(pcAtual ? pcAtual.cliente_id : '', '—')}</select></label>
         <label class="fld"><span>Data do pedido</span><input type="date" name="data" value="${inData(quando)}"></label>
         <label class="fld"><span>Hora</span><input type="time" name="hora" value="${inHora(quando)}"></label>
+        <label class="fld span3"><span>Descrição <span class="hint">· da peça, aparece no catálogo</span></span><input name="descricao" value="${esc((pcAtual && pcAtual.descricao) || '')}" placeholder="Ex.: colete de tricô com bolso"></label>
       </div>
       <div id="peca-info"></div>
       <div class="fld"><span class="lbl">Quem pediu (de)</span>${pickPessoas('de', p.de_id)}</div>
@@ -1070,8 +1101,8 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
       <div class="grid2">
         <label class="fld"><span>Finalizado em</span><input type="datetime-local" name="fim" value="${inDT(p.finalizado_em)}"><span class="hint">Preenchido sozinho quando todas as etapas são marcadas.</span></label>
       </div>
-      <label class="fld"><span>Descrição / observação</span><textarea name="obs" rows="2" placeholder="Ex.: pedido de bordado">${esc(p.obs || '')}</textarea></label>
-      <div class="fld"><span class="lbl">Fotos da peça <span class="hint">· aparecem no catálogo</span></span><div class="fotos-edit" id="fotos"></div></div>
+      <label class="fld"><span>Observação <span class="hint">· deste pedido</span></span><textarea name="obs" rows="2" placeholder="Ex.: pedido de bordado">${esc(p.obs || '')}</textarea></label>
+      <div class="fld"><span class="lbl">Fotos e PDFs da peça <span class="hint">· aparecem no catálogo</span></span><div class="fotos-edit" id="fotos"></div></div>
       <datalist id="dl-refs">${S.db.pecas.map(x => `<option value="${esc(x.ref)}">`).join('')}</datalist>
     </form>`,
     rodape: `<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fp" class="btn primary">${pedido ? 'Salvar' : 'Cadastrar'}</button>`,
@@ -1095,12 +1126,13 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
         const box = m.$('#peca-info');
         if (achada) {
           const nPed = S.db.pedidos.filter(x => x.peca_id === achada.id && x.id !== p.id).length;
-          box.innerHTML = `<div class="peca-info">${thumb(achada.fotos[0])}<div>Peça já cadastrada${achada.descricao ? ` · <b>${esc(achada.descricao)}</b>` : ''} · ${plural(nPed, 'outro pedido', 'outros pedidos')}. As fotos e o cliente são da peça.</div></div>`;
+          box.innerHTML = `<div class="peca-info">${thumb(capa(achada))}<div>Peça já cadastrada · ${nPed ? plural(nPed, 'outro pedido', 'outros pedidos') : 'nenhum outro pedido'}. Descrição, fotos e cliente são da peça.</div></div>`;
           hidratarFotos(box);
           if (achada !== pcAtual) {
             pcAtual = achada;
             if (achada.cliente_id) form.cliente.value = achada.cliente_id;
             if (!form.op.value && achada.op) form.op.value = achada.op;
+            if (!form.descricao.value && achada.descricao) form.descricao.value = achada.descricao;
             fotos.trocar(achada.fotos || []);
           }
         } else {
@@ -1122,9 +1154,10 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
         try {
           const op = String(fd.get('op') || '').trim() || null;
           const cliId = fd.get('cliente') || (c && c.id) || null;
+          const descricao = String(fd.get('descricao') || '').trim() || null;
           let pc = S.db.pecas.find(x => x.ref === ref);
-          if (!pc) pc = await salvarReg('pecas', { ref, op, cliente_id: cliId, fotos: [], detalhes: [] });
-          else if ((op && op !== pc.op) || cliId !== pc.cliente_id) pc = await salvarReg('pecas', { op: op || pc.op, cliente_id: cliId }, pc.id);
+          if (!pc) pc = await salvarReg('pecas', { ref, op, cliente_id: cliId, descricao, fotos: [], detalhes: [] });
+          else if ((op && op !== pc.op) || cliId !== pc.cliente_id || descricao !== (pc.descricao || null)) pc = await salvarReg('pecas', { op: op || pc.op, cliente_id: cliId, descricao }, pc.id);
           const novas = await enviarFotos(pc.id, fotos.novas());
           const rem = fotos.removidas().filter(x => (pc.fotos || []).includes(x));
           if (novas.length || rem.length) {
@@ -1296,9 +1329,9 @@ async function excluirTarefa(id) {
    CATÁLOGO, PESQUISA e FICHA DA PEÇA
    ================================================================ */
 function cartaoPeca(pc) {
-  const st = statusPeca(pc.id), ops = opsDaPeca(pc), nf = (pc.fotos || []).length;
+  const st = statusPeca(pc.id), ops = opsDaPeca(pc), nf = imagens(pc).length, np = pdfs(pc).length;
   return `<a class="pc" href="#/peca/${pc.id}">
-    ${thumb(pc.fotos[0], 'th', `${cbadge(pc.cliente_id)}${nf > 1 ? `<span class="nf">${ic('image')}${nf}</span>` : ''}`)}
+    ${thumb(capa(pc), 'th', `${cbadge(pc.cliente_id)}${nf > 1 || np ? `<span class="nf">${nf > 1 ? `${ic('image')}${nf}` : ''}${np ? `${nf > 1 ? ' · ' : ''}${ic('file')}${np}` : ''}</span>` : ''}`)}
     <div class="bd"><b>${esc(pc.ref)}</b><div class="op">${ops.length ? `OP ${esc(ops.join(' · '))}` : 'Sem OP'}</div>
       ${pc.descricao ? `<div class="desc">${esc(pc.descricao)}</div>` : ''}
       <div class="st">${tagStatus('desenho', st.desenho)}${tagStatus('consumo', st.consumo)}</div></div></a>`;
@@ -1354,7 +1387,7 @@ function viewPeca(id) {
   const c = cliente(pc.cliente_id), ops = opsDaPeca(pc), st = statusPeca(pc.id);
   setPage(pc.ref, [c ? c.nome : 'Sem cliente', ops.length ? `OP ${ops.join(', ')}` : ''].filter(Boolean).join(' · '),
     `<button class="btn" data-novo="consumo" data-peca="${pc.id}">${ic('scissors')}<span class="tx">Consumo</span></button><button class="btn primary" data-novo="desenho" data-peca="${pc.id}" style="margin-left:8px">${ic('plus')}<span class="tx">Desenho</span></button>`);
-  const fotos = pc.fotos || [];
+  const fotos = imagens(pc), docs = pdfs(pc);
   let sel = 0;
   const peds = S.db.pedidos.filter(p => p.peca_id === pc.id).map(p => ({ k: 'p', d: p.pedido_em, p }));
   const tars = S.db.tarefas.filter(t => t.peca_id === pc.id).map(t => ({ k: 't', d: t.pedido_em, t }));
@@ -1369,7 +1402,8 @@ function viewPeca(id) {
     <div class="card galeria">
       <div class="principal th"${fotos.length ? ` data-foto="${esc(fotos[0])}"` : ''} id="principal">${ic('dress')}</div>
       <div class="mini" id="mini">${fotos.map((f, i) => `<button type="button" class="th${i === 0 ? ' on' : ''}" data-i="${i}" data-foto="${esc(f)}" aria-label="Foto ${i + 1}">${ic('dress')}</button>`).join('')}
-        <label class="add" title="Adicionar fotos" style="aspect-ratio:1;border-radius:9px;cursor:pointer">${ic('camera')}<input type="file" accept="image/*" multiple hidden id="add-foto"></label></div>
+        <label class="add" title="Adicionar fotos ou PDFs" style="aspect-ratio:1;border-radius:9px;cursor:pointer">${ic('camera')}<input type="file" accept="image/*,application/pdf,.pdf" multiple hidden id="add-foto"></label></div>
+      ${docs.length ? `<div class="docs">${docs.map(d => `<button type="button" class="doc" data-pdf="${esc(d)}"><span class="pdf-ic">PDF</span><span class="pdf-nm">${esc(nomePdf(d))}</span>${ic('external')}</button>`).join('')}</div>` : ''}
     </div>
     <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
       <div class="card">
@@ -1402,12 +1436,13 @@ function viewPeca(id) {
   $('#mini').addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) mostrar(+b.dataset.i); });
   principal.addEventListener('click', () => { if (fotos.length) lightbox(fotos, sel); });
   $('#add-foto').addEventListener('change', async e => {
-    const files = [...e.target.files].filter(f => f.type.startsWith('image/'));
+    const files = [...e.target.files].filter(f => f.type.startsWith('image/') || ehPdfArq(f));
     if (!files.length) return;
-    toast(`Enviando ${plural(files.length, 'foto')}…`);
-    try { const novas = await enviarFotos(pc.id, files); await salvarReg('pecas', { fotos: fotos.concat(novas) }, pc.id); toast('Fotos adicionadas.'); rerender(); }
+    toast(`Enviando ${plural(files.length, 'arquivo')}…`);
+    try { const novas = await enviarFotos(pc.id, files); await salvarReg('pecas', { fotos: (pc.fotos || []).concat(novas) }, pc.id); toast('Arquivos adicionados.'); rerender(); }
     catch (err) { toast(msgErro(err), 'erro'); }
   });
+  $$('[data-pdf]', view()).forEach(b => { b.onclick = () => abrirArquivo(b.dataset.pdf); });
   $('#ed-peca').onclick = () => formPeca(pc);
   $('#ed-det').onclick = () => formPeca(pc);
 }
@@ -1437,7 +1472,7 @@ function formPeca(pc) {
       </div>
       <label class="fld"><span>Descrição</span><input name="descricao" value="${esc(pc.descricao || '')}" placeholder="Ex.: vestido midi com amarração"></label>
       <label class="fld"><span>Informações <span class="hint">· uma por linha (viram a lista 1, 2, 3…)</span></span><textarea name="detalhes" rows="5" placeholder="Tecido: viscose&#10;Botões forrados (8 un.)&#10;Forro somente no corpo">${esc((pc.detalhes || []).join('\n'))}</textarea></label>
-      <div class="fld"><span class="lbl">Fotos</span><div class="fotos-edit" id="fotos"></div></div>
+      <div class="fld"><span class="lbl">Fotos e PDFs</span><div class="fotos-edit" id="fotos"></div></div>
     </form>`,
     rodape: `<button type="button" class="btn danger esq" id="del-peca">${ic('trash')}Excluir peça</button><button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fpc" class="btn primary">Salvar</button>`,
     aoAbrir: m => {

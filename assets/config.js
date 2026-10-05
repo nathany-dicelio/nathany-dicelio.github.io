@@ -5,7 +5,7 @@
 window.ND_CONFIG = {
   supabaseUrl: 'https://bubhhonjvyijgfiipseb.supabase.co',
   supabaseAnonKey: 'sb_publishable_W0Ut6IXmUZUMpgpfwgppVQ_8difPSz7',
-  // Deixe true só até a Nathany criar a conta dela. Depois mude para false
-  // e desligue "Allow new users to sign up" no Supabase (Authentication > Sign In / Providers).
-  permitirCadastro: true,
+  // Cadastro fechado: as contas da Nathany e do Henrique já existem.
+  // "Allow new users to sign up" também está desligado no Supabase (Authentication > Sign In / Providers).
+  permitirCadastro: false,
 };
