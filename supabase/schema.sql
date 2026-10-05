@@ -190,3 +190,9 @@ begin
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
   end loop;
 end $$;
+
+-- =====================================================================
+-- AJUSTE DAS FOTOS (adicionado em 2026-10-05): posição e zoom por imagem
+-- formato: { "<caminho da foto>": { "m": "cover|contain", "z": 1.2, "x": 10, "y": -5 } }
+-- =====================================================================
+alter table public.pecas add column if not exists foto_ajustes jsonb not null default '{}'::jsonb;
