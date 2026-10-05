@@ -1,0 +1,16 @@
+{
+  "name": "Nathany Di Celio · Ateliê",
+  "short_name": "Ateliê ND",
+  "description": "Controle de desenhos, consumos, tarefas e catálogo de peças.",
+  "start_url": "./#/inicio",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F8F4F0",
+  "theme_color": "#781026",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
