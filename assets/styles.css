@@ -748,6 +748,9 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .cons-arqs { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .cons-arqs .mini { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; }
 .cons-arqs .mini button { aspect-ratio: 1; border-radius: 9px; border: 0; padding: 0; cursor: zoom-in; }
+/* catálogo: separar por tipo de peça */
+.tipos-peca .chip { height: 36px; padding: 0 15px; font-size: 13.5px; }
+.chip.sem-itens:not(.on) { opacity: .45; }
 @media print {
   .side, .topbar .acoes, .toolbar, .acts { display: none !important; }
   .shell { display: block; }
