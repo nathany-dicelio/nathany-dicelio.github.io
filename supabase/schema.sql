@@ -196,3 +196,8 @@ end $$;
 -- formato: { "<caminho da foto>": { "m": "cover|contain", "z": 1.2, "x": 10, "y": -5 } }
 -- =====================================================================
 alter table public.pecas add column if not exists foto_ajustes jsonb not null default '{}'::jsonb;
+
+-- =====================================================================
+-- ARQUIVOS DO CONSUMO (adicionado em 2026-10-06): separados das fotos do catálogo
+-- =====================================================================
+alter table public.pecas add column if not exists arquivos_consumo jsonb not null default '[]'::jsonb;

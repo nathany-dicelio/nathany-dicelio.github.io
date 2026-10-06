@@ -740,6 +740,14 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .etp.pos.cedo { opacity: .5; }
 .etp.pos.cedo:hover { opacity: 1; }
 .etp-sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; align-self: center; }
+/* horário de cada etapa (histórico) e arquivos do consumo */
+.etp-tempos { list-style: none; margin: 10px 0 0; padding: 10px 12px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--line-2); display: grid; gap: 5px; font-size: 12.5px; color: var(--ink-2); }
+.etp-tempos li { display: flex; gap: 6px; align-items: center; }
+.etp-tempos svg { width: 13px; height: 13px; color: var(--green); stroke-width: 3; }
+.etp-tempos b { color: var(--ink); font-weight: 600; }
+.cons-arqs { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cons-arqs .mini { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; }
+.cons-arqs .mini button { aspect-ratio: 1; border-radius: 9px; border: 0; padding: 0; cursor: zoom-in; }
 @media print {
   .side, .topbar .acoes, .toolbar, .acts { display: none !important; }
   .shell { display: block; }
