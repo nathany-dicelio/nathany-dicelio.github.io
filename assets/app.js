@@ -493,7 +493,8 @@ async function hidratarFotos(el = document) {
     if (!img) { img = document.createElement('img'); img.className = 'ft'; img.alt = ''; img.decoding = 'async'; img.loading = 'lazy'; e.prepend(img); }
     img.src = c.u;
     aplicarAjuste(img, aj[e.dataset.foto]);
-    if (e.dataset.fit) img.style.objectFit = e.dataset.fit;
+    // data-fit: mostra a imagem inteira (fichas, guia) sem o zoom/posição do catálogo
+    if (e.dataset.fit) { img.style.objectFit = e.dataset.fit; img.style.transform = ''; }
     e.dataset.ok = '1';
   });
 }
