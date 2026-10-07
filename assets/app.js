@@ -567,7 +567,12 @@ const pdfsCons = pc => arqCons(pc).filter(ehPdf);
 const noCatalogo = pc => S.db.pedidos.some(p => p.peca_id === pc.id && p.tipo === 'desenho');
 const campoArq = tipo => (tipo === 'consumo' ? 'arquivos_consumo' : 'fotos');
 // etapa marcada guarda a data/hora (texto ISO); registros antigos guardam só "true"
-const quandoEtapa = v => (typeof v === 'string' && v.length > 10 ? fQuando(v) : '');
+const ehNC = v => typeof v === 'string' && v.startsWith('nc:');
+const isoEtapa = v => (typeof v === 'string' ? v.replace(/^nc:/, '') : '');
+const quandoEtapa = v => (isoEtapa(v).length > 10 ? fQuando(isoEtapa(v)) : '');
+// clique: não feita → feita → não cadastrado → não feita
+const proximaEtapa = v => (!v ? agoraISO() : ehNC(v) ? false : `nc:${agoraISO()}`);
+const DICA_ETAPA = 'Clique 1 vez = feito · 2 vezes = não cadastrado (vermelho) · 3 vezes = desmarca';
 const nomePdf = p => { const b = String(p).split('/').pop(); const i = b.indexOf('-', 36); return i > 0 ? b.slice(i + 1) : 'documento.pdf'; };
 async function abrirArquivo(path, pagina) {
   const w = window.open('', '_blank');
@@ -1142,8 +1147,10 @@ function viewPedidos(tipo) {
 function etapasHtml(p, mini = true, comPos = false) {
   return `<div class="etapas${mini ? ' mini' : ''}">${ETAPAS[p.tipo].map(([k, l]) => {
     const on = !!(p.etapas || {})[k];
-    const qd = quandoEtapa((p.etapas || {})[k]);
-    return `<button type="button" class="etp${on ? ' on' : ''}" data-acao="etapa" data-id="${p.id}" data-k="${k}" title="${on ? `${l}: feito${qd ? ' ' + qd : ''} — clique para desmarcar` : `Marcar ${l}`}"><span class="bx">${ic('check')}</span>${l}</button>`;
+    const v = (p.etapas || {})[k], nc = ehNC(v), qd = quandoEtapa(v);
+    const titulo = nc ? `${l}: não cadastrado${qd ? ' (marcado ' + qd + ')' : ''} — clique para desmarcar`
+      : on ? `${l}: feito${qd ? ' ' + qd : ''} — clique de novo se não foi cadastrado` : `Marcar ${l} como feito`;
+    return `<button type="button" class="etp${nc ? ' nc' : on ? ' on' : ''}" data-acao="etapa" data-id="${p.id}" data-k="${k}" title="${titulo}"><span class="bx">${ic(nc ? 'x' : 'check')}</span>${l}</button>`;
   }).join('')}${comPos && POS_ETAPAS[p.tipo].length ? `<span class="etp-sep" title="Depois de finalizado"></span>${POS_ETAPAS[p.tipo].map(([k, l]) => botaoPos(p, k, l)).join('')}` : ''}</div>`;
 }
 function botaoPos(p, k, l, curto = false) {
@@ -1184,15 +1191,18 @@ function linhaPedido(p) {
 async function alternarEtapa(id, k, btn) {
   const p = byId('pedidos', id);
   if (!p) return;
-  const etapas = { ...(p.etapas || {}), [k]: (p.etapas || {})[k] ? false : agoraISO() };
+  const novo = proximaEtapa((p.etapas || {})[k]);
+  const etapas = { ...(p.etapas || {}), [k]: novo };
   const todas = ETAPAS[p.tipo].every(([kk]) => etapas[kk]);
   const fim = todas ? (p.finalizado_em || agoraISO()) : null;
-  btn.classList.toggle('on', etapas[k]); btn.disabled = true;
+  btn.classList.toggle('on', !!novo && !ehNC(novo)); btn.classList.toggle('nc', ehNC(novo)); btn.disabled = true;
   try {
     await salvarReg('pedidos', { etapas, finalizado_em: fim }, id);
+    const nome = (ETAPAS[p.tipo].find(([kk]) => kk === k) || [])[1] || 'Etapa';
+    if (ehNC(novo)) toast(`${nome} marcado como não cadastrado.`);
     if (todas && !p.finalizado_em) toast(`${TIPO[p.tipo].nome} da ${(peca(p.peca_id) || {}).ref || 'peça'} finalizado!`);
     rerender();
-  } catch (e) { btn.classList.toggle('on'); btn.disabled = false; toast(msgErro(e), 'erro'); }
+  } catch (e) { btn.disabled = false; toast(msgErro(e), 'erro'); rerender(); }
 }
 
 async function excluirPedido(id) {
@@ -1222,7 +1232,8 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
       <div id="peca-info"></div>
       <div class="fld"><span class="lbl">Quem pediu (de)</span>${pickPessoas('de', p.de_id)}</div>
       <div class="fld"><span class="lbl">Para quem</span>${pickPessoas('para', p.para_id)}</div>
-      <div class="fld"><span class="lbl">Etapas</span><div class="etapas">${ETAPAS[tipo].map(([k, l]) => `<label class="etp"><input type="checkbox" name="et_${k}"${(p.etapas || {})[k] ? ' checked' : ''}><span class="bx">${ic('check')}</span>${l}</label>`).join('')}</div></div>
+      <div class="fld"><span class="lbl">Etapas <span class="hint">· ${DICA_ETAPA}</span></span><div class="etapas" id="etapas-form">${ETAPAS[tipo].map(([k, l]) => { const v = (p.etapas || {})[k];
+        return `<button type="button" class="etp${ehNC(v) ? ' nc' : v ? ' on' : ''}" data-et="${k}" data-v="${esc(v === true ? 'true' : v || '')}"><span class="bx">${ic(ehNC(v) ? 'x' : 'check')}</span>${l}${ehNC(v) ? '<small>não cadastrado</small>' : ''}</button>`; }).join('')}</div></div>
       <div class="grid2">
         <label class="fld"><span>Finalizado em</span><input type="datetime-local" name="fim" value="${inDT(p.finalizado_em)}"><span class="hint">Preenchido sozinho quando todas as etapas são marcadas.</span></label>
         ${POS_ETAPAS[tipo].length ? `<div class="fld"><span class="lbl">Depois de finalizado</span><div class="etapas">${POS_ETAPAS[tipo].map(([k, l]) => `<label class="etp"><input type="checkbox" name="pos_${k}"${(p.etapas || {})[k] ? ' checked' : ''}><span class="bx">${ic('check')}</span>${l}</label>`).join('')}</div></div>` : ''}
@@ -1237,8 +1248,18 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
       fotos = editorFotos(m.$('#fotos'), pcAtual ? (pcAtual[campoArq(tipo)] || []) : []);
       ligarNovaPessoa(form);
       const fimInp = form.fim;
+      const valorEt = k => { const b = form.querySelector(`[data-et="${k}"]`); return b.dataset.v === 'true' ? true : (b.dataset.v || false); };
+      form.querySelector('#etapas-form').addEventListener('click', e => {
+        const b = e.target.closest('[data-et]'); if (!b) return;
+        const novo = proximaEtapa(valorEt(b.dataset.et));
+        b.dataset.v = novo || '';
+        b.className = `etp${ehNC(novo) ? ' nc' : novo ? ' on' : ''}`;
+        const l = (ETAPAS[tipo].find(([kk]) => kk === b.dataset.et) || [])[1];
+        b.innerHTML = `<span class="bx">${ic(ehNC(novo) ? 'x' : 'check')}</span>${l}${ehNC(novo) ? '<small>não cadastrado</small>' : ''}`;
+        conferirFim();
+      });
       const conferirFim = () => {
-        const todas = ETAPAS[tipo].every(([k]) => form[`et_${k}`].checked);
+        const todas = ETAPAS[tipo].every(([k]) => valorEt(k));
         fimInp.disabled = !todas;
         if (todas && !fimInp.value) fimInp.value = inDT(agoraISO());
         if (!todas) fimInp.value = '';
@@ -1293,7 +1314,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
           }
           const marca = (k, on) => (on ? ((p.etapas || {})[k] || agoraISO()) : false);
           const etapas = { ...(p.etapas || {}),
-            ...Object.fromEntries(ETAPAS[tipo].map(([k]) => [k, marca(k, !!fd.get(`et_${k}`))])),
+            ...Object.fromEntries(ETAPAS[tipo].map(([k]) => [k, valorEt(k)])),
             ...Object.fromEntries(POS_ETAPAS[tipo].map(([k]) => [k, marca(k, !!fd.get(`pos_${k}`))])) };
           const todas = ETAPAS[tipo].every(([k]) => etapas[k]);
           const fimTxt = form.fim.value;
@@ -1618,8 +1639,10 @@ function itemHistPedido(p) {
     ${(() => {
       const feitas = [...ETAPAS[p.tipo], ...POS_ETAPAS[p.tipo]].filter(([k]) => (p.etapas || {})[k])
         .map(([k, l]) => ({ l, v: p.etapas[k] }))
-        .sort((a, b) => String(typeof a.v === 'string' ? a.v : '').localeCompare(String(typeof b.v === 'string' ? b.v : '')));
-      return feitas.length ? `<ul class="etp-tempos">${feitas.map(x => `<li>${ic('check')}<b>${esc(x.l)}:</b><span>${quandoEtapa(x.v) ? `feito ${quandoEtapa(x.v)}` : 'feito (antes de o sistema guardar o horário)'}</span></li>`).join('')}</ul>` : '';
+        .sort((a, b) => isoEtapa(a.v).localeCompare(isoEtapa(b.v)));
+      return feitas.length ? `<ul class="etp-tempos">${feitas.map(x => ehNC(x.v)
+        ? `<li class="nc">${ic('x')}<b>${esc(x.l)}:</b><span>não cadastrado${quandoEtapa(x.v) ? ` (marcado ${quandoEtapa(x.v)})` : ''}</span></li>`
+        : `<li>${ic('check')}<b>${esc(x.l)}:</b><span>${quandoEtapa(x.v) ? `feito ${quandoEtapa(x.v)}` : 'feito (antes de o sistema guardar o horário)'}</span></li>`).join('')}</ul>` : '';
     })()}</div></div>`;
 }
 function itemHistTarefa(t) {

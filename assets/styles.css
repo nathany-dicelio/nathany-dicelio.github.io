@@ -939,6 +939,14 @@ body.exportando .folha input, body.exportando .folha select, body.exportando .fo
   .des-imgs.n2 { grid-template-columns: minmax(0, 1fr); }
   .folha-barra .r .btn .tx { display: none; }
 }
+/* etapa "não cadastrado" (vermelha) */
+.etp.nc { border-style: solid; border-color: var(--red); background: var(--red-bg); color: var(--red); }
+.etp.nc .bx { background: var(--red); border-color: var(--red); color: #fff; }
+.etp.nc .bx svg { opacity: 1; }
+.etp small { font-size: 10.5px; font-weight: 600; opacity: .85; margin-left: 2px; }
+.etp-tempos li.nc { color: var(--red); }
+.etp-tempos li.nc svg { color: var(--red); }
+.etp-tempos li.nc b { color: var(--red); }
 @media print {
   body.imprimindo-ficha { background: #fff; }
   body.imprimindo-ficha .side, body.imprimindo-ficha .topbar, body.imprimindo-ficha .no-print, body.imprimindo-ficha .toasts { display: none !important; }
