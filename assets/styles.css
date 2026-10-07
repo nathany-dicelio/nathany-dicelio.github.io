@@ -909,9 +909,15 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .folha .ft-tab td:nth-child(2) input:not(.num) { min-width: 220px; }
 .mini-tab td:first-child { width: 40%; }
 .mini-tab td:first-child input { min-width: 150px; }
-.ft-cotas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 18px; padding: 14px 18px 18px; border-top: 1px solid var(--line-2); }
-.ft-cotas .slot { aspect-ratio: 3 / 4; max-height: 520px; }
-.ft-minis { display: flex; flex-direction: column; gap: 16px; }
+.ft-bloco { padding: 14px 18px 4px; }
+.ft-b-dig { padding-bottom: 0; }
+.slot.cotas { aspect-ratio: auto; height: 560px; }
+.slot.livre { aspect-ratio: auto; min-height: 200px; height: auto; }
+.slot.livre .slot-img { display: block; height: auto; }
+.slot.livre .th > img.ft { position: static; height: auto; max-height: 900px; object-fit: contain; }
+.slot-add small { font-weight: 400; font-size: 11.5px; }
+tr.so-print { display: none; }
+.ft-minis { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; padding: 16px 18px 18px; border-top: 1px solid var(--line-2); }
 .mini-tab .add-linha { margin-top: 6px; }
 .esc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .esc-grid .esc { aspect-ratio: 3 / 4; border-radius: 12px; border: 2px solid var(--line); padding: 0; cursor: pointer; background: #fff; position: relative; }
@@ -926,7 +932,9 @@ body.exportando .folha input, body.exportando .folha select, body.exportando .fo
   .ft-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ft-caixas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cx:nth-child(2) { border-right: 0; }
-  .ft-des, .ft-cotas { grid-template-columns: minmax(0, 1fr); }
+  .ft-des { grid-template-columns: minmax(0, 1fr); }
+  .ft-minis { grid-template-columns: minmax(0, 1fr); }
+  .slot.cotas { height: 420px; }
   .des-imgs { border-right: 0; border-bottom: 1px solid var(--line-2); }
 }
 @media (max-width: 640px) {
@@ -969,8 +977,8 @@ body.exportando .folha input, body.exportando .folha select, body.exportando .fo
   .folha .ft-med .pv { font-size: 9.5pt; padding: 3px 2px; }
   .folha .ft-med th { padding: 4px 2px; font-size: 7.5pt; }
   .folha .ft-med { width: 100%; }
-  .ft-cotas > div:has(> .slot .slot-add) { display: none !important; }
-  .ft-cotas:has(> div > .slot .slot-add) { grid-template-columns: minmax(0, 1fr) !important; }
+  .ft-bloco:has(.slot-add) { display: none !important; }
+  .ft-b-dig, .ft-medidas .tbl-wrap:has(tbody:empty) { display: none !important; }
   .folha .ft-tab .cod + .pv, .folha .ft-tab td:first-child .pv { font-weight: 800; }
   .ft-titulo { background: none !important; border: 2px solid #000; padding: 4px 10px; gap: 12px; }
   .ft-logo { filter: brightness(0) !important; height: 32px; }
@@ -1009,9 +1017,13 @@ body.exportando .folha input, body.exportando .folha select, body.exportando .fo
   .ft-tab td { border-bottom: 1px solid #888; padding: 0; }
   .ft-tab .pil { background: #e2e2e2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .ft-med, .ft-med td:nth-child(2) input, .ft-med td:nth-child(3) input { min-width: 0 !important; }
-  .ft-cotas { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) !important; padding: 8px 10px; gap: 12px; border-top: 1.5px solid #000; }
-  .ft-cotas .slot { height: 105mm; max-height: none; }
-  .ft-minis { gap: 10px; }
+  .ft-bloco { padding: 6px 10px 2px; }
+  .slot.cotas { height: 95mm; }
+  .slot.livre { height: auto; min-height: 0; }
+  .slot.livre .th > img.ft { max-height: 95mm; }
+  .ft-minis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; gap: 12px; padding: 6px 10px 8px; border-top: 1.5px solid #000; }
+  .folha tr.so-print { display: table-row; }
+  .folha tr.so-print td { height: 7mm; }
 }
 @media print {
   .folha, .folha * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -1031,7 +1043,7 @@ body.exportando .folha input, body.exportando .folha select, body.exportando .fo
   .folha .ft-tab th { color: #781026 !important; border-bottom: 1.5px solid #5E0A1C !important; }
   .folha .ft-tab .pil { background: #F3DDE1 !important; }
   .folha .des-imgs { border-bottom-color: #C9A9B0 !important; }
-  .folha .ft-cotas { border-top-color: #C9A9B0 !important; }
+  .folha .ft-minis { border-top-color: #C9A9B0 !important; }
   .folha .folha-consumo { border-top: 0; }
 }
 @media print {

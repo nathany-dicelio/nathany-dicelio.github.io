@@ -2656,9 +2656,9 @@ const autoAltura = t => { t.style.height = 'auto'; t.style.height = `${t.scrollH
 const fcInput = (E, rot, k, extra = '', cls = '') => `<label class="fc ${cls}"><span>${rot}</span><input data-k="${k}" value="${esc(getPath(E.F, k) ?? '')}" ${extra} autocomplete="off"></label>`;
 const fcPeca = (E, rot, campo, cls = '') => `<label class="fc ${cls}"><span>${rot}</span><input data-peca="${campo}" value="${esc(E.pc[campo] ?? '')}" autocomplete="off"${campo === 'op' ? ' inputmode="numeric"' : ''}></label>`;
 const fcCliente = E => `<label class="fc"><span>Cliente</span><select data-peca="cliente_id">${opClientes(E.pc.cliente_id || '', '—')}</select></label>`;
-const slotHtml = (k, p, rot = 'Imagem') => `<div class="slot" data-slot="${k}">${p
+const slotHtml = (k, p, rot = 'Imagem', cls = '', dica = '') => `<div class="slot ${cls}" data-slot="${k}">${p
   ? `<button type="button" class="th slot-img" data-foto="${esc(p)}" data-fit="contain" data-lb="${esc(p)}" title="Ampliar">${ic('image')}</button><button type="button" class="slot-x no-print" data-slot-x="${k}" title="Tirar imagem">${ic('x')}</button>`
-  : `<label class="slot-add no-print">${ic('camera')}<span>${rot}</span><input type="file" accept="image/*" hidden data-slot-up="${k}"></label>`}</div>`;
+  : `<label class="slot-add no-print">${ic('camera')}<span>${rot}</span>${dica ? `<small>${dica}</small>` : ''}<input type="file" accept="image/*" hidden data-slot-up="${k}"></label>`}</div>`;
 const tituloFolha = (E, nome) => {
   const fi = fichaDe(E.pc.id);
   return `<div class="ft-titulo">
@@ -2673,7 +2673,7 @@ function miniTabela(E, titulo, key, grade, lista = '') {
     <table class="ft-tab"><thead><tr><th>Descrição</th>${grade.map(g => `<th class="n">${esc(g)}</th>`).join('')}<th class="no-print"></th></tr></thead>
     <tbody>${linhas.map((r, i) => `<tr><td><input data-k="${key}.${i}.desc" value="${esc(r.desc || '')}"${lista ? ` list="${lista}"` : ''}></td>
       ${grade.map(g => `<td class="n"><input class="num" data-k="${key}.${i}.v.${g}" value="${esc((r.v || {})[g] ?? '')}" inputmode="decimal"></td>`).join('')}
-      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="${key}.${i}" title="Tirar linha">${ic('x')}</button></td></tr>`).join('')}</tbody></table>
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="${key}.${i}" title="Tirar linha">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 4 - linhas.length) }, () => `<tr class="so-print"><td></td>${grade.map(() => '<td></td>').join('')}</tr>`).join('')}</tbody></table>
     <button type="button" class="btn sm add-linha no-print" data-add="${key}">${ic('plus')}Linha</button></div>`;
 }
 
@@ -2715,16 +2715,16 @@ function folhaTecnicaHtml(E) {
     <div class="ft-caixas">${CAIXAS_FT.map(([k, l]) => { const cx = (t.caixas || {})[k] || {};
       return `<div class="cx"><div class="cx-h">${l}</div>${slotHtml(`tecnica.caixas.${k}.img`, cx.img)}<textarea data-k="tecnica.caixas.${k}.txt" rows="3" placeholder="Instruções">${esc(cx.txt || '')}</textarea></div>`; }).join('')}</div>
   </section>
-  <section class="fs quebra">
+  <section class="fs quebra ft-medidas">
     <div class="fs-h"><h3>Tabela de medidas</h3><div class="r small muted">em cm · tamanho base <b>${esc(piloto)}</b></div></div>
+    <div class="ft-bloco ft-b-cotas"><div class="fs-sub">Desenho das cotas</div>${slotHtml('tecnica.img_cotas', t.img_cotas, 'Desenho com as cotas', 'cotas', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
+    <div class="ft-bloco ft-b-tab"><div class="fs-sub">Medidas (foto da tabela)</div>${slotHtml('tecnica.img_tabela', t.img_tabela, 'Foto ou print da tabela de medidas', 'livre', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
+    <div class="ft-bloco ft-b-dig"><div class="fs-sub">Medidas digitadas <span class="muted no-print" style="text-transform:none;letter-spacing:0;font-weight:500">· opcional, se preferir digitar em vez da foto</span></div></div>
     <div class="tbl-wrap"><table class="ft-tab ft-med"><thead><tr><th>Dim</th><th>Descrição</th><th>Descrição (inglês)</th><th>Tipo de cota</th><th>Crítica</th><th class="n">Tol −</th><th class="n">Tol +</th>${grade.map(g => `<th class="n${g === piloto ? ' pil' : ''}">${esc(g)}</th>`).join('')}<th class="no-print"></th></tr></thead>
       <tbody>${(t.medidas || []).map(linhaMed).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="tecnica.medidas">${ic('plus')}Adicionar medida</button>
       ${poms ? `<span class="small muted">Digite o código (ex.: ${esc(Object.keys(poms).slice(0, 1)[0] || 'B6')}) e a descrição vem do guia de medidas da ${esc(cli.nome)}.</span>` : ''}</div>
-    <div class="ft-cotas">
-      <div><div class="fs-sub">Desenho das cotas</div>${slotHtml('tecnica.img_cotas', t.img_cotas, 'Desenho com as cotas')}</div>
-      <div class="ft-minis">${miniTabela(E, 'Medidas de acabamento', 'tecnica.acabamento', grade)}${miniTabela(E, 'Consumos de aviamentos', 'tecnica.avi_tam', grade, 'dl-avi')}</div>
-    </div>
+    <div class="ft-minis">${miniTabela(E, 'Medidas de acabamento', 'tecnica.acabamento', grade)}${miniTabela(E, 'Consumos de aviamentos', 'tecnica.avi_tam', grade, 'dl-avi')}</div>
   </section>
   ${poms ? `<datalist id="dl-pom">${Object.entries(poms).map(([c, n]) => `<option value="${esc(c)}">${esc(n)}</option>`).join('')}</datalist>` : ''}
   <datalist id="dl-avi">${avis.map(a => `<option value="${esc(a)}">`).join('')}</datalist>`;
@@ -2856,6 +2856,22 @@ function ligarFolha(E) {
     if (esc0) { escolherDesenho(E); return; }
     if (lb) lightbox([lb.dataset.lb]);
   });
+  el.addEventListener('mouseover', e => { const sl = e.target.closest('.slot[data-slot]'); if (sl && sl.querySelector('.slot-add')) E.slotAlvo = sl.dataset.slot; });
+  if (!S.colarFicha) {
+    S.colarFicha = true;
+    document.addEventListener('paste', async e => {
+      const E2 = S.fichaAberta; if (!E2 || !$('#folha') || e.target.closest('input, textarea')) return;
+      const file = [...(e.clipboardData || {}).items || []].filter(i => i.type.startsWith('image/')).map(i => i.getAsFile())[0];
+      if (!file) return;
+      e.preventDefault();
+      const vazios = $$('#folha .slot[data-slot]').filter(x => x.querySelector('.slot-add')).map(x => x.dataset.slot);
+      const k = vazios.includes(E2.slotAlvo) ? E2.slotAlvo : vazios.includes('tecnica.img_tabela') ? 'tecnica.img_tabela' : vazios.includes('tecnica.img_cotas') ? 'tecnica.img_cotas' : null;
+      if (!k) { toast('Tire uma imagem antes de colar outra (no X da imagem)', 'erro'); return; }
+      statusSalvo('Enviando imagem…');
+      try { const [p] = await enviarFotos(E2.pc.id, [new File([file], `colada-${Date.now()}.png`, { type: file.type })]); setPath(E2.F, k, p); agendarSalvar(E2, 0); desenharFolha(E2); toast('Imagem colada'); }
+      catch (err) { statusSalvo('Imagem não enviada', 'erro'); toast(msgErro(err), 'erro'); }
+    });
+  }
   $('#f-print').onclick = () => imprimirFicha();
   const ir = $('#ir-consumo'); if (ir) ir.onclick = () => $('#folha-consumo').scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('#f-img').onclick = () => baixarFichaImagem(E);
@@ -2899,6 +2915,7 @@ function escolherDesenho(E) {
 function prepararImpressao() {
   const f = $('#folha'); if (!f) return;
   limparImpressao();
+  $$('img', f).forEach(i => { i.loading = 'eager'; });
   $$('input, select, textarea', f).forEach(el => {
     if (el.type === 'file' || el.type === 'hidden') return;
     let v = el.tagName === 'SELECT' ? ((el.selectedOptions[0] || {}).text || '') : el.value;
