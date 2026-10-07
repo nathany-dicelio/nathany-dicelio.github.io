@@ -2693,7 +2693,7 @@ function folhaTecnicaHtml(E) {
     <td class="n"><input class="num" data-k="tecnica.medidas.${i}.tmais" value="${esc(r.tmais ?? '')}" inputmode="decimal"></td>
     ${grade.map(g => `<td class="n${g === piloto ? ' pil' : ''}"><input class="num" data-k="tecnica.medidas.${i}.v.${g}" value="${esc((r.v || {})[g] ?? '')}" inputmode="decimal"></td>`).join('')}
     <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="tecnica.medidas.${i}" title="Tirar medida">${ic('x')}</button></td></tr>`;
-  return `${tituloFolha(E, 'Ficha técnica do produto')}
+  return `<div class="pg1">${tituloFolha(E, 'Ficha técnica do produto')}
   <div class="ft-grid">
     ${fcCliente(E)}${fcPeca(E, 'OP', 'op')}${fcInput(E, 'Pedido', 'tecnica.pedido')}${fcInput(E, 'Código 2', 'tecnica.codigo2')}
     ${fcPeca(E, 'Descrição', 'descricao', 'span2')}${fcInput(E, 'Coleção', 'tecnica.colecao')}${fcInput(E, 'Mod. aprovada', 'tecnica.mod_aprovada', 'type="date"')}
@@ -2703,7 +2703,7 @@ function folhaTecnicaHtml(E) {
     ${fcInput(E, 'Rota', 'tecnica.rota')}${fcInput(E, 'M.O.', 'tecnica.mo')}
     ${fcInput(E, 'Resp. Kabriolli', 'tecnica.resp', '', 'span2')}${fcInput(E, 'Cor do produto', 'consumo.cor', '', 'span2')}
   </div>
-  <section class="fs">
+  <section class="fs fs-des">
     <div class="fs-h"><h3>Desenho técnico</h3><div class="r no-print"><button type="button" class="btn sm" data-escolher>${ic('image')}Escolher imagens</button></div></div>
     <div class="ft-des">
       <div class="des-imgs n${Math.min(des.length, 2)}">${des.length ? des.map(p => `<button type="button" class="th des-img" data-foto="${esc(p)}" data-fit="contain" data-lb="${esc(p)}" title="Ampliar">${ic('dress')}</button>`).join('')
@@ -2714,7 +2714,7 @@ function folhaTecnicaHtml(E) {
   <section class="fs">
     <div class="ft-caixas">${CAIXAS_FT.map(([k, l]) => { const cx = (t.caixas || {})[k] || {};
       return `<div class="cx"><div class="cx-h">${l}</div>${slotHtml(`tecnica.caixas.${k}.img`, cx.img)}<textarea data-k="tecnica.caixas.${k}.txt" rows="3" placeholder="Instruções">${esc(cx.txt || '')}</textarea></div>`; }).join('')}</div>
-  </section>
+  </section></div>
   <section class="fs quebra ft-medidas">
     <div class="fs-h"><h3>Tabela de medidas</h3><div class="r small muted">em cm · tamanho base <b>${esc(piloto)}</b></div></div>
     <div class="ft-bloco ft-b-cotas"><div class="fs-sub">Desenho das cotas</div>${slotHtml('tecnica.img_cotas', t.img_cotas, 'Desenho com as cotas', 'cotas', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>

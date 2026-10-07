@@ -949,6 +949,7 @@ body.exportando .folha input, body.exportando .folha select, body.exportando .fo
   .des-imgs.n2 { grid-template-columns: minmax(0, 1fr); }
   .folha-barra .r .btn .tx { display: none; }
 }
+.pg1 > .fs:last-child { border-bottom: 1px solid var(--line); }
 /* etapa "não cadastrado" (vermelha) */
 .etp.nc { border-style: solid; border-color: var(--red); background: var(--red-bg); color: var(--red); }
 .etp.nc .bx { background: var(--red); border-color: var(--red); color: #fff; }
@@ -1045,6 +1046,20 @@ body.exportando .folha input, body.exportando .folha select, body.exportando .fo
   .folha .des-imgs { border-bottom-color: #C9A9B0 !important; }
   .folha .ft-minis { border-top-color: #C9A9B0 !important; }
   .folha .folha-consumo { border-top: 0; }
+}
+@media print {
+  /* folha 1 ocupa a A4 inteira: o desenho cresce e as etiquetas descem até o fim da página */
+  .pg1 { height: 277mm; display: flex; flex-direction: column; overflow: hidden; }
+  .pg1 > .fs-des { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .pg1 .ft-des { flex: 1 1 auto; min-height: 0; display: flex !important; flex-direction: column; }
+  .pg1 .des-imgs { flex: 1 1 auto; min-height: 70mm; padding: 3px; gap: 4px; grid-auto-rows: minmax(0, 1fr); }
+  .pg1 .des-img, .pg1 .des-imgs.n2 .des-img { height: 100%; }
+  .pg1 .ft-obs { flex: none; padding: 4px 10px 5px; }
+  .pg1 > .fs:last-child { flex: none; }
+  .pg1 .cx { padding: 3px 5px 4px; gap: 3px; }
+  .pg1 .cx-h { font-size: 8.5pt; padding: 2px 4px; }
+  .pg1 .cx .slot { height: 22mm; }
+  .pg1 .cx .pv { font-size: 8pt; line-height: 1.2; }
 }
 @media print {
   .side, .topbar .acoes, .toolbar, .acts { display: none !important; }
