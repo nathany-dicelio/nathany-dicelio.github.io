@@ -11,7 +11,7 @@ Site estático (HTML + CSS + JavaScript puro) com banco **Supabase**, no mesmo e
 | Meu ponto | Bater entrada, almoço, volta e saída; atraso/adiantamento de cada dia, banco de horas, período de assinatura (16 a 15), feriados automáticos, planilha do mês |
 | Desenho | Pedidos de desenho com checklist (Desenho, Conferido, Sisplan, ISA) e a Tabela depois de finalizado |
 | Mini consumo | Pedidos de consumo com checklist (Consumo, Sisplan, Foto, ISA) |
-| Ficha técnica | Pesquisa a peça e abre a ficha técnica + ficha de consumo (no final), tudo editável. Impressão em 3 folhas A4: 1) dados, desenho, obs. e etiquetas; 2) tabela de medidas; 3) ficha de consumo |
+| Ficha técnica | Pesquisa a peça e abre a ficha técnica + ficha de consumo (no final), tudo editável. Impressão em 3 folhas A4: 1) dados, desenho, obs. e etiquetas; 2) desenho das cotas, foto da tabela de medidas, acabamento e aviamentos; 3) ficha de consumo |
 | Fazer | Tarefas: quem pediu, prazo e entrega (data/hora e para quem) |
 | Catálogo | Cartões com foto, REF, OP e situação; abre a ficha da peça |
 | Medidas | Guia de consulta dos manuais (Renner, C&A, Havan): busca por código ou nome, desenho, como medir, página do PDF; e arquivos avulsos |
