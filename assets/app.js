@@ -23,7 +23,7 @@ const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const PERIODOS = [['tudo', 'Qualquer data'], ['mes', 'Este mês'], ['30', 'Últimos 30 dias'], ['ano', 'Este ano']];
 const CORES = ['#781026', '#D23B3B', '#3B4FD2', '#9B3BD2', '#17925A', '#0E8FA0', '#C98A06', '#D9541E', '#B4507A', '#2B2B2B'];
-const TABS = ['pessoas', 'clientes', 'pecas', 'pedidos', 'tarefas', 'medidas', 'ponto', 'ponto_fechamentos', 'config', 'guia_manuais', 'guia_pontos'];
+const TABS = ['pessoas', 'clientes', 'pecas', 'pedidos', 'tarefas', 'medidas', 'ponto', 'ponto_fechamentos', 'config', 'guia_manuais', 'guia_pontos', 'fichas'];
 
 const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>',
@@ -391,7 +391,7 @@ function demoSeed() {
     return { id: uid(), manual: 'renner', codigo, nome, como_medir, grupo, pagina, imagem, extra: {}, ordem: i + 1, favorito: i === 0, criado_em: em(10) };
   });
   const guia_manuais = [{ id: uid(), manual: 'renner', cliente_id: C('RNN'), titulo: 'Manual de POMs (exemplo)', arquivo: null, paginas: 70, criado_em: em(10) }];
-  return { db: { pessoas, clientes, pecas, pedidos, tarefas, medidas: [], guia_manuais, guia_pontos, ...demoPonto() }, arquivos };
+  return { db: { pessoas, clientes, pecas, pedidos, tarefas, medidas: [], guia_manuais, guia_pontos, fichas: [demoFicha(pecas[0])], ...demoPonto() }, arquivos };
 }
 
 /* ================================================================
@@ -816,8 +816,11 @@ function renderShell() {
         <a href="#/ponto" data-r="ponto">${ic('clock')}Meu ponto</a>
         <div class="grp">Trabalho</div>
         <a href="#/desenhos" data-r="desenhos">${ic('pen')}Desenho<span class="cnt hidden" data-cnt="desenho"></span></a>
-        <a href="#/consumos" data-r="consumos">${ic('scissors')}Consumo<span class="cnt hidden" data-cnt="consumo"></span></a>
+        <a href="#/consumos" data-r="consumos">${ic('scissors')}Mini consumo<span class="cnt hidden" data-cnt="consumo"></span></a>
         <a href="#/fazer" data-r="fazer">${ic('list')}Fazer<span class="cnt hidden" data-cnt="fazer"></span></a>
+        <div class="grp">Fichas</div>
+        <a href="#/ficha-tecnica" data-r="ficha-tecnica">${ic('file')}Ficha técnica</a>
+        <a href="#/ficha-consumo" data-r="ficha-consumo">${ic('tag')}Ficha de consumo</a>
         <div class="grp">Consulta</div>
         <a href="#/catalogo" data-r="catalogo">${ic('grid')}Catálogo</a>
         <a href="#/medidas" data-r="medidas">${ic('ruler')}Medidas</a>
@@ -955,6 +958,8 @@ const ROTAS = {
   medidas: viewMedidas,
   ajustes: viewAjustes,
   ponto: viewPonto,
+  'ficha-tecnica': a => viewFicha('tecnica', a),
+  'ficha-consumo': a => viewFicha('consumo', a),
   peca: viewPeca,
   busca: viewBusca,
 };
@@ -1092,7 +1097,7 @@ function viewInicio() {
 function viewPedidos(tipo) {
   const T = TIPO[tipo];
   const f = S.f[tipo] || (S.f[tipo] = { q: '', st: 'todos', cli: '', pes: '', per: 'tudo' });
-  setPage(T.plural, `Pedidos de ${T.nome.toLowerCase()} e o checklist de cada um`, `<button class="btn primary" data-novo="${tipo}">${ic('plus')}<span class="tx">${T.novo}</span></button>`);
+  setPage(tipo === 'consumo' ? 'Mini consumo' : T.plural, `Pedidos de ${T.nome.toLowerCase()} e o checklist de cada um`, `<button class="btn primary" data-novo="${tipo}">${ic('plus')}<span class="tx">${T.novo}</span></button>`);
   view().innerHTML = `<div class="card">
     <div class="toolbar">
       <div class="busca">${ic('search')}<input class="inp" data-f="q" placeholder="Filtrar por REF, OP, pessoa ou observação" value="${esc(f.q)}"></div>
@@ -1564,7 +1569,7 @@ function viewPeca(id) {
           <div class="row">${c ? `<span class="cbadge" style="--c:${esc(c.cor)}">${esc(c.nome)}</span>` : '<span class="tag gray sem">Sem cliente</span>'}${tagStatus('desenho', st.desenho)}${tagStatus('consumo', st.consumo)}</div>
           <div class="ref">${esc(pc.ref)}</div>
           ${pc.descricao ? `<div style="color:var(--ink-2);font-size:15px">${esc(pc.descricao)}</div>` : ''}
-          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button></div>
+          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button><a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}Ficha técnica</a><a class="btn sm" href="#/ficha-consumo/${pc.id}">${ic('tag')}Ficha de consumo</a></div>
         </div>
         <div class="info">
           <div><small>OP</small><b>${ops.length ? esc(ops.join(', ')) : '—'}</b></div>
@@ -2513,6 +2518,412 @@ function demoPonto() {
 setInterval(() => { const t = inHora(agoraISO()); $$('[data-relogio]').forEach(e => { e.textContent = t; }); }, 10000);
 
 /* ================================================================
+   FICHA TÉCNICA e FICHA DE CONSUMO (uma por peça, tudo editável)
+   ================================================================ */
+const GRADE_PADRAO = ['PP', 'P', 'M', 'G', 'GG'];
+const CAIXAS_FT = [['marca', 'Etiqueta de marca / tamanho'], ['composicao', 'Etiqueta de composição'], ['tag', 'Tag cód. barras'], ['alarme', 'Pino / alarme']];
+const MODELOS_LINHA = {
+  'tecnica.medidas': () => ({ dim: '', desc: '', desc_en: '', tipo: 'Primária', critica: 'Não', tmenos: '', tmais: '', v: {} }),
+  'tecnica.acabamento': () => ({ desc: '', v: {} }),
+  'tecnica.avi_tam': () => ({ desc: '', v: {} }),
+  'consumo.tecidos': () => ({ codigo: '', tecido: '', gramatura: '', largura: '', consumo: '', composicao: '', cor: '' }),
+  'consumo.aviamentos': () => ({ codigo: '', material: '', aplicacao: '0 - Geral', un: '', cor: '', consumo: '' }),
+};
+const ROTA_FICHA = { tecnica: 'ficha-tecnica', consumo: 'ficha-consumo' };
+const NOME_FICHA = { tecnica: 'Ficha técnica', consumo: 'Ficha de consumo' };
+
+const fichaDe = pecaId => S.db.fichas.find(f => f.peca_id === pecaId) || null;
+const gradeDe = F => ((F.tecnica.grade || []).length ? F.tecnica.grade : GRADE_PADRAO);
+function fichaVazia(d) {
+  return !d || !Object.values(d).some(v => (Array.isArray(v) ? v.length : v && typeof v === 'object' ? Object.keys(v).length : !!v));
+}
+function getPath(o, path) { return path.split('.').reduce((x, k) => (x == null ? undefined : x[k]), o); }
+function setPath(o, path, val) {
+  const ks = path.split('.');
+  let x = o;
+  for (let i = 0; i < ks.length - 1; i++) {
+    if (x[ks[i]] == null || typeof x[ks[i]] !== 'object') x[ks[i]] = /^\d+$/.test(ks[i + 1]) ? [] : {};
+    x = x[ks[i]];
+  }
+  x[ks[ks.length - 1]] = val;
+}
+const _scripts = {};
+const carregarScript = url => _scripts[url] || (_scripts[url] = new Promise((res, rej) => {
+  const s = document.createElement('script'); s.src = url; s.onload = res; s.onerror = () => { delete _scripts[url]; rej(new Error('Não foi possível carregar a ferramenta de exportação.')); };
+  document.head.append(s);
+}));
+
+/* pontos de medida do guia do cliente, por código (ex.: "B6" → "Altura da cintura") */
+function pomsDoCliente(clienteId) {
+  const man = S.db.guia_manuais.find(m => m.cliente_id === clienteId);
+  if (!man) return null;
+  const mapa = {};
+  S.db.guia_pontos.filter(p => p.manual === man.manual).forEach(p => {
+    String(p.codigo || '').split(/[/,\s]+/).filter(Boolean).forEach(c => { if (!mapa[c.toUpperCase()]) mapa[c.toUpperCase()] = p.nome; });
+  });
+  return mapa;
+}
+
+/* ---------- lista: pesquisar a peça ---------- */
+function viewFicha(tipo, arg) {
+  if (arg) return folhaFicha(tipo, arg);
+  const rota = ROTA_FICHA[tipo];
+  const f = S.f['fl_' + tipo] || (S.f['fl_' + tipo] = { q: '' });
+  setPage(NOME_FICHA[tipo], 'Pesquise a peça pela REF, OP ou descrição para abrir a ficha');
+  view().innerHTML = `<div class="card">
+    <div class="guia-top"><div class="busca guia-busca">${ic('search')}<input class="inp" id="fq" placeholder="REF, OP ou descrição da peça" value="${esc(f.q)}" autocomplete="off" spellcheck="false"></div></div>
+    <div class="guia-info small muted" id="fi"></div>
+    <div id="fl"></div>
+  </div>`;
+  const desenhar = () => {
+    const q = f.q.trim();
+    const quando = pc => String((fichaDe(pc.id) || {}).atualizado_em || pc.atualizado_em || '');
+    const lista = q ? pecasQue(q) : [...S.db.pecas].sort((a, b) => quando(b).localeCompare(quando(a)));
+    $('#fi').textContent = q ? plural(lista.length, 'peça encontrada', 'peças encontradas') : 'Peças mais recentes · pesquise para achar qualquer outra';
+    $('#fl').innerHTML = lista.length ? `<div class="fl-lista">${lista.slice(0, q ? 60 : 30).map(pc => {
+      const fi = fichaDe(pc.id), tem = fi && !fichaVazia(fi[tipo]), ops = opsDaPeca(pc);
+      const sub = [pc.descricao, ops.length ? `OP ${ops.join(', ')}` : ''].filter(Boolean).map(esc).join(' · ') || 'Sem descrição';
+      return `<a class="fl-it" href="#/${rota}/${pc.id}">${thumb(capa(pc) || imgsCons(pc)[0])}<div class="t"><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${sub}</small></div>
+        ${tem ? `<span class="tag green">Ficha preenchida${fi.atualizado_em ? ' · ' + fDia(fi.atualizado_em) : ''}</span>` : '<span class="tag gray">Sem ficha</span>'}${ic('chevR')}</a>`;
+    }).join('')}</div>` : vazio('search', `Nenhuma peça para “${q}”`, 'A peça precisa estar cadastrada em Desenho ou Mini consumo.');
+    hidratarFotos($('#fl'));
+  };
+  const inp = $('#fq');
+  inp.addEventListener('input', () => { f.q = inp.value; desenhar(); });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter' && f.q.trim()) { const l = pecasQue(f.q); if (l.length) location.hash = `#/${rota}/${l[0].id}`; } });
+  desenhar();
+  if (!matchMedia('(max-width: 640px)').matches) setTimeout(() => inp.focus(), 50);
+}
+
+/* ---------- a folha (técnica ou consumo) ---------- */
+function folhaFicha(tipo, pecaId) {
+  const pc = peca(pecaId);
+  if (!pc) { setPage(NOME_FICHA[tipo]); view().innerHTML = `<div class="card">${vazio('dress', 'Essa peça não existe mais', '', `<a class="btn" href="#/${ROTA_FICHA[tipo]}">Voltar</a>`)}</div>`; return; }
+  const fi = fichaDe(pc.id);
+  const E = S.fichaAberta && S.fichaAberta.pc.id === pc.id && S.fichaAberta.pendente
+    ? S.fichaAberta
+    : (S.fichaAberta = { pc, tipo, F: { tecnica: clone((fi && fi.tecnica) || {}), consumo: clone((fi && fi.consumo) || {}) }, fila: Promise.resolve() });
+  E.pc = pc; E.tipo = tipo;
+  setPage(`${NOME_FICHA[tipo]} · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
+  const outro = tipo === 'tecnica' ? 'consumo' : 'tecnica';
+  view().innerHTML = `<div class="folha-barra no-print">
+      <a class="link-btn" href="#/${ROTA_FICHA[tipo]}">${ic('chevL')}Outra peça</a>
+      <span class="salvo ok" id="salvo">${ic('check')}Tudo salvo</span>
+      <div class="r">
+        <a class="btn sm" href="#/peca/${pc.id}">${ic('dress')}<span class="tx">Peça</span></a>
+        <a class="btn sm" href="#/${ROTA_FICHA[outro]}/${pc.id}">${ic(outro === 'tecnica' ? 'file' : 'tag')}<span class="tx">${NOME_FICHA[outro]}</span></a>
+        <button type="button" class="btn sm" id="f-print">${ic('download')}<span class="tx">Imprimir / PDF</span></button>
+        <button type="button" class="btn sm primary" id="f-img">${ic('image')}<span class="tx">Baixar imagem</span></button>
+      </div>
+    </div>
+    <div class="folha" id="folha"></div>`;
+  desenharFolha(E);
+  ligarFolha(E);
+}
+
+function desenharFolha(E) {
+  const el = $('#folha'); if (!el) return;
+  el.innerHTML = E.tipo === 'tecnica' ? folhaTecnicaHtml(E) : folhaConsumoHtml(E);
+  $$('textarea', el).forEach(autoAltura);
+  hidratarFotos(el);
+}
+const autoAltura = t => { t.style.height = 'auto'; t.style.height = `${t.scrollHeight + 2}px`; };
+
+const fcInput = (E, rot, k, extra = '', cls = '') => `<label class="fc ${cls}"><span>${rot}</span><input data-k="${k}" value="${esc(getPath(E.F, k) ?? '')}" ${extra} autocomplete="off"></label>`;
+const fcPeca = (E, rot, campo, cls = '') => `<label class="fc ${cls}"><span>${rot}</span><input data-peca="${campo}" value="${esc(E.pc[campo] ?? '')}" autocomplete="off"${campo === 'op' ? ' inputmode="numeric"' : ''}></label>`;
+const fcCliente = E => `<label class="fc"><span>Cliente</span><select data-peca="cliente_id">${opClientes(E.pc.cliente_id || '', '—')}</select></label>`;
+const slotHtml = (k, p, rot = 'Imagem') => `<div class="slot" data-slot="${k}">${p
+  ? `<button type="button" class="th slot-img" data-foto="${esc(p)}" data-fit="contain" data-lb="${esc(p)}" title="Ampliar">${ic('image')}</button><button type="button" class="slot-x no-print" data-slot-x="${k}" title="Tirar imagem">${ic('x')}</button>`
+  : `<label class="slot-add no-print">${ic('camera')}<span>${rot}</span><input type="file" accept="image/*" hidden data-slot-up="${k}"></label>`}</div>`;
+const tituloFolha = (E, nome) => {
+  const fi = fichaDe(E.pc.id);
+  return `<div class="ft-titulo">
+    <img src="assets/img/logo.png" alt="Nathany Di Celio" class="ft-logo">
+    <div class="ft-nome"><small>${nome}</small><b>${esc(E.pc.ref)}</b></div>
+    <div class="ft-atual">${fi ? `Atualizada em ${fData(fi.atualizado_em)} às ${fHora(fi.atualizado_em)}` : 'Ainda não preenchida'}</div>
+  </div>`;
+};
+function miniTabela(E, titulo, key, grade, lista = '') {
+  const linhas = getPath(E.F, key) || [];
+  return `<div class="mini-tab"><div class="fs-sub">${titulo}</div>
+    <table class="ft-tab"><thead><tr><th>Descrição</th>${grade.map(g => `<th class="n">${esc(g)}</th>`).join('')}<th class="no-print"></th></tr></thead>
+    <tbody>${linhas.map((r, i) => `<tr><td><input data-k="${key}.${i}.desc" value="${esc(r.desc || '')}"${lista ? ` list="${lista}"` : ''}></td>
+      ${grade.map(g => `<td class="n"><input class="num" data-k="${key}.${i}.v.${g}" value="${esc((r.v || {})[g] ?? '')}" inputmode="decimal"></td>`).join('')}
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="${key}.${i}" title="Tirar linha">${ic('x')}</button></td></tr>`).join('')}</tbody></table>
+    <button type="button" class="btn sm add-linha no-print" data-add="${key}">${ic('plus')}Linha</button></div>`;
+}
+
+function folhaTecnicaHtml(E) {
+  const { pc, F } = E, t = F.tecnica;
+  const grade = gradeDe(F), piloto = grade.includes(t.piloto) ? t.piloto : (grade.includes('P') ? 'P' : grade[0]);
+  const des = t.desenho !== undefined ? t.desenho : [capa(pc)].filter(Boolean);
+  const poms = pomsDoCliente(pc.cliente_id), cli = cliente(pc.cliente_id);
+  const avis = [...new Set((F.consumo.aviamentos || []).map(a => a.material).filter(Boolean))];
+  const linhaMed = (r, i) => `<tr>
+    <td><input class="cod" data-k="tecnica.medidas.${i}.dim" data-pom="${i}" value="${esc(r.dim || '')}"${poms ? ' list="dl-pom"' : ''} placeholder="—"></td>
+    <td><input data-k="tecnica.medidas.${i}.desc" value="${esc(r.desc || '')}"></td>
+    <td><input data-k="tecnica.medidas.${i}.desc_en" value="${esc(r.desc_en || '')}"></td>
+    <td><select data-k="tecnica.medidas.${i}.tipo">${opcoes([['Primária', 'Primária'], ['Secundária', 'Secundária']], r.tipo || 'Primária')}</select></td>
+    <td><select data-k="tecnica.medidas.${i}.critica">${opcoes([['Não', 'Não'], ['Sim', 'Sim']], r.critica || 'Não')}</select></td>
+    <td class="n"><input class="num" data-k="tecnica.medidas.${i}.tmenos" value="${esc(r.tmenos ?? '')}" inputmode="decimal"></td>
+    <td class="n"><input class="num" data-k="tecnica.medidas.${i}.tmais" value="${esc(r.tmais ?? '')}" inputmode="decimal"></td>
+    ${grade.map(g => `<td class="n${g === piloto ? ' pil' : ''}"><input class="num" data-k="tecnica.medidas.${i}.v.${g}" value="${esc((r.v || {})[g] ?? '')}" inputmode="decimal"></td>`).join('')}
+    <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="tecnica.medidas.${i}" title="Tirar medida">${ic('x')}</button></td></tr>`;
+  return `${tituloFolha(E, 'Ficha técnica do produto')}
+  <div class="ft-grid">
+    ${fcCliente(E)}${fcPeca(E, 'OP', 'op')}${fcInput(E, 'Pedido', 'tecnica.pedido')}${fcInput(E, 'Código 2', 'tecnica.codigo2')}
+    ${fcPeca(E, 'Descrição', 'descricao', 'span2')}${fcInput(E, 'Coleção', 'tecnica.colecao')}${fcInput(E, 'Mod. aprovada', 'tecnica.mod_aprovada', 'type="date"')}
+    ${fcInput(E, 'Etiqueta', 'tecnica.etiqueta')}${fcInput(E, 'Compradora', 'tecnica.compradora')}${fcInput(E, 'Modelista', 'tecnica.modelista')}${fcInput(E, 'Lacre cliente', 'tecnica.lacre')}
+    <label class="fc"><span>Grade</span><input data-grade value="${esc(grade.join(', '))}" placeholder="PP, P, M, G, GG" autocomplete="off"></label>
+    <label class="fc"><span>Tamanho base</span><select data-k="tecnica.piloto">${opcoes(grade.map(g => [g, g]), piloto)}</select></label>
+    ${fcInput(E, 'Rota', 'tecnica.rota')}${fcInput(E, 'M.O.', 'tecnica.mo')}
+    ${fcInput(E, 'Resp. Kabriolli', 'tecnica.resp', '', 'span2')}${fcInput(E, 'Cor do produto', 'consumo.cor', '', 'span2')}
+  </div>
+  <section class="fs">
+    <div class="fs-h"><h3>Desenho técnico</h3><div class="r no-print"><button type="button" class="btn sm" data-escolher>${ic('image')}Escolher imagens</button></div></div>
+    <div class="ft-des">
+      <div class="des-imgs n${Math.min(des.length, 2)}">${des.length ? des.map(p => `<button type="button" class="th des-img" data-foto="${esc(p)}" data-fit="contain" data-lb="${esc(p)}" title="Ampliar">${ic('dress')}</button>`).join('')
+        : `<button type="button" class="des-vazio" data-escolher>${ic('image')}<span>Escolha o desenho técnico<br><small>frente e costas · as imagens da peça já aparecem aqui</small></span></button>`}</div>
+      <div class="ft-obs"><div class="fs-sub">Obs. de modelagem</div><textarea data-k="tecnica.obs_modelagem" rows="7" placeholder="1- Seguir tabela de medidas&#10;2- Atenção aos acabamentos e tolerâncias">${esc(t.obs_modelagem || '')}</textarea></div>
+    </div>
+  </section>
+  <section class="fs">
+    <div class="ft-caixas">${CAIXAS_FT.map(([k, l]) => { const cx = (t.caixas || {})[k] || {};
+      return `<div class="cx"><div class="cx-h">${l}</div>${slotHtml(`tecnica.caixas.${k}.img`, cx.img)}<textarea data-k="tecnica.caixas.${k}.txt" rows="3" placeholder="Instruções">${esc(cx.txt || '')}</textarea></div>`; }).join('')}</div>
+  </section>
+  <section class="fs quebra">
+    <div class="fs-h"><h3>Tabela de medidas</h3><div class="r small muted">em cm · tamanho base <b>${esc(piloto)}</b></div></div>
+    <div class="tbl-wrap"><table class="ft-tab ft-med"><thead><tr><th>Dim</th><th>Descrição</th><th>Descrição (inglês)</th><th>Tipo de cota</th><th>Crítica</th><th class="n">Tol −</th><th class="n">Tol +</th>${grade.map(g => `<th class="n${g === piloto ? ' pil' : ''}">${esc(g)}</th>`).join('')}<th class="no-print"></th></tr></thead>
+      <tbody>${(t.medidas || []).map(linhaMed).join('')}</tbody></table></div>
+    <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="tecnica.medidas">${ic('plus')}Adicionar medida</button>
+      ${poms ? `<span class="small muted">Digite o código (ex.: ${esc(Object.keys(poms).slice(0, 1)[0] || 'B6')}) e a descrição vem do guia de medidas da ${esc(cli.nome)}.</span>` : ''}</div>
+    <div class="ft-cotas">
+      <div><div class="fs-sub">Desenho das cotas</div>${slotHtml('tecnica.img_cotas', t.img_cotas, 'Desenho com as cotas')}</div>
+      <div class="ft-minis">${miniTabela(E, 'Medidas de acabamento', 'tecnica.acabamento', grade)}${miniTabela(E, 'Consumos de aviamentos', 'tecnica.avi_tam', grade, 'dl-avi')}</div>
+    </div>
+  </section>
+  ${poms ? `<datalist id="dl-pom">${Object.entries(poms).map(([c, n]) => `<option value="${esc(c)}">${esc(n)}</option>`).join('')}</datalist>` : ''}
+  <datalist id="dl-avi">${avis.map(a => `<option value="${esc(a)}">`).join('')}</datalist>`;
+}
+
+function folhaConsumoHtml(E) {
+  const { F } = E, k = F.consumo;
+  const grade = gradeDe(F);
+  const tec = k.tecidos || [], avi = k.aviamentos || [];
+  return `${tituloFolha(E, 'Ficha de consumo')}
+  <div class="ft-grid">
+    ${fcCliente(E)}${fcPeca(E, 'OP', 'op')}${fcPeca(E, 'Descrição', 'descricao', 'span2')}
+    ${fcInput(E, 'Cor do produto', 'consumo.cor', '', 'span2')}
+    <label class="fc span2"><span>Grade (da ficha técnica)</span><input value="${esc(grade.join(' / '))}" readonly tabindex="-1"></label>
+  </div>
+  <section class="fs">
+    <div class="fs-h"><h3>Tecidos</h3><div class="r small muted">${plural(tec.length, 'tecido')}</div></div>
+    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Tecido</th><th class="n">Gramatura</th><th class="n">Largura</th><th class="n">Consumo</th><th>Composição</th><th>Cor</th><th class="no-print"></th></tr></thead>
+    <tbody>${tec.map((r, i) => `<tr>
+      <td><input class="cod" data-k="consumo.tecidos.${i}.codigo" value="${esc(r.codigo || '')}" placeholder="15.07.0395"></td>
+      <td><input data-k="consumo.tecidos.${i}.tecido" value="${esc(r.tecido || '')}"></td>
+      <td class="n"><input class="num" data-k="consumo.tecidos.${i}.gramatura" value="${esc(r.gramatura ?? '')}" inputmode="decimal"></td>
+      <td class="n"><input class="num" data-k="consumo.tecidos.${i}.largura" value="${esc(r.largura ?? '')}" inputmode="decimal"></td>
+      <td class="n pil"><input class="num" data-k="consumo.tecidos.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
+      <td><input data-k="consumo.tecidos.${i}.composicao" value="${esc(r.composicao || '')}"></td>
+      <td><input data-k="consumo.tecidos.${i}.cor" value="${esc(r.cor || '')}"></td>
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.tecidos.${i}" title="Tirar tecido">${ic('x')}</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.tecidos">${ic('plus')}Adicionar tecido</button></div>
+  </section>
+  <section class="fs">
+    <div class="fs-h"><h3>Aviamentos</h3><div class="r small muted">${plural(avi.length, 'aviamento')}</div></div>
+    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Material / insumo</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print"></th></tr></thead>
+    <tbody>${avi.map((r, i) => `<tr>
+      <td><input class="cod" data-k="consumo.aviamentos.${i}.codigo" value="${esc(r.codigo || '')}" placeholder="20.02.0001"></td>
+      <td><input data-k="consumo.aviamentos.${i}.material" value="${esc(r.material || '')}"></td>
+      <td><input data-k="consumo.aviamentos.${i}.aplicacao" value="${esc(r.aplicacao || '')}"></td>
+      <td><input data-k="consumo.aviamentos.${i}.un" value="${esc(r.un || '')}" list="dl-un" style="max-width:70px"></td>
+      <td><input data-k="consumo.aviamentos.${i}.cor" value="${esc(r.cor || '')}"></td>
+      <td class="n pil"><input class="num" data-k="consumo.aviamentos.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.aviamentos.${i}" title="Tirar aviamento">${ic('x')}</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.aviamentos">${ic('plus')}Adicionar aviamento</button>
+      <span class="small muted">Os aviamentos daqui aparecem como sugestão nos consumos por tamanho da ficha técnica.</span></div>
+  </section>
+  <datalist id="dl-un"><option value="MT"><option value="UN"><option value="KG"><option value="CM"><option value="PC"></datalist>`;
+}
+
+/* ---------- salvar ---------- */
+function statusSalvo(txt, tipo) {
+  const el = $('#salvo'); if (!el) return;
+  el.className = `salvo ${tipo || ''}`;
+  el.innerHTML = `${ic(tipo === 'ok' ? 'check' : tipo === 'erro' ? 'alert' : 'clock')}${esc(txt)}`;
+}
+const fimSalvar = E => { if (!E.agFicha && !E.agPeca) { E.pendente = false; statusSalvo('Tudo salvo', 'ok'); } };
+function agendarSalvar(E, ms = 700) {
+  E.pendente = true; E.agFicha = true; statusSalvo('Salvando…');
+  clearTimeout(E.timer);
+  E.timer = setTimeout(() => { E.agFicha = false; E.fila = E.fila.then(() => salvarFicha(E)); }, ms);
+}
+async function salvarFicha(E) {
+  const f = fichaDe(E.pc.id);
+  try {
+    await salvarReg('fichas', f ? { tecnica: E.F.tecnica, consumo: E.F.consumo } : { peca_id: E.pc.id, tecnica: E.F.tecnica, consumo: E.F.consumo }, f && f.id);
+    fimSalvar(E);
+  } catch (e) { statusSalvo('Não salvou, tente de novo', 'erro'); toast(msgErro(e), 'erro'); }
+}
+function agendarPeca(E, campo, valor) {
+  E.pendente = true; E.agPeca = true; statusSalvo('Salvando…');
+  E.pecaPatch = { ...(E.pecaPatch || {}), [campo]: valor };
+  clearTimeout(E.timerPeca);
+  E.timerPeca = setTimeout(() => {
+    E.agPeca = false;
+    const patch = E.pecaPatch; E.pecaPatch = null;
+    E.fila = E.fila.then(async () => {
+      try { E.pc = await salvarReg('pecas', patch, E.pc.id); fimSalvar(E); }
+      catch (e) { statusSalvo('Não salvou, tente de novo', 'erro'); toast(msgErro(e), 'erro'); }
+    });
+  }, 700);
+}
+window.addEventListener('beforeunload', e => { if (S.fichaAberta && S.fichaAberta.pendente) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ---------- eventos da folha ---------- */
+function ligarFolha(E) {
+  const el = $('#folha');
+  el.addEventListener('input', e => {
+    const t = e.target;
+    if (t.tagName === 'TEXTAREA') autoAltura(t);
+    if (t.dataset.k) { setPath(E.F, t.dataset.k, t.value); agendarSalvar(E); }
+    else if (t.dataset.peca && t.tagName === 'INPUT') agendarPeca(E, t.dataset.peca, t.value.trim() || null);
+  });
+  el.addEventListener('change', async e => {
+    const t = e.target;
+    if (t.dataset.peca && t.tagName === 'SELECT') { agendarPeca(E, t.dataset.peca, t.value || null); return; }
+    if (t.dataset.pom !== undefined) {
+      const poms = pomsDoCliente(E.pc.cliente_id), i = t.dataset.pom, cod = t.value.trim().toUpperCase();
+      const r = E.F.tecnica.medidas[i];
+      if (poms && poms[cod] && !r.desc) { r.desc = poms[cod].toUpperCase(); const d = el.querySelector(`[data-k="tecnica.medidas.${i}.desc"]`); if (d) d.value = r.desc; agendarSalvar(E); }
+    }
+    if (t.dataset.k === 'tecnica.piloto') desenharFolha(E);
+    if (t.dataset.grade !== undefined) {
+      E.F.tecnica.grade = t.value.split(/[,/;\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+      agendarSalvar(E, 0); desenharFolha(E);
+    }
+    if (t.dataset.slotUp) {
+      const file = t.files[0]; if (!file) return;
+      statusSalvo('Enviando imagem…');
+      try { const [p] = await enviarFotos(E.pc.id, [file]); setPath(E.F, t.dataset.slotUp, p); agendarSalvar(E, 0); desenharFolha(E); }
+      catch (err) { statusSalvo('Imagem não enviada', 'erro'); toast(msgErro(err), 'erro'); }
+    }
+  });
+  el.addEventListener('click', e => {
+    const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]'), lb = e.target.closest('[data-lb]');
+    const sx = e.target.closest('[data-slot-x]'), esc0 = e.target.closest('[data-escolher]');
+    if (add) {
+      const k = add.dataset.add, lista = getPath(E.F, k) || [];
+      lista.push(MODELOS_LINHA[k]()); setPath(E.F, k, lista); agendarSalvar(E); desenharFolha(E);
+      const ult = el.querySelector(`[data-k^="${k}.${lista.length - 1}."]`); if (ult) ult.focus();
+      return;
+    }
+    if (rm) {
+      const ks = rm.dataset.rm.split('.'), i = +ks.pop(), lista = getPath(E.F, ks.join('.')) || [];
+      lista.splice(i, 1); agendarSalvar(E); desenharFolha(E); return;
+    }
+    if (sx) { setPath(E.F, sx.dataset.slotX, null); agendarSalvar(E); desenharFolha(E); return; }
+    if (esc0) { escolherDesenho(E); return; }
+    if (lb) lightbox([lb.dataset.lb]);
+  });
+  $('#f-print').onclick = () => imprimirFicha();
+  $('#f-img').onclick = () => baixarFichaImagem(E);
+}
+
+function escolherDesenho(E) {
+  const pc = E.pc;
+  let sel = (E.F.tecnica.desenho !== undefined ? E.F.tecnica.desenho : [capa(pc)]).filter(Boolean);
+  modal({
+    titulo: 'Desenho técnico', tamanho: 'lg',
+    corpo: `<p class="muted small" style="margin-top:0">Toque nas imagens para escolher (ex.: frente e costas). Imagens novas também entram no catálogo da peça.</p><div class="esc-grid" id="escg"></div>`,
+    rodape: '<button type="button" class="btn" data-cancelar>Cancelar</button><button type="button" class="btn primary" id="esc-ok">Usar estas imagens</button>',
+    aoAbrir: m => {
+      const desenha = () => {
+        m.$('#escg').innerHTML = imagens(peca(pc.id) || pc).map(p => `<button type="button" class="th esc${sel.includes(p) ? ' on' : ''}" data-p="${esc(p)}" data-foto="${esc(p)}" data-fit="contain">${ic('dress')}<span class="ck">${sel.includes(p) ? sel.indexOf(p) + 1 : ''}</span></button>`).join('')
+          + `<label class="esc add">${ic('camera')}<span>Enviar nova</span><input type="file" accept="image/*" multiple hidden></label>`;
+        hidratarFotos(m.el);
+      };
+      m.$('#escg').addEventListener('click', e => {
+        const b = e.target.closest('[data-p]'); if (!b) return;
+        const p = b.dataset.p; sel = sel.includes(p) ? sel.filter(x => x !== p) : sel.concat(p); desenha();
+      });
+      m.$('#escg').addEventListener('change', async e => {
+        if (e.target.type !== 'file') return;
+        const files = [...e.target.files].filter(f => f.type.startsWith('image/')); if (!files.length) return;
+        toast(`Enviando ${plural(files.length, 'imagem', 'imagens')}…`);
+        try {
+          const novas = await enviarFotos(pc.id, files);
+          const atual = peca(pc.id);
+          E.pc = await salvarReg('pecas', { fotos: (atual.fotos || []).concat(novas) }, pc.id);
+          sel = sel.concat(novas); desenha();
+        } catch (err) { toast(msgErro(err), 'erro'); }
+      });
+      m.$('#esc-ok').onclick = () => { E.F.tecnica.desenho = sel; agendarSalvar(E, 0); m.fechar(); desenharFolha(E); };
+      desenha();
+    },
+  });
+}
+
+function imprimirFicha() {
+  document.body.classList.add('imprimindo-ficha');
+  const fim = () => { document.body.classList.remove('imprimindo-ficha'); window.removeEventListener('afterprint', fim); };
+  window.addEventListener('afterprint', fim);
+  setTimeout(() => window.print(), 50);
+}
+async function baixarFichaImagem(E) {
+  const btn = $('#f-img'); ocupado(btn, true, 'Gerando…');
+  try {
+    await carregarScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
+    document.body.classList.add('exportando');
+    const canvas = await window.html2canvas($('#folha'), { useCORS: true, scale: 2, backgroundColor: '#ffffff', logging: false });
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `${E.tipo === 'tecnica' ? 'ficha-tecnica' : 'ficha-consumo'}-${nomeSeguro(E.pc.ref)}.png`;
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  } catch (err) { toast(msgErro(err), 'erro'); }
+  finally { document.body.classList.remove('exportando'); ocupado(btn, false); }
+}
+
+/* exemplo para o modo demonstração */
+function demoFicha(pc) {
+  return {
+    id: uid(), peca_id: pc.id, criado_em: agoraISO(), atualizado_em: agoraISO(),
+    tecnica: {
+      colecao: 'VERÃO 27', pedido: '123323', codigo2: '2026-2-12936', mod_aprovada: '2026-10-01', etiqueta: 'T11- ATITUDES (CLOCK HOUSE)',
+      compradora: 'BRUNA / LUIZA', modelista: 'MARINA SOARES DE OLIVEIRA', lacre: '408338', rota: 'OPERAÇÃO LASTEX', resp: 'STEPHANY PEREIRA DO NASCIMENTO',
+      grade: ['PP', 'P', 'M', 'G', 'GG'], piloto: 'P',
+      obs_modelagem: 'DATA 05/10 APROVADA COM RESTRIÇÃO COMO TAMANHO P\n1- SEGUIR TABELA DE MEDIDAS\n2- ATENÇÃO AOS ACABAMENTOS E TOLERÂNCIAS\n3- DEIXAR COSTURA DO BUSTO RETA\n4- ATENÇÃO ÀS MEDIDAS DE ELÁSTICO E LASTEX',
+      caixas: {
+        marca: { txt: '2 travetes horizontais costurados no centro costas na linha da costura para não ficar aparente' },
+        composicao: { txt: 'Etiqueta de composição costurar a 10 cm da barra na lateral esquerda de quem veste' },
+        tag: { txt: 'Colocar na etiqueta de marca. A tag de preço/cód. barras deve ser colocada em local visível' },
+        alarme: { txt: 'Colocar o alarme na costura lateral da direita de quem veste, acima 10 cm da barra' },
+      },
+      medidas: [
+        { dim: 'A', desc: '1/2 TÓRAX / BUSTO', desc_en: '1/2 CHEST', tipo: 'Primária', critica: 'Não', tmenos: '-1,00', tmais: '1,00', v: { PP: '28,00', P: '32,00', M: '36,00', G: '40,00', GG: '44,00' } },
+        { dim: 'B6', desc: 'ALTURA DA CINTURA', desc_en: 'WAIST HEIGHT', tipo: 'Primária', critica: 'Não', tmenos: '-1,00', tmais: '1,00', v: { PP: '17,00', P: '18,00', M: '19,00', G: '20,50', GG: '22,00' } },
+        { dim: 'C', desc: '1/2 QUADRIL', desc_en: '1/2 HIP', tipo: 'Primária', critica: 'Não', tmenos: '-1,00', tmais: '1,00', v: { PP: '34,00', P: '38,00', M: '42,00', G: '46,00', GG: '50,00' } },
+      ],
+      acabamento: [{ desc: 'Elást. decote pronto', v: { PP: '28', P: '32', M: '36', G: '40', GG: '44' } }],
+      avi_tam: [{ desc: 'Elást. 1cm', v: { PP: '0,65', P: '0,73', M: '0,81', G: '0,89', GG: '0,97' } }],
+    },
+    consumo: {
+      cor: 'OFF WHITE',
+      tecidos: [
+        { codigo: '15.07.0395', tecido: 'TRICOLINE WORK CITY', gramatura: '0', largura: '1,47', consumo: '1,84', composicao: '', cor: 'OFF WHITE' },
+        { codigo: '14.06.0059', tecido: 'MALHA FORRO ARIZONA (ADAR)', gramatura: '0,098', largura: '1,55', consumo: '0,185', composicao: '', cor: 'OFF WHITE' },
+      ],
+      aviamentos: [
+        { codigo: '20.02.0001', material: 'ELÁSTICO JARAGUÁ 10MM', aplicacao: '0 - Geral', un: 'MT', cor: '100 | BRANCO', consumo: '0,77' },
+        { codigo: '20.02.0011', material: 'ELASTEX', aplicacao: '0 - Geral', un: 'MT', cor: '100 | BRANCO', consumo: '30,50' },
+        { codigo: '20.03.0023', material: 'RFID COSTURÁVEL (C&A)', aplicacao: '0 - Geral', un: 'UN', cor: '43 | ÚNICA', consumo: '1,00' },
+      ],
+    },
+  };
+}
+
+/* ================================================================
    Início do app
    ================================================================ */
 async function iniciar(sess) {
@@ -2549,7 +2960,7 @@ async function boot() {
 // recarrega os dados quando a aba volta a ficar visível (ex.: depois de usar no celular)
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible' || !S.user || !$('.shell') || S.api.demo) return;
-  if (Date.now() - S.carregadoEm < 2 * 60e3 || $('.modal-bg')) return;
+  if (Date.now() - S.carregadoEm < 2 * 60e3 || $('.modal-bg') || (S.fichaAberta && S.fichaAberta.pendente)) return;
   try { await carregarTudo(); if (!$('.modal-bg')) rerender(); } catch (e) { /* tenta depois */ }
 });
 

@@ -9,11 +9,13 @@ Site estático (HTML + CSS + JavaScript puro) com banco **Supabase**, no mesmo e
 |---|---|
 | Início | Relatório: desenhos e consumos feitos, tarefas, peças; totais por cliente; pedidos por mês; pendências e prazos |
 | Meu ponto | Bater entrada, almoço, volta e saída; atraso/adiantamento de cada dia, banco de horas, período de assinatura (16 a 15), feriados automáticos, planilha do mês |
-| Desenho | Pedidos de desenho com checklist (Desenho, Conferido, Sisplan, ISA, Tabela, Foto) |
-| Consumo | Pedidos de consumo com checklist (Consumo, Sisplan, Foto, ISA) |
+| Desenho | Pedidos de desenho com checklist (Desenho, Conferido, Sisplan, ISA) e a Tabela depois de finalizado |
+| Mini consumo | Pedidos de consumo com checklist (Consumo, Sisplan, Foto, ISA) |
+| Ficha técnica | Pesquisa a peça e abre a ficha técnica editável (cabeçalho, desenho técnico, obs., etiquetas, tabela de medidas, consumos por tamanho); imprimir/PDF e baixar imagem |
+| Ficha de consumo | Tecidos e aviamentos da peça, editável e ligada à ficha técnica |
 | Fazer | Tarefas: quem pediu, prazo e entrega (data/hora e para quem) |
 | Catálogo | Cartões com foto, REF, OP e situação; abre a ficha da peça |
-| Medidas | Arquivos (PDF, foto, planilha) de cada cliente |
+| Medidas | Guia de consulta dos manuais (Renner, C&A, Havan): busca por código ou nome, desenho, como medir, página do PDF; e arquivos avulsos |
 | Pessoas e clientes | Cores das pessoas, siglas dos clientes (RNN, CeA, IND…) |
 
 No **Meu ponto**, a jornada (entrada 07:30, saída, almoço, tolerância, dia da assinatura) fica em *Minha jornada* e pode ser mudada a qualquer momento — os saldos são recalculados.
@@ -45,7 +47,7 @@ supabase/schema.sql      tabelas, regras de acesso (RLS) e bucket de fotos
 ## Supabase
 
 - Organização **Nathany Di Celio** → projeto **nathany-atelie** (região São Paulo).
-- Tabelas: `pessoas`, `clientes`, `pecas`, `pedidos` (desenho/consumo), `tarefas`, `medidas`, `ponto`, `ponto_fechamentos`, `config`.
+- Tabelas: `pessoas`, `clientes`, `pecas`, `pedidos` (desenho/consumo), `tarefas`, `medidas`, `ponto`, `ponto_fechamentos`, `config`, `guia_manuais`, `guia_pontos`, `fichas`.
 - Fotos e arquivos no bucket privado `arquivos` (só quem está logado vê).
 - Só usuários logados acessam os dados (RLS).
 
