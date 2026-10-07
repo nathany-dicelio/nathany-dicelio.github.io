@@ -826,7 +826,6 @@ function renderShell() {
         <a href="#/fazer" data-r="fazer">${ic('list')}Fazer<span class="cnt hidden" data-cnt="fazer"></span></a>
         <div class="grp">Fichas</div>
         <a href="#/ficha-tecnica" data-r="ficha-tecnica">${ic('file')}Ficha técnica</a>
-        <a href="#/ficha-consumo" data-r="ficha-consumo">${ic('tag')}Ficha de consumo</a>
         <div class="grp">Consulta</div>
         <a href="#/catalogo" data-r="catalogo">${ic('grid')}Catálogo</a>
         <a href="#/medidas" data-r="medidas">${ic('ruler')}Medidas</a>
@@ -965,7 +964,7 @@ const ROTAS = {
   ajustes: viewAjustes,
   ponto: viewPonto,
   'ficha-tecnica': a => viewFicha('tecnica', a),
-  'ficha-consumo': a => viewFicha('consumo', a),
+  'ficha-consumo': a => location.replace(`#/ficha-tecnica${a ? '/' + a : ''}`),
   peca: viewPeca,
   busca: viewBusca,
 };
@@ -1591,7 +1590,7 @@ function viewPeca(id) {
           <div class="row">${c ? `<span class="cbadge" style="--c:${esc(c.cor)}">${esc(c.nome)}</span>` : '<span class="tag gray sem">Sem cliente</span>'}${tagStatus('desenho', st.desenho)}${tagStatus('consumo', st.consumo)}</div>
           <div class="ref">${esc(pc.ref)}</div>
           ${pc.descricao ? `<div style="color:var(--ink-2);font-size:15px">${esc(pc.descricao)}</div>` : ''}
-          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button><a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}Ficha técnica</a><a class="btn sm" href="#/ficha-consumo/${pc.id}">${ic('tag')}Ficha de consumo</a></div>
+          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button><a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}Ficha técnica e consumo</a></div>
         </div>
         <div class="info">
           <div><small>OP</small><b>${ops.length ? esc(ops.join(', ')) : '—'}</b></div>
@@ -2593,7 +2592,7 @@ function viewFicha(tipo, arg) {
   if (arg) return folhaFicha(tipo, arg);
   const rota = ROTA_FICHA[tipo];
   const f = S.f['fl_' + tipo] || (S.f['fl_' + tipo] = { q: '' });
-  setPage(NOME_FICHA[tipo], 'Pesquise a peça pela REF, OP ou descrição para abrir a ficha');
+  setPage('Ficha técnica', 'Ficha técnica e de consumo de cada peça · pesquise pela REF, OP ou descrição');
   view().innerHTML = `<div class="card">
     <div class="guia-top"><div class="busca guia-busca">${ic('search')}<input class="inp" id="fq" placeholder="REF, OP ou descrição da peça" value="${esc(f.q)}" autocomplete="off" spellcheck="false"></div></div>
     <div class="guia-info small muted" id="fi"></div>
@@ -2605,7 +2604,7 @@ function viewFicha(tipo, arg) {
     const lista = q ? pecasQue(q) : [...S.db.pecas].sort((a, b) => quando(b).localeCompare(quando(a)));
     $('#fi').textContent = q ? plural(lista.length, 'peça encontrada', 'peças encontradas') : 'Peças mais recentes · pesquise para achar qualquer outra';
     $('#fl').innerHTML = lista.length ? `<div class="fl-lista">${lista.slice(0, q ? 60 : 30).map(pc => {
-      const fi = fichaDe(pc.id), tem = fi && !fichaVazia(fi[tipo]), ops = opsDaPeca(pc);
+      const fi = fichaDe(pc.id), tem = fi && (!fichaVazia(fi.tecnica) || !fichaVazia(fi.consumo)), ops = opsDaPeca(pc);
       const sub = [pc.descricao, ops.length ? `OP ${ops.join(', ')}` : ''].filter(Boolean).map(esc).join(' · ') || 'Sem descrição';
       return `<a class="fl-it" href="#/${rota}/${pc.id}">${thumb(capa(pc) || imgsCons(pc)[0])}<div class="t"><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${sub}</small></div>
         ${tem ? `<span class="tag green">Ficha preenchida${fi.atualizado_em ? ' · ' + fDia(fi.atualizado_em) : ''}</span>` : '<span class="tag gray">Sem ficha</span>'}${ic('chevR')}</a>`;
@@ -2623,6 +2622,7 @@ function viewFicha(tipo, arg) {
 function folhaFicha(tipo, pecaId) {
   const pc = peca(pecaId);
   if (!pc) { setPage(NOME_FICHA[tipo]); view().innerHTML = `<div class="card">${vazio('dress', 'Essa peça não existe mais', '', `<a class="btn" href="#/${ROTA_FICHA[tipo]}">Voltar</a>`)}</div>`; return; }
+  tipo = 'tecnica';
   const fi = fichaDe(pc.id);
   const E = S.fichaAberta && S.fichaAberta.pc.id === pc.id && S.fichaAberta.pendente
     ? S.fichaAberta
@@ -2635,7 +2635,7 @@ function folhaFicha(tipo, pecaId) {
       <span class="salvo ok" id="salvo">${ic('check')}Tudo salvo</span>
       <div class="r">
         <a class="btn sm" href="#/peca/${pc.id}">${ic('dress')}<span class="tx">Peça</span></a>
-        <a class="btn sm" href="#/${ROTA_FICHA[outro]}/${pc.id}">${ic(outro === 'tecnica' ? 'file' : 'tag')}<span class="tx">${NOME_FICHA[outro]}</span></a>
+        <button type="button" class="btn sm" id="ir-consumo">${ic('tag')}<span class="tx">Ir para o consumo</span></button>
         <button type="button" class="btn sm" id="f-print">${ic('download')}<span class="tx">Imprimir / PDF</span></button>
         <button type="button" class="btn sm primary" id="f-img">${ic('image')}<span class="tx">Baixar imagem</span></button>
       </div>
@@ -2647,7 +2647,7 @@ function folhaFicha(tipo, pecaId) {
 
 function desenharFolha(E) {
   const el = $('#folha'); if (!el) return;
-  el.innerHTML = E.tipo === 'tecnica' ? folhaTecnicaHtml(E) : folhaConsumoHtml(E);
+  el.innerHTML = `${folhaTecnicaHtml(E)}<div class="folha-consumo quebra" id="folha-consumo">${folhaConsumoHtml(E)}</div>`;
   $$('textarea', el).forEach(autoAltura);
   hidratarFotos(el);
 }
@@ -2766,7 +2766,7 @@ function folhaConsumoHtml(E) {
       <td class="n pil"><input class="num" data-k="consumo.aviamentos.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
       <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.aviamentos.${i}" title="Tirar aviamento">${ic('x')}</button></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.aviamentos">${ic('plus')}Adicionar aviamento</button>
-      <span class="small muted">Os aviamentos daqui aparecem como sugestão nos consumos por tamanho da ficha técnica.</span></div>
+      <span class="small muted">Os aviamentos daqui aparecem como sugestão em “Consumos de aviamentos”, mais acima.</span></div>
   </section>
   <datalist id="dl-un"><option value="MT"><option value="UN"><option value="KG"><option value="CM"><option value="PC"></datalist>`;
 }
@@ -2811,12 +2811,17 @@ function ligarFolha(E) {
   el.addEventListener('input', e => {
     const t = e.target;
     if (t.tagName === 'TEXTAREA') autoAltura(t);
+    const sel = t.dataset.k ? `[data-k="${t.dataset.k}"]` : t.dataset.peca ? `[data-peca="${t.dataset.peca}"]` : null;
+    if (sel) el.querySelectorAll(sel).forEach(o => { if (o !== t) o.value = t.value; });
     if (t.dataset.k) { setPath(E.F, t.dataset.k, t.value); agendarSalvar(E); }
     else if (t.dataset.peca && t.tagName === 'INPUT') agendarPeca(E, t.dataset.peca, t.value.trim() || null);
   });
   el.addEventListener('change', async e => {
     const t = e.target;
-    if (t.dataset.peca && t.tagName === 'SELECT') { agendarPeca(E, t.dataset.peca, t.value || null); return; }
+    if (t.dataset.peca && t.tagName === 'SELECT') {
+      el.querySelectorAll(`select[data-peca="${t.dataset.peca}"]`).forEach(o => { if (o !== t) o.value = t.value; });
+      agendarPeca(E, t.dataset.peca, t.value || null); return;
+    }
     if (t.dataset.pom !== undefined) {
       const poms = pomsDoCliente(E.pc.cliente_id), i = t.dataset.pom, cod = t.value.trim().toUpperCase();
       const r = E.F.tecnica.medidas[i];
@@ -2852,6 +2857,7 @@ function ligarFolha(E) {
     if (lb) lightbox([lb.dataset.lb]);
   });
   $('#f-print').onclick = () => imprimirFicha();
+  const ir = $('#ir-consumo'); if (ir) ir.onclick = () => $('#folha-consumo').scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('#f-img').onclick = () => baixarFichaImagem(E);
 }
 
