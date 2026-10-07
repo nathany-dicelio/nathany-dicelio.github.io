@@ -23,7 +23,7 @@ const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const PERIODOS = [['tudo', 'Qualquer data'], ['mes', 'Este mês'], ['30', 'Últimos 30 dias'], ['ano', 'Este ano']];
 const CORES = ['#781026', '#D23B3B', '#3B4FD2', '#9B3BD2', '#17925A', '#0E8FA0', '#C98A06', '#D9541E', '#B4507A', '#2B2B2B'];
-const TABS = ['pessoas', 'clientes', 'pecas', 'pedidos', 'tarefas', 'medidas', 'ponto', 'ponto_fechamentos', 'config'];
+const TABS = ['pessoas', 'clientes', 'pecas', 'pedidos', 'tarefas', 'medidas', 'ponto', 'ponto_fechamentos', 'config', 'guia_manuais', 'guia_pontos'];
 
 const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>',
@@ -63,6 +63,7 @@ const ICONS = {
   external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff: '<path d="M3 3l18 18"/><path d="M10.6 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2"/><path d="M6.6 6.6A17.4 17.4 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  star: '<path d="M12 3.2l2.7 5.5 6 .9-4.35 4.25 1.03 6-5.38-2.83-5.38 2.83 1.03-6L3.3 9.6l6-.9z"/>',
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
 };
 const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
@@ -240,7 +241,13 @@ function SupaAPI() {
     async inserir(tab, row) { return ok(await sb.from(tab).insert(row).select().single()); },
     async atualizar(tab, id, patch) { return ok(await sb.from(tab).update(patch).eq('id', id).select().single()); },
     async excluir(tab, id) { ok(await sb.from(tab).delete().eq('id', id)); },
-    async enviar(path, blob) { ok(await B().upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: false, cacheControl: '31536000' })); return path; },
+    async enviar(path, blob, upsert = false) { ok(await B().upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert, cacheControl: upsert ? '3600' : '31536000' })); return path; },
+    async inserirVarios(tab, rows) {
+      let out = [];
+      for (let i = 0; i < rows.length; i += 200) out = out.concat(ok(await sb.from(tab).insert(rows.slice(i, i + 200)).select()));
+      return out;
+    },
+    async excluirOnde(tab, col, val) { ok(await sb.from(tab).delete().eq(col, val)); },
     async urls(paths) {
       const d = ok(await B().createSignedUrls(paths, 3600));
       const m = {}; d.forEach(x => { if (x.signedUrl) m[x.path] = x.signedUrl; }); return m;
@@ -291,6 +298,8 @@ function DemoAPI() {
       if (tab === 'clientes') { db.pecas.forEach(p => { if (p.cliente_id === id) p.cliente_id = null; }); db.medidas = db.medidas.filter(m => m.cliente_id !== id); }
       gravar();
     },
+    async inserirVarios(tab, rows) { const out = []; for (const r of rows) out.push(await this.inserir(tab, r)); return out; },
+    async excluirOnde(tab, col, val) { db[tab] = (db[tab] || []).filter(x => x[col] !== val); gravar(); },
     async enviar(path, blob) {
       const b = blob.type.startsWith('image/') ? await comprimir(blob, 900, 0.75) : blob;
       arqs[path] = await blobUrl(b); gravarArqs(); return path;
@@ -370,7 +379,19 @@ function demoSeed() {
     tarefa('Separar aviamentos do vestido midi', 'Anderson', 6, 3, 18, 0, 3, 'Lu'),
     tarefa('Fotografar as peças piloto da semana', 'Karen', 2, -4, 16, null, null, null),
   ];
-  return { db: { pessoas, clientes, pecas, pedidos, tarefas, medidas: [], ...demoPonto() }, arquivos };
+  const guiaEx = [
+    ['513', 'Largura do decote', 'Medir a largura do decote a partir do ponto mais alto do decote em linha reta entre as alças.', 'Top – lingerie – praia', 34],
+    ['514', 'Altura do decote frente', 'Medir a partir do ponto mais alto do decote em linha reta.', 'Top – lingerie – praia', 34],
+    ['341', 'Largura da manga', 'Medir a 2cm abaixo da cava, de dobra a dobra, paralelo à linha da abertura da manga.', 'Top', 20],
+    ['400', 'Comprimento saia centro das costas', 'Medir no centro das costas desde a cintura até a barra da saia.', 'Bottom', 25],
+  ];
+  const guia_pontos = guiaEx.map(([codigo, nome, como_medir, grupo, pagina], i) => {
+    const imagem = `demo/guia-${codigo}.svg`;
+    arquivos[imagem] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220"><rect width="400" height="220" fill="#fff"/><path d="M120 40h160l-20 40 30 110H110l30-110z" fill="none" stroke="#333" stroke-width="3"/><path d="M128 95h144" stroke="#d22" stroke-width="3"/><circle cx="200" cy="95" r="20" fill="#fff" stroke="#d22" stroke-width="3"/><text x="200" y="101" font-size="16" text-anchor="middle" fill="#d22" font-family="Arial">${codigo}</text></svg>`);
+    return { id: uid(), manual: 'renner', codigo, nome, como_medir, grupo, pagina, imagem, extra: {}, ordem: i + 1, favorito: i === 0, criado_em: em(10) };
+  });
+  const guia_manuais = [{ id: uid(), manual: 'renner', cliente_id: C('RNN'), titulo: 'Manual de POMs (exemplo)', arquivo: null, paginas: 70, criado_em: em(10) }];
+  return { db: { pessoas, clientes, pecas, pedidos, tarefas, medidas: [], guia_manuais, guia_pontos, ...demoPonto() }, arquivos };
 }
 
 /* ================================================================
@@ -469,9 +490,10 @@ async function hidratarFotos(el = document) {
     const c = S.urls[e.dataset.foto];
     if (!c) return;
     let img = e.querySelector(':scope > img.ft');
-    if (!img) { img = document.createElement('img'); img.className = 'ft'; img.alt = ''; img.decoding = 'async'; e.prepend(img); }
+    if (!img) { img = document.createElement('img'); img.className = 'ft'; img.alt = ''; img.decoding = 'async'; img.loading = 'lazy'; e.prepend(img); }
     img.src = c.u;
     aplicarAjuste(img, aj[e.dataset.foto]);
+    if (e.dataset.fit) img.style.objectFit = e.dataset.fit;
     e.dataset.ok = '1';
   });
 }
@@ -547,9 +569,9 @@ const campoArq = tipo => (tipo === 'consumo' ? 'arquivos_consumo' : 'fotos');
 // etapa marcada guarda a data/hora (texto ISO); registros antigos guardam só "true"
 const quandoEtapa = v => (typeof v === 'string' && v.length > 10 ? fQuando(v) : '');
 const nomePdf = p => { const b = String(p).split('/').pop(); const i = b.indexOf('-', 36); return i > 0 ? b.slice(i + 1) : 'documento.pdf'; };
-async function abrirArquivo(path) {
+async function abrirArquivo(path, pagina) {
   const w = window.open('', '_blank');
-  try { const u = await S.api.urlArquivo(path); if (w) w.location = u; else location.href = u; }
+  try { let u = await S.api.urlArquivo(path); if (pagina) u += `#page=${pagina}`; if (w) w.location = u; else location.href = u; }
   catch (e) { if (w) w.close(); toast(msgErro(e), 'erro'); }
 }
 async function enviarFotos(pecaId, files) {
@@ -1542,7 +1564,7 @@ function viewPeca(id) {
           <div class="row">${c ? `<span class="cbadge" style="--c:${esc(c.cor)}">${esc(c.nome)}</span>` : '<span class="tag gray sem">Sem cliente</span>'}${tagStatus('desenho', st.desenho)}${tagStatus('consumo', st.consumo)}</div>
           <div class="ref">${esc(pc.ref)}</div>
           ${pc.descricao ? `<div style="color:var(--ink-2);font-size:15px">${esc(pc.descricao)}</div>` : ''}
-          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button><button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button></div>
+          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button></div>
         </div>
         <div class="info">
           <div><small>OP</small><b>${ops.length ? esc(ops.join(', ')) : '—'}</b></div>
@@ -1658,30 +1680,41 @@ function formPeca(pc) {
 /* ================================================================
    MEDIDAS — arquivos por cliente
    ================================================================ */
-function viewMedidas() {
+function viewMedidas(arg) {
   const cls = clientesOrd();
+  if (arg && cliente(arg)) S.f.medCli = arg;
+  const comGuia = id => S.db.guia_manuais.some(m => m.cliente_id === id);
   let cli = S.f.medCli;
-  if (cli === undefined || (cli && !cliente(cli))) cli = S.f.medCli = (cls[0] || {}).id || '';
-  setPage('Medidas', 'Tabelas de medidas e arquivos de cada cliente', `<button class="btn primary" data-novo="medida" data-cliente="${esc(cli)}">${ic('plus')}<span class="tx">Adicionar</span></button>`);
-  const conta = id => S.db.medidas.filter(m => (m.cliente_id || '') === id).length;
-  const lista = S.db.medidas.filter(m => (m.cliente_id || '') === cli).sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
+  if (cli === undefined || (cli && !cliente(cli))) cli = S.f.medCli = ((cls.find(x => comGuia(x.id)) || cls[0]) || {}).id || '';
   const c = cliente(cli);
-  view().innerHTML = `<div class="card">
-    <div class="chips" style="padding:16px 18px;border-bottom:1px solid var(--line)" id="cli">${cls.map(x => `<button class="chip${x.id === cli ? ' on' : ''}" data-cli="${x.id}" style="--c:${esc(x.cor)}"><i class="d"></i>${esc(x.nome)}<span class="n">${conta(x.id)}</span></button>`).join('')}</div>
-    ${lista.length ? `<div class="arq-grid">${lista.map(m => {
-      const img = /^image\//.test(m.tipo_arquivo || '');
-      const ext = (String(m.nome_arquivo || '').split('.').pop() || 'arq').slice(0, 4).toUpperCase();
-      return `<div class="arq">
-        ${img ? `<div class="th" data-foto="${esc(m.arquivo)}" data-abrir="${m.id}">${ic('image')}</div>` : `<div class="th" data-abrir="${m.id}"><span class="ext">${esc(m.arquivo ? ext : '—')}</span></div>`}
-        <div class="bd"><div><b>${esc(m.titulo)}</b><small>${esc(m.nome_arquivo || 'Sem arquivo')}${m.tamanho ? ' · ' + tamanhoArq(m.tamanho) : ''} · ${fData(m.criado_em)}</small>${m.obs ? `<p>${esc(m.obs)}</p>` : ''}</div>
-          <div style="display:flex">${m.arquivo ? `<button class="icon-btn" data-abrir="${m.id}" title="Abrir">${ic('external')}</button>` : ''}<button class="icon-btn" data-ed-med="${m.id}" title="Editar">${ic('edit')}</button><button class="icon-btn danger" data-del-med="${m.id}" title="Excluir">${ic('trash')}</button></div></div>
-      </div>`;
-    }).join('')}</div>`
-      : vazio('ruler', c ? `Nenhuma medida da ${c.nome} ainda` : 'Cadastre um cliente primeiro', c ? 'Adicione PDFs, fotos ou planilhas com as tabelas de medidas.' : '',
-        c ? `<button class="btn primary" data-novo="medida" data-cliente="${c.id}">${ic('plus')}Adicionar medida</button>` : '<a class="btn" href="#/ajustes">Cadastrar clientes</a>')}
-  </div>`;
+  const man = S.db.guia_manuais.find(m => m.cliente_id === cli);
+  setPage('Medidas', man ? `Guia de medidas da ${c.nome}: busque pelo código ou pelo nome` : 'Guias de medidas e arquivos de cada cliente',
+    `<button class="btn primary" data-novo="medida" data-cliente="${esc(cli)}">${ic('plus')}<span class="tx">Arquivo</span></button>`);
+  const nArq = id => S.db.medidas.filter(m => (m.cliente_id || '') === id).length;
+  const arquivos = S.db.medidas.filter(m => (m.cliente_id || '') === cli).sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
+  view().innerHTML = `
+    <div class="chips med-cli" id="cli">${cls.map(x => `<button class="chip${x.id === cli ? ' on' : ''}" data-cli="${x.id}" style="--c:${esc(x.cor)}"><i class="d"></i>${esc(x.nome)}${comGuia(x.id) ? `<span class="n" title="Tem guia de medidas">${ic('ruler')}</span>` : nArq(x.id) ? `<span class="n">${nArq(x.id)}</span>` : ''}</button>`).join('')}</div>
+    ${man ? guiaHtml(man) : ''}
+    <div class="card" id="arqs">
+      <div class="card-h"><div><h3>${man ? 'Outros arquivos' : 'Arquivos'}${c ? ` da ${esc(c.nome)}` : ''}</h3><div class="sub">PDFs, fotos ou planilhas</div></div>
+        <div class="r"><button class="btn sm" data-novo="medida" data-cliente="${esc(cli)}">${ic('plus')}Adicionar</button></div></div>
+      ${arquivos.length ? `<div class="arq-grid">${arquivos.map(m => {
+        const img = /^image\//.test(m.tipo_arquivo || '');
+        const ext = (String(m.nome_arquivo || '').split('.').pop() || 'arq').slice(0, 4).toUpperCase();
+        return `<div class="arq">
+          ${img ? `<div class="th" data-foto="${esc(m.arquivo)}" data-abrir="${m.id}">${ic('image')}</div>` : `<div class="th" data-abrir="${m.id}"><span class="ext">${esc(m.arquivo ? ext : '—')}</span></div>`}
+          <div class="bd"><div><b>${esc(m.titulo)}</b><small>${esc(m.nome_arquivo || 'Sem arquivo')}${m.tamanho ? ' · ' + tamanhoArq(m.tamanho) : ''} · ${fData(m.criado_em)}</small>${m.obs ? `<p>${esc(m.obs)}</p>` : ''}</div>
+            <div style="display:flex">${m.arquivo ? `<button class="icon-btn" data-abrir="${m.id}" title="Abrir">${ic('external')}</button>` : ''}<button class="icon-btn" data-ed-med="${m.id}" title="Editar">${ic('edit')}</button><button class="icon-btn danger" data-del-med="${m.id}" title="Excluir">${ic('trash')}</button></div></div>
+        </div>`;
+      }).join('')}</div>`
+        : man ? '<div class="card-b muted small" style="padding-top:4px">Nenhum outro arquivo.</div>'
+        : vazio('ruler', c ? `Nenhum guia ou arquivo da ${c.nome} ainda` : 'Cadastre um cliente primeiro', c ? 'Adicione PDFs, fotos ou planilhas com as tabelas de medidas.' : '',
+          c ? `<button class="btn primary" data-novo="medida" data-cliente="${c.id}">${ic('plus')}Adicionar arquivo</button>` : '<a class="btn" href="#/ajustes">Cadastrar clientes</a>')}
+    </div>
+    <div class="guia-imp"><button type="button" class="link-btn" id="imp-guia">${ic('download')}Importar ou atualizar os guias de medidas</button></div>`;
   $('#cli').addEventListener('click', e => { const b = e.target.closest('[data-cli]'); if (b) { S.f.medCli = b.dataset.cli; rerender(); } });
-  $('.card', view()).addEventListener('click', async e => {
+  $('#imp-guia').onclick = formImportarGuia;
+  $('#arqs').addEventListener('click', async e => {
     const ab = e.target.closest('[data-abrir]'), ed = e.target.closest('[data-ed-med]'), del = e.target.closest('[data-del-med]');
     if (ab) abrirMedida(byId('medidas', ab.dataset.abrir));
     if (ed) formMedida(byId('medidas', ed.dataset.edMed));
@@ -1692,6 +1725,203 @@ function viewMedidas() {
       catch (err) { toast(msgErro(err), 'erro'); }
     }
   });
+  if (man) ligarGuia(man);
+}
+
+/* ---------- guia de medidas (pontos dos manuais dos clientes) ---------- */
+const estadoGuia = man => {
+  const g = S.f.guia || (S.f.guia = {});
+  return g[man.manual] || (g[man.manual] = { q: '', grupo: '', fav: false });
+};
+const pontosDo = man => S.db.guia_pontos.filter(p => p.manual === man.manual).sort((a, b) => a.ordem - b.ordem);
+// manual em fichas (ex.: Havan): todos os pontos de um grupo usam a mesma imagem
+const guiaEmFichas = man => {
+  const pts = pontosDo(man);
+  const grupos = [...new Set(pts.map(p => p.grupo))];
+  return pts.length > 0 && grupos.every(g => new Set(pts.filter(p => p.grupo === g).map(p => p.imagem)).size === 1);
+};
+function buscarPontos(lista, q) {
+  const qn = norm(q);
+  if (!qn) return lista;
+  const so = t => norm(t).replace(/[^a-z0-9]/g, '');
+  const qc = so(qn), tok = qn.split(/\s+/).filter(Boolean);
+  return lista.map(p => {
+    const cods = String(p.codigo || '').split(/[/,\s]+/).map(so).filter(Boolean);
+    const nome = norm(p.nome), tudo = norm([p.nome, p.como_medir, p.grupo, JSON.stringify(p.extra || {})].join(' '));
+    let n = 0;
+    if (qc && cods.includes(qc)) n = 100;
+    else if (qc && /\d/.test(qc) && cods.some(c => c.startsWith(qc))) n = 80;
+    else if (nome === qn) n = 70;
+    else if (nome.startsWith(qn)) n = 60;
+    else if (tok.every(t => nome.includes(t))) n = 50;
+    else if (tok.every(t => tudo.includes(t))) n = 20;
+    return { p, n };
+  }).filter(x => x.n).sort((a, b) => (b.n - a.n) || (a.p.ordem - b.p.ordem)).map(x => x.p);
+}
+function guiaHtml(man) {
+  const st = estadoGuia(man);
+  return `<div class="card guia" id="guia">
+    <div class="guia-top">
+      <div class="busca guia-busca">${ic('search')}<input class="inp" id="gq" placeholder="Código ou nome da medida (ex.: 513 ou largura do decote)" value="${esc(st.q)}" autocomplete="off" spellcheck="false" aria-label="Buscar ponto de medida"></div>
+      ${man.arquivo ? `<button type="button" class="btn" data-pdf-pg="">${ic('file')}<span class="tx">Manual completo</span></button>` : ''}
+    </div>
+    <div class="chips chips-row" id="gg"></div>
+    <div class="guia-info small muted" id="gi"></div>
+    <div id="gl"></div>
+  </div>`;
+}
+function pontoHtml(p, man) {
+  const ex = p.extra || {};
+  const imgs = [p.imagem, ...(ex.mais_imagens || [])].filter(Boolean);
+  const campos = [['Posicionamento', ex.posicionamento], ['Tipo de cota', ex.tipo_cota], ['Aplicabilidade', ex.aplicabilidade]].filter(x => x[1]);
+  return `<article class="gp${p.favorito ? ' fav' : ''}">
+    ${p.imagem ? `<button type="button" class="gp-img th" data-foto="${esc(p.imagem)}" data-fit="contain" data-gp-zoom="${p.id}" title="Ampliar">${ic('ruler')}</button>` : ''}
+    <div class="gp-bd">
+      <div class="gp-h"><span class="gp-cod">${esc(p.codigo)}</span><h4>${esc(p.nome)}</h4>
+        <button type="button" class="gp-fav" data-gp-fav="${p.id}" title="${p.favorito ? 'Tirar dos favoritos' : 'Marcar como favorito'}" aria-pressed="${p.favorito}">${ic('star')}</button></div>
+      <div class="gp-meta">${esc(p.grupo || '')}${ex.auxiliar ? ' · POM auxiliar' : ''}</div>
+      ${p.como_medir ? `<p class="gp-como">${esc(p.como_medir)}</p>` : ''}
+      ${campos.length ? `<dl class="gp-ex">${campos.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : ''}
+      ${(ex.observacoes || []).length ? `<ul class="gp-obs">${ex.observacoes.map(o => `<li>${esc(o)}</li>`).join('')}</ul>` : ''}
+      <div class="gp-acts">${imgs.length > 1 ? `<button type="button" class="btn sm" data-gp-zoom="${p.id}">${ic('image')}Ver ${imgs.length} imagens</button>` : ''}${man.arquivo && p.pagina ? `<button type="button" class="btn sm" data-pdf-pg="${p.pagina}">${ic('external')}Ver no manual · pág. ${p.pagina}</button>` : ''}</div>
+    </div>
+  </article>`;
+}
+function desenharGuia(man) {
+  const st = estadoGuia(man);
+  const todos = pontosDo(man);
+  const grupos = [...new Set(todos.map(p => p.grupo).filter(Boolean))];
+  const nFav = todos.filter(p => p.favorito).length;
+  if (st.grupo && !grupos.includes(st.grupo)) st.grupo = '';
+  $('#gg').innerHTML = `<button class="chip${!st.grupo && !st.fav ? ' on' : ''}" data-gg="">Todos<span class="n">${todos.length}</span></button>`
+    + `<button class="chip chip-fav${st.fav ? ' on' : ''}" data-gfav="1">${ic('star')}Favoritos<span class="n">${nFav}</span></button>`
+    + grupos.map(g => `<button class="chip${st.grupo === g && !st.fav ? ' on' : ''}" data-gg="${esc(g)}">${esc(g)}<span class="n">${todos.filter(p => p.grupo === g).length}</span></button>`).join('');
+  let lista = todos;
+  if (st.fav) lista = lista.filter(p => p.favorito);
+  else if (st.grupo) lista = lista.filter(p => p.grupo === st.grupo);
+  const q = st.q.trim();
+  if (q) lista = buscarPontos(lista, q);
+  const fichas = guiaEmFichas(man);
+  const gl = $('#gl'), gi = $('#gi');
+  if (!q && !st.fav && fichas && !st.grupo) {
+    gi.textContent = 'Escolha o tipo de peça para ver a ficha com os pontos de medida.';
+    gl.innerHTML = `<div class="fichas">${grupos.map(g => { const pts = todos.filter(p => p.grupo === g);
+      return `<button type="button" class="ficha-card" data-gg="${esc(g)}"><div class="th" data-foto="${esc(pts[0].imagem)}" data-fit="contain">${ic('ruler')}</div><b>${esc(g)}</b><small>${plural(pts.length, 'ponto')}</small></button>`; }).join('')}</div>`;
+  } else if (!q && !st.fav && fichas && st.grupo) {
+    const nota = lista.find(p => p.como_medir);
+    gi.textContent = '';
+    gl.innerHTML = `<div class="ficha-ver">
+      <button type="button" class="th ficha-img" data-foto="${esc(lista[0].imagem)}" data-fit="contain" data-gp-zoom="${lista[0].id}" title="Ampliar">${ic('ruler')}</button>
+      <div class="ficha-lista">${nota ? `<div class="aviso">${ic('info')}<span>${esc(nota.como_medir)}</span></div>` : ''}
+        <ol>${lista.map(p => `<li class="${p.favorito ? 'fav' : ''}"><span class="gp-cod">${esc(p.codigo)}</span><span class="nm">${esc(p.nome)}</span><button type="button" class="gp-fav" data-gp-fav="${p.id}" aria-pressed="${p.favorito}" title="Favorito">${ic('star')}</button></li>`).join('')}</ol>
+        ${man.arquivo ? `<button type="button" class="btn sm" data-pdf-pg="${lista[0].pagina || ''}">${ic('external')}Ver no manual · pág. ${lista[0].pagina}</button>` : ''}</div>
+    </div>`;
+  } else {
+    gi.textContent = q ? `${plural(lista.length, 'ponto encontrado', 'pontos encontrados')} para “${q}”` : st.fav ? 'Seus pontos favoritos' : `${plural(lista.length, 'ponto')}`;
+    gl.innerHTML = lista.length ? `<div class="gp-lista">${lista.map(p => pontoHtml(p, man)).join('')}</div>`
+      : vazio(st.fav ? 'star' : 'search', st.fav ? 'Nenhum favorito ainda' : `Nada encontrado para “${q}”`, st.fav ? 'Toque na estrela de um ponto para ele aparecer aqui.' : 'Tente outro código ou parte do nome.');
+  }
+  hidratarFotos(gl);
+}
+function ligarGuia(man) {
+  const st = estadoGuia(man);
+  const card = $('#guia');
+  const inp = $('#gq');
+  inp.addEventListener('input', () => { st.q = inp.value; desenharGuia(man); });
+  inp.addEventListener('keydown', e => { if (e.key === 'Escape') { inp.value = ''; st.q = ''; desenharGuia(man); } });
+  card.addEventListener('click', async e => {
+    const gg = e.target.closest('[data-gg]'), gf = e.target.closest('[data-gfav]'), fav = e.target.closest('[data-gp-fav]');
+    const zoom = e.target.closest('[data-gp-zoom]'), pg = e.target.closest('[data-pdf-pg]');
+    if (gg) { st.grupo = gg.dataset.gg; st.fav = false; desenharGuia(man); return; }
+    if (gf) { st.fav = !st.fav; desenharGuia(man); return; }
+    if (fav) {
+      const p = byId('guia_pontos', fav.dataset.gpFav); if (!p) return;
+      fav.disabled = true;
+      try { await salvarReg('guia_pontos', { favorito: !p.favorito }, p.id); desenharGuia(man); }
+      catch (err) { fav.disabled = false; toast(msgErro(err), 'erro'); }
+      return;
+    }
+    if (zoom) { const p = byId('guia_pontos', zoom.dataset.gpZoom); if (p) lightbox([p.imagem, ...((p.extra || {}).mais_imagens || [])].filter(Boolean)); return; }
+    if (pg && man.arquivo) abrirArquivo(man.arquivo, +pg.dataset.pdfPg || null);
+  });
+  desenharGuia(man);
+  if (!matchMedia('(max-width: 640px)').matches) setTimeout(() => inp.focus(), 50);
+}
+
+/* importar a pasta "guia-medidas-importar" (guia.json + imagens + PDFs) */
+function formImportarGuia() {
+  if (S.api.demo) { toast('Na demonstração não dá para importar. Entre com a sua conta.', 'erro'); return; }
+  let dados = null, arquivos = null;
+  modal({
+    titulo: 'Importar guias de medidas', tamanho: 'sm',
+    corpo: `<div class="form">
+      <div class="aviso">${ic('info')}<span>Escolha a pasta <b>guia-medidas-importar</b>. Os pontos de cada manual são trocados pelos da pasta; as estrelas de favorito continuam.</span></div>
+      <label class="btn" style="align-self:flex-start">${ic('download')}Escolher a pasta<input type="file" id="gpasta" webkitdirectory multiple hidden></label>
+      <div id="gres"></div>
+    </div>`,
+    rodape: '<button type="button" class="btn" data-cancelar>Cancelar</button><button type="button" class="btn primary" id="gimp" disabled>Importar</button>',
+    aoAbrir: m => {
+      const res = m.$('#gres'), btn = m.$('#gimp');
+      m.$('#gpasta').addEventListener('change', async e => {
+        const mapa = {};
+        [...e.target.files].forEach(f => { mapa[(f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name] = f; });
+        if (!mapa['guia.json']) { res.innerHTML = `<div class="aviso erro">${ic('alert')}<span>Essa pasta não tem o arquivo guia.json.</span></div>`; btn.disabled = true; return; }
+        try { dados = JSON.parse(await mapa['guia.json'].text()); arquivos = mapa; }
+        catch (err) { res.innerHTML = `<div class="aviso erro">${ic('alert')}<span>Não consegui ler o guia.json.</span></div>`; return; }
+        res.innerHTML = `<ul class="imp-lista">${dados.manuais.map(mn => { const cl = acharClienteGuia(mn.cliente);
+          return `<li>${cl ? ic('check') : ic('alert')}<b>${esc(mn.cliente)}</b> · ${dados.pontos.filter(p => p.manual === mn.manual).length} pontos${cl ? '' : ' · <span style="color:var(--red)">cliente não cadastrado</span>'}</li>`; }).join('')}</ul><div class="prog imp-prog hidden"><i style="width:0"></i></div><div class="small muted" id="gst"></div>`;
+        btn.disabled = false;
+      });
+      btn.onclick = async () => {
+        ocupado(btn, true, 'Importando…');
+        const bar = m.$('.imp-prog'), stx = m.$('#gst');
+        bar.classList.remove('hidden');
+        try {
+          await importarGuia(dados, arquivos, (txt, frac) => { stx.textContent = txt; bar.firstElementChild.style.width = `${Math.round(frac * 100)}%`; });
+          m.fechar(); toast('Guias de medidas importados.'); rerender();
+        } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); stx.textContent = ''; }
+      };
+    },
+  });
+}
+const acharClienteGuia = nome => { const so = t => norm(t).replace(/[^a-z0-9]/g, ''); return S.db.clientes.find(c => so(c.nome) === so(nome)) || null; };
+async function importarGuia(dados, arquivos, prog) {
+  const total = dados.manuais.length;
+  for (const [i, mn] of dados.manuais.entries()) {
+    const cl = acharClienteGuia(mn.cliente);
+    const pts = dados.pontos.filter(p => p.manual === mn.manual);
+    const base = `guia/${mn.manual}/`;
+    const nomeArq = r => base + String(r).split('/').pop();
+    const imgs = [...new Set(pts.flatMap(p => [p.imagem, ...((p.extra || {}).mais_imagens || [])]).filter(Boolean))];
+    let feitos = 0;
+    const passo = () => prog(`${mn.cliente}: enviando arquivos (${feitos} de ${imgs.length + 1})`, (i + feitos / (imgs.length + 2)) / total);
+    passo();
+    if (mn.arquivo && arquivos[mn.arquivo]) await S.api.enviar(nomeArq(mn.arquivo), arquivos[mn.arquivo], true);
+    feitos++; passo();
+    const fila = imgs.slice();
+    await Promise.all([0, 1, 2, 3, 4].map(async () => {
+      while (fila.length) {
+        const r = fila.shift();
+        if (arquivos[r]) await S.api.enviar(nomeArq(r), arquivos[r], true);
+        feitos++; passo();
+      }
+    }));
+    prog(`${mn.cliente}: salvando ${pts.length} pontos`, (i + 0.95) / total);
+    const favs = new Set(S.db.guia_pontos.filter(p => p.manual === mn.manual && p.favorito).map(p => p.codigo));
+    await S.api.excluirOnde('guia_pontos', 'manual', mn.manual);
+    const linhas = pts.map(p => {
+      const ex = { ...(p.extra || {}) };
+      if (ex.mais_imagens) ex.mais_imagens = ex.mais_imagens.map(nomeArq);
+      return { manual: mn.manual, codigo: p.codigo, nome: p.nome, como_medir: p.como_medir || null, grupo: p.grupo || null,
+        pagina: p.pagina || null, imagem: p.imagem ? nomeArq(p.imagem) : null, extra: ex, ordem: p.ordem || 0, favorito: favs.has(p.codigo) };
+    });
+    const novos = await S.api.inserirVarios('guia_pontos', linhas);
+    S.db.guia_pontos = S.db.guia_pontos.filter(p => p.manual !== mn.manual).concat(novos);
+    const atual = S.db.guia_manuais.find(x => x.manual === mn.manual);
+    await salvarReg('guia_manuais', { manual: mn.manual, cliente_id: cl ? cl.id : null, titulo: mn.titulo || null,
+      arquivo: mn.arquivo ? nomeArq(mn.arquivo) : null, paginas: mn.paginas || null }, atual && atual.id);
+  }
+  prog('Pronto!', 1);
 }
 async function abrirMedida(m) {
   if (!m || !m.arquivo) return;

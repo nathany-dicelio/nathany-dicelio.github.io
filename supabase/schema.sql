@@ -201,3 +201,44 @@ alter table public.pecas add column if not exists foto_ajustes jsonb not null de
 -- ARQUIVOS DO CONSUMO (adicionado em 2026-10-06): separados das fotos do catálogo
 -- =====================================================================
 alter table public.pecas add column if not exists arquivos_consumo jsonb not null default '[]'::jsonb;
+
+-- =====================================================================
+-- GUIA DE MEDIDAS (adicionado em 2026-10-07): pontos de medida dos manuais dos clientes
+-- importados pelo botão "Importar guia" da tela Medidas (arquivos no bucket privado "arquivos")
+-- =====================================================================
+create table if not exists public.guia_manuais (
+  id         uuid primary key default gen_random_uuid(),
+  manual     text not null unique,            -- renner | cea | havan
+  cliente_id uuid references public.clientes(id) on delete set null,
+  titulo     text,
+  arquivo    text,                            -- PDF completo no Storage
+  paginas    int,
+  criado_em  timestamptz not null default now()
+);
+create table if not exists public.guia_pontos (
+  id         uuid primary key default gen_random_uuid(),
+  manual     text not null,
+  codigo     text not null,
+  nome       text not null,
+  como_medir text,
+  grupo      text,
+  pagina     int,
+  imagem     text,
+  extra      jsonb not null default '{}'::jsonb,
+  ordem      int not null default 0,
+  favorito   boolean not null default false,
+  criado_em  timestamptz not null default now()
+);
+create index if not exists guia_pontos_manual on public.guia_pontos (manual, ordem);
+
+do $$
+declare t text;
+begin
+  foreach t in array array['guia_manuais','guia_pontos'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists "logado" on public.%I', t);
+    execute format('create policy "logado" on public.%I for all to authenticated using (true) with check (true)', t);
+    execute format('revoke all on public.%I from anon', t);
+    execute format('grant select, insert, update, delete on public.%I to authenticated', t);
+  end loop;
+end $$;
