@@ -2888,12 +2888,23 @@ function escolherDesenho(E) {
   });
 }
 
-function imprimirFicha() {
-  document.body.classList.add('imprimindo-ficha');
-  const fim = () => { document.body.classList.remove('imprimindo-ficha'); window.removeEventListener('afterprint', fim); };
-  window.addEventListener('afterprint', fim);
-  setTimeout(() => window.print(), 50);
+/* na impressão, cada caixa de digitar vira texto (quebra linha em vez de cortar) */
+function prepararImpressao() {
+  const f = $('#folha'); if (!f) return;
+  limparImpressao();
+  $$('input, select, textarea', f).forEach(el => {
+    if (el.type === 'file' || el.type === 'hidden') return;
+    let v = el.tagName === 'SELECT' ? ((el.selectedOptions[0] || {}).text || '') : el.value;
+    if (el.type === 'date' && v) v = v.split('-').reverse().join('/');
+    const t = document.createElement('div');
+    t.className = 'pv'; t.textContent = v;
+    el.after(t);
+  });
 }
+function limparImpressao() { $$('.folha .pv').forEach(x => x.remove()); }
+window.addEventListener('beforeprint', prepararImpressao);
+window.addEventListener('afterprint', limparImpressao);
+function imprimirFicha() { prepararImpressao(); setTimeout(() => window.print(), 50); }
 async function baixarFichaImagem(E) {
   const btn = $('#f-img'); ocupado(btn, true, 'Gerando…');
   try {
