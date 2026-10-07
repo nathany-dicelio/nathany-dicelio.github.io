@@ -242,3 +242,24 @@ begin
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
   end loop;
 end $$;
+
+-- =====================================================================
+-- FICHA TÉCNICA e FICHA DE CONSUMO (adicionado em 2026-10-07): uma linha por peça
+-- tecnica: cabeçalho, desenho, obs., etiquetas, tabela de medidas, consumos por tamanho
+-- consumo: tecidos e aviamentos
+-- =====================================================================
+create table if not exists public.fichas (
+  id            uuid primary key default gen_random_uuid(),
+  peca_id       uuid not null unique references public.pecas(id) on delete cascade,
+  tecnica       jsonb not null default '{}'::jsonb,
+  consumo       jsonb not null default '{}'::jsonb,
+  criado_em     timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+drop trigger if exists t_fichas_upd on public.fichas;
+create trigger t_fichas_upd before update on public.fichas for each row execute function public.tocar_atualizado();
+alter table public.fichas enable row level security;
+drop policy if exists "logado" on public.fichas;
+create policy "logado" on public.fichas for all to authenticated using (true) with check (true);
+revoke all on public.fichas from anon;
+grant select, insert, update, delete on public.fichas to authenticated;
