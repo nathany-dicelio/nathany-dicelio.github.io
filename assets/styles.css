@@ -1068,10 +1068,10 @@ body.exportando .folha input, body.exportando .folha select, body.exportando .fo
 }
 
 /* ---------- Etapas (linha do tempo e quadro) ---------- */
-.fx-wrap { overflow-x: auto; padding: 4px 0 6px; }
+.fx-wrap { overflow: auto; max-height: calc(100vh - 215px); min-height: 320px; padding: 0 0 6px; overscroll-behavior: contain; }
 .fx { border-collapse: separate; border-spacing: 0; min-width: 100%; }
-.fx th { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--mute); padding: 14px 6px 10px; text-align: center; vertical-align: bottom; min-width: 92px; line-height: 1.25; }
-.fx th span { display: block; max-width: 96px; margin: 0 auto; }
+.fx th { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); padding: 14px 6px 10px; text-align: center; vertical-align: bottom; min-width: 124px; line-height: 1.25; }
+.fx th span { display: block; max-width: 124px; margin: 0 auto; }
 .fx th:nth-child(odd):not(.fx-pc):not(.fx-d), .fx td:nth-child(odd):not(.fx-pc):not(.fx-d) { background: color-mix(in srgb, var(--brand) 3.5%, transparent); }
 .fx td { padding: 10px 0; text-align: center; border-top: 1px solid var(--line-2); position: relative; }
 .fx td:not(.fx-pc):not(.fx-d)::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1.5px solid var(--line); z-index: 0; }
@@ -1175,3 +1175,8 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
   .kb-col { flex-basis: 78vw; }
   .abas button { padding: 10px 10px; }
 }
+
+/* cabeçalho das etapas fixo ao rolar (a tabela rola dentro do quadro) */
+.fx thead th { position: sticky; top: 0; z-index: 3; background-color: var(--card); box-shadow: inset 0 -1.5px 0 var(--line); }
+.fx thead th:nth-child(odd):not(.fx-pc):not(.fx-d) { background: linear-gradient(color-mix(in srgb, var(--brand) 5%, transparent), color-mix(in srgb, var(--brand) 5%, transparent)), var(--card); }
+.fx thead th.fx-pc { left: 0; z-index: 4; box-shadow: inset 0 -1.5px 0 var(--line), 1px 0 0 var(--line-2); }
