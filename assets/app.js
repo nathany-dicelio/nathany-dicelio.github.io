@@ -1603,7 +1603,7 @@ function viewPeca(id) {
           <div class="row">${c ? `<span class="cbadge" style="--c:${esc(c.cor)}">${esc(c.nome)}</span>` : '<span class="tag gray sem">Sem cliente</span>'}${pc.sala ? `<span class="tag gray sem">Sala ${esc(pc.sala)}</span>` : ''}${tagStatus('desenho', st.desenho)}${tagStatus('consumo', st.consumo)}</div>
           <div class="ref">${esc(pc.ref)}</div>
           ${pc.descricao ? `<div style="color:var(--ink-2);font-size:15px">${esc(pc.descricao)}</div>` : ''}
-          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button><a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}Ficha técnica e consumo</a><a class="btn sm" href="#/etapas/${pc.id}">${ic('flow')}${fluxoDe(pc.id) ? `Etapas · ${esc(situacaoFluxo(pc).atual ? nomeFluxo(situacaoFluxo(pc).atual) : 'concluído')}` : 'Colocar nas etapas'}</a></div>
+          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button><a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}Ficha técnica e consumo</a><a class="btn sm" href="#/etapas/${pc.id}">${ic('flow')}Etapas · ${esc(situacaoFluxo(pc).atual ? nomeFluxo(situacaoFluxo(pc).atual) : 'concluído')}</a></div>
         </div>
         <div class="info">
           <div><small>OP</small><b>${ops.length ? esc(ops.join(', ')) : '—'}</b></div>
@@ -2576,6 +2576,11 @@ const nomeFluxo = k => (FLUXO.find(([x]) => x === k) || [])[1] || k;
 const nomeSt = s => (ST_FLUXO.find(([x]) => x === s) || [])[1] || s;
 const fluxoDe = pcId => S.db.fluxos.find(f => f.peca_id === pcId) || null;
 const pendAbertas = e => (e.pend || []).filter(p => !p.ok).length;
+const ocultoFluxo = pc => { const fl = fluxoDe(pc.id); return !!(fl && fl.etapas && fl.etapas._oculto); };
+async function salvarFluxo(pc, etapas) {
+  const fl = fluxoDe(pc.id);
+  return fl ? salvarReg('fluxos', { etapas }, fl.id) : salvarReg('fluxos', { peca_id: pc.id, etapas });
+}
 
 function estadoEtapa(pc, fl, k) {
   const e = ((fl && fl.etapas) || {})[k] || {};
@@ -2590,16 +2595,23 @@ function estadoEtapa(pc, fl, k) {
   }
   return { ...e, st: 'fazer' };
 }
-// etapa atual = a primeira que não está feita nem pulada
+// etapa atual = a primeira depois da última feita (ou pulada)
 function situacaoFluxo(pc) {
   const fl = fluxoDe(pc.id);
   const est = Object.fromEntries(FLUXO.map(([k]) => [k, estadoEtapa(pc, fl, k)]));
-  const atual = (FLUXO.find(([k]) => !['feito', 'pular'].includes(est[k].st)) || [])[0] || null;
+  const ok = k => ['feito', 'pular'].includes(est[k].st);
+  const ult = FLUXO.reduce((u, [k], i) => (ok(k) ? i : u), -1);
+  const atual = (FLUXO.slice(ult + 1).find(([k]) => !ok(k)) || [])[0] || null;
   const feitas = FLUXO.filter(([k]) => est[k].st === 'feito').length;
   const ultimo = FLUXO.map(([k]) => est[k]).filter(e => ['feito', 'pular'].includes(e.st) && e.em).map(e => e.em).sort().pop();
   const desde = ultimo || (fl && fl.criado_em) || pc.criado_em;
   const pend = FLUXO.reduce((n, [k]) => n + pendAbertas(est[k]), 0);
   return { fl, est, atual, feitas, desde, pend };
+}
+function recenteFluxo(x) {
+  const fl = fluxoDe(x.pc.id);
+  const peds = S.db.pedidos.filter(p => p.peca_id === x.pc.id).map(p => p.pedido_em);
+  return [fl && fl.atualizado_em, x.pc.criado_em, ...peds].filter(Boolean).sort().pop() || '';
 }
 function textoDias(desde) {
   if (!desde) return '';
@@ -2625,7 +2637,7 @@ function ligarSala(form) {
 function viewEtapas(arg) {
   const f = S.f.etapas || (S.f.etapas = { q: '', cli: '', sala: '', st: 'andamento' });
   const modo = pref.get('etapasModo', 'linha');
-  setPage('Etapas', 'O caminho de cada modelo, da criação ao corte de produção', `<button class="btn primary" id="et-add">${ic('plus')}<span class="tx">Adicionar modelo</span></button>`);
+  setPage('Etapas', 'O caminho de cada modelo, da criação ao corte de produção', `<button class="btn primary" id="et-add">${ic('plus')}<span class="tx">Novo modelo</span></button>`);
   view().innerHTML = `<div class="card">
     <div class="toolbar">
       <div class="busca">${ic('search')}<input class="inp" data-f="q" placeholder="Filtrar por REF, OP, descrição ou responsável" value="${esc(f.q)}"></div>
@@ -2638,7 +2650,7 @@ function viewEtapas(arg) {
   </div>`;
   const desenhar = () => {
     const qn = norm(f.q);
-    const base = S.db.fluxos.map(fl => peca(fl.peca_id)).filter(Boolean).filter(pc => {
+    const base = S.db.pecas.filter(pc => {
       if (f.cli && pc.cliente_id !== f.cli) return false;
       if (f.sala && pc.sala !== f.sala) return false;
       if (qn) {
@@ -2647,16 +2659,17 @@ function viewEtapas(arg) {
       }
       return true;
     }).map(pc => ({ pc, s: situacaoFluxo(pc) }));
-    const filtros = { andamento: x => !!x.s.atual, pend: x => x.s.pend > 0, ok: x => !x.s.atual, todos: () => true };
+    base.forEach(x => { x.oc = ocultoFluxo(x.pc); });
+    const filtros = { andamento: x => !x.oc && !!x.s.atual, pend: x => !x.oc && x.s.pend > 0, ok: x => !x.oc && !x.s.atual, todos: x => !x.oc, ocultos: x => x.oc };
     const n = Object.fromEntries(Object.keys(filtros).map(k => [k, base.filter(filtros[k]).length]));
-    $('#et-st').innerHTML = [['andamento', 'Em andamento'], ['pend', 'Com pendências'], ['ok', 'Concluídos'], ['todos', 'Todos']]
+    $('#et-st').innerHTML = [['andamento', 'Em andamento'], ['pend', 'Com pendências'], ['ok', 'Concluídos'], ['todos', 'Todos'], ...(n.ocultos ? [['ocultos', 'Escondidos']] : [])]
       .map(([v, t]) => `<button class="chip${f.st === v ? ' on' : ''}" data-st="${v}">${t}<span class="n">${n[v]}</span></button>`).join('');
     const lista = base.filter(filtros[f.st] || filtros.todos)
-      .sort((a, b) => (FLUXO.findIndex(([k]) => k === a.s.atual) - FLUXO.findIndex(([k]) => k === b.s.atual)) || String(a.s.desde).localeCompare(String(b.s.desde)));
+      .sort((a, b) => String(recenteFluxo(b)).localeCompare(String(recenteFluxo(a))));
     const box = $('#et-lista');
     if (!lista.length) {
-      box.innerHTML = vazio('flow', S.db.fluxos.length ? 'Nada encontrado com esses filtros' : 'Nenhum modelo nas etapas ainda',
-        S.db.fluxos.length ? '' : 'Adicione os modelos que estão em desenvolvimento para acompanhar cada etapa.', `<button class="btn primary" data-et-add>${ic('plus')}Adicionar modelo</button>`);
+      box.innerHTML = vazio('flow', S.db.pecas.length ? 'Nada encontrado com esses filtros' : 'Nenhuma peça cadastrada ainda',
+        S.db.pecas.length ? '' : 'As peças de Desenho e Mini consumo aparecem aqui sozinhas.', `<button class="btn primary" data-et-add>${ic('plus')}Novo modelo</button>`);
       return;
     }
     box.innerHTML = modo === 'quadro' ? quadroFluxo(lista, f.st) : linhaFluxo(lista);
@@ -2679,8 +2692,7 @@ function viewEtapas(arg) {
   if (arg && peca(arg)) {
     const pc = peca(arg);
     history.replaceState(null, '', '#/etapas');
-    if (fluxoDe(pc.id)) formEtapa(pc, situacaoFluxo(pc).atual || FLUXO[FLUXO.length - 1][0]);
-    else formAddFluxo(pc);
+    formEtapa(pc, situacaoFluxo(pc).atual || FLUXO[FLUXO.length - 1][0]);
   }
 }
 
@@ -2720,7 +2732,7 @@ function quadroFluxo(lista, st) {
 /* ---------- colocar um modelo nas etapas ---------- */
 function formAddFluxo(pcPre = null) {
   modal({
-    titulo: 'Adicionar modelo às etapas',
+    titulo: 'Novo modelo',
     corpo: `<form class="form" id="fad" autocomplete="off" novalidate>
       <div class="grid2">
         <label class="fld"><span>Referência *</span><input name="ref" list="dl-refs-fx" value="${esc(pcPre ? pcPre.ref : '')}" placeholder="Ex.: V116577MAR" autofocus style="text-transform:uppercase;font-weight:600"></label>
@@ -2801,8 +2813,8 @@ function ligacoesEtapa(pc, k) {
 const ehImgArq = n => /\.(jpe?g|png|webp|gif|bmp|heic)$/i.test(n || '');
 function formEtapa(pc, k) {
   const fl0 = fluxoDe(pc.id);
-  if (!fl0) return formAddFluxo(pc);
-  const e0 = (fl0.etapas || {})[k] || {};
+  const e0 = ((fl0 && fl0.etapas) || {})[k] || {};
+  const oculto = ocultoFluxo(pc);
   const est = estadoEtapa(pc, fl0, k);
   const idx = FLUXO.findIndex(([x]) => x === k);
   let arqs = (e0.arquivos || []).slice();
@@ -2837,7 +2849,7 @@ function formEtapa(pc, k) {
           <label class="fld" style="max-width:240px"><span>Prazo</span><input type="date" name="prazo" value="${esc(e0.prazo || '')}"></label>
         </div>
       </form>`,
-    rodape: `<button type="button" class="btn danger esq" id="et-del" title="Tira o modelo da tela Etapas (a peça continua no catálogo)">${ic('trash')}<span class="tx">Tirar das etapas</span></button><button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fet" class="btn primary">Salvar alterações</button>`,
+    rodape: `<button type="button" class="btn esq" id="et-del" title="${oculto ? 'Volta a mostrar o modelo na tela Etapas' : 'Esconde o modelo da tela Etapas (ex.: peça antiga). Nada é apagado.'}">${ic(oculto ? 'eye' : 'eyeOff')}<span class="tx">${oculto ? 'Mostrar nas etapas' : 'Esconder das etapas'}</span></button><button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fet" class="btn primary">Salvar alterações</button>`,
     aoAbrir: m => {
       const form = m.$('#fet');
       ligarNovaPessoa(form);
@@ -2887,13 +2899,11 @@ function formEtapa(pc, k) {
       m.$('#pend').addEventListener('click', e => { const b = e.target.closest('[data-prm]'); if (b) { e.preventDefault(); pend.splice(+b.dataset.prm, 1); desenhaPend(); } });
       desenhaPend();
       m.$('#et-del').onclick = async () => {
-        if (!await confirmar(`Tirar <b>${esc(pc.ref)}</b> da tela Etapas? Os status, pendências e arquivos das etapas dela serão apagados. A peça, o desenho, o consumo e a ficha continuam.`, { ok: 'Tirar das etapas' })) return;
         try {
-          const fl = fluxoDe(pc.id);
-          const todos = Object.values(fl.etapas || {}).flatMap(e => (e.arquivos || []).map(a => a.p));
-          await excluirReg('fluxos', fl.id);
-          if (todos.length) S.api.removerArquivos(todos).catch(() => {});
-          m.fechar(); toast(`${pc.ref} saiu das etapas.`); rerender();
+          const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
+          if (oculto) delete et._oculto; else et._oculto = true;
+          await salvarFluxo(pc, et);
+          m.fechar(); toast(oculto ? `${pc.ref} voltou para as etapas.` : `${pc.ref} escondido. Ele fica em “Escondidos”.`); rerender();
         } catch (err) { toast(msgErro(err), 'erro'); }
       };
       form.addEventListener('submit', async e => {
@@ -2910,15 +2920,15 @@ function formEtapa(pc, k) {
           }
           const fd = new FormData(form);
           const st = fd.get('st') || 'fazer';
-          const fl = fluxoDe(pc.id) || fl0;
-          const atual = (fl.etapas || {})[k] || {};
+          const fl = fluxoDe(pc.id);
+          const atual = ((fl && fl.etapas) || {})[k] || {};
           const novo = { ...atual, arquivos: arqs.concat(enviados), pend, obs: String(fd.get('obs') || '').trim() || null, resp: fd.get('resp') || null, prazo: fd.get('prazo') || null };
           const automatico = !atual.st && st === est.st;
           if (!automatico && st !== atual.st) {
             novo.st = st; novo.em = agoraISO();
             novo.hist = (atual.hist || []).concat({ st, em: novo.em, por: nomeUsuario().split(' ')[0] });
           }
-          await salvarReg('fluxos', { etapas: { ...(fl.etapas || {}), [k]: novo } }, fl.id);
+          await salvarFluxo(pc, { ...((fl && fl.etapas) || {}), [k]: novo });
           if (removidos.length) S.api.removerArquivos(removidos).catch(() => {});
           m.fechar();
           toast(`${nomeFluxo(k)} · ${nomeSt(novo.st || est.st)}`);
