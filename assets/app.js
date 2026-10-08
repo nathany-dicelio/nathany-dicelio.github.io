@@ -23,7 +23,7 @@ const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const PERIODOS = [['tudo', 'Qualquer data'], ['mes', 'Este mês'], ['30', 'Últimos 30 dias'], ['ano', 'Este ano']];
 const CORES = ['#781026', '#D23B3B', '#3B4FD2', '#9B3BD2', '#17925A', '#0E8FA0', '#C98A06', '#D9541E', '#B4507A', '#2B2B2B'];
-const TABS = ['pessoas', 'clientes', 'pecas', 'pedidos', 'tarefas', 'medidas', 'ponto', 'ponto_fechamentos', 'config', 'guia_manuais', 'guia_pontos', 'fichas'];
+const TABS = ['pessoas', 'clientes', 'pecas', 'pedidos', 'tarefas', 'medidas', 'ponto', 'ponto_fechamentos', 'config', 'guia_manuais', 'guia_pontos', 'fichas', 'fluxos'];
 
 const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>',
@@ -64,6 +64,7 @@ const ICONS = {
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff: '<path d="M3 3l18 18"/><path d="M10.6 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2"/><path d="M6.6 6.6A17.4 17.4 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
   star: '<path d="M12 3.2l2.7 5.5 6 .9-4.35 4.25 1.03 6-5.38-2.83-5.38 2.83 1.03-6L3.3 9.6l6-.9z"/>',
+  flow: '<circle cx="5" cy="12" r="2.6"/><circle cx="12" cy="12" r="2.6"/><circle cx="19" cy="12" r="2.6"/><path d="M7.6 12h1.8"/><path d="M14.6 12h1.8"/>',
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
 };
 const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
@@ -267,7 +268,7 @@ function DemoAPI() {
     try { localStorage.setItem(KA, JSON.stringify(arqs)); }
     catch (e) { throw new Error('Sem espaço no navegador para mais arquivos na demonstração.'); }
   }
-  const comAtualizado = ['pecas', 'pedidos', 'tarefas', 'ponto', 'config'];
+  const comAtualizado = ['pecas', 'pedidos', 'tarefas', 'ponto', 'config', 'fichas', 'fluxos'];
   const blobUrl = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
   return {
     demo: true,
@@ -293,7 +294,7 @@ function DemoAPI() {
     },
     async excluir(tab, id) {
       db[tab] = (db[tab] || []).filter(x => x.id !== id);
-      if (tab === 'pecas') { db.pedidos = db.pedidos.filter(p => p.peca_id !== id); db.tarefas.forEach(t => { if (t.peca_id === id) t.peca_id = null; }); }
+      if (tab === 'pecas') { db.pedidos = db.pedidos.filter(p => p.peca_id !== id); ['fichas', 'fluxos'].forEach(t => { db[t] = (db[t] || []).filter(x => x.peca_id !== id); }); db.tarefas.forEach(t => { if (t.peca_id === id) t.peca_id = null; }); }
       if (tab === 'pessoas') { db.pedidos.forEach(p => { if (p.de_id === id) p.de_id = null; if (p.para_id === id) p.para_id = null; }); db.tarefas.forEach(t => { if (t.por_id === id) t.por_id = null; if (t.entregue_para_id === id) t.entregue_para_id = null; }); }
       if (tab === 'clientes') { db.pecas.forEach(p => { if (p.cliente_id === id) p.cliente_id = null; }); db.medidas = db.medidas.filter(m => m.cliente_id !== id); }
       gravar();
@@ -391,7 +392,7 @@ function demoSeed() {
     return { id: uid(), manual: 'renner', codigo, nome, como_medir, grupo, pagina, imagem, extra: {}, ordem: i + 1, favorito: i === 0, criado_em: em(10) };
   });
   const guia_manuais = [{ id: uid(), manual: 'renner', cliente_id: C('RNN'), titulo: 'Manual de POMs (exemplo)', arquivo: null, paginas: 70, criado_em: em(10) }];
-  return { db: { pessoas, clientes, pecas, pedidos, tarefas, medidas: [], guia_manuais, guia_pontos, fichas: [demoFicha(pecas[0])], ...demoPonto() }, arquivos };
+  return { db: { pessoas, clientes, pecas, pedidos, tarefas, medidas: [], guia_manuais, guia_pontos, fichas: [demoFicha(pecas[0])], fluxos: demoFluxos(pecas, pessoas), ...demoPonto() }, arquivos };
 }
 
 /* ================================================================
@@ -423,7 +424,7 @@ async function salvarReg(tab, row, id) {
 async function excluirReg(tab, id) {
   await S.api.excluir(tab, id);
   S.db[tab] = S.db[tab].filter(x => x.id !== id);
-  if (tab === 'pecas') { S.db.pedidos = S.db.pedidos.filter(p => p.peca_id !== id); S.db.tarefas.forEach(t => { if (t.peca_id === id) t.peca_id = null; }); }
+  if (tab === 'pecas') { S.db.pedidos = S.db.pedidos.filter(p => p.peca_id !== id); S.db.fichas = S.db.fichas.filter(x => x.peca_id !== id); S.db.fluxos = S.db.fluxos.filter(x => x.peca_id !== id); S.db.tarefas.forEach(t => { if (t.peca_id === id) t.peca_id = null; }); }
   if (tab === 'pessoas') {
     S.db.pedidos.forEach(p => { if (p.de_id === id) p.de_id = null; if (p.para_id === id) p.para_id = null; });
     S.db.tarefas.forEach(t => { if (t.por_id === id) t.por_id = null; if (t.entregue_para_id === id) t.entregue_para_id = null; });
@@ -824,6 +825,7 @@ function renderShell() {
         <a href="#/desenhos" data-r="desenhos">${ic('pen')}Desenho<span class="cnt hidden" data-cnt="desenho"></span></a>
         <a href="#/consumos" data-r="consumos">${ic('scissors')}Mini consumo<span class="cnt hidden" data-cnt="consumo"></span></a>
         <a href="#/fazer" data-r="fazer">${ic('list')}Fazer<span class="cnt hidden" data-cnt="fazer"></span></a>
+        <a href="#/etapas" data-r="etapas">${ic('flow')}Etapas<span class="cnt hidden" data-cnt="etapas"></span></a>
         <div class="grp">Fichas</div>
         <a href="#/ficha-tecnica" data-r="ficha-tecnica">${ic('file')}Ficha técnica</a>
         <div class="grp">Consulta</div>
@@ -877,6 +879,7 @@ function atualizarContadores() {
   set('desenho', S.db.pedidos.filter(p => p.tipo === 'desenho' && !p.finalizado_em).length);
   set('consumo', S.db.pedidos.filter(p => p.tipo === 'consumo' && !p.finalizado_em).length);
   set('fazer', S.db.tarefas.filter(t => !t.entregue_em).length);
+  set('etapas', S.db.fluxos.reduce((n, fl) => { const pc = peca(fl.peca_id); return n + (pc ? situacaoFluxo(pc).pend : 0); }, 0));
 }
 
 /* busca global (topo) */
@@ -963,6 +966,8 @@ const ROTAS = {
   medidas: viewMedidas,
   ajustes: viewAjustes,
   ponto: viewPonto,
+  etapas: viewEtapas,
+  filtro: irFiltro,
   'ficha-tecnica': a => viewFicha('tecnica', a),
   'ficha-consumo': a => location.replace(`#/ficha-tecnica${a ? '/' + a : ''}`),
   peca: viewPeca,
@@ -1101,12 +1106,13 @@ function viewInicio() {
    ================================================================ */
 function viewPedidos(tipo) {
   const T = TIPO[tipo];
-  const f = S.f[tipo] || (S.f[tipo] = { q: '', st: 'todos', cli: '', pes: '', per: 'tudo' });
+  const f = S.f[tipo] || (S.f[tipo] = { q: '', st: 'todos', cli: '', pes: '', per: 'tudo', sala: '' });
   setPage(tipo === 'consumo' ? 'Mini consumo' : T.plural, `Pedidos de ${T.nome.toLowerCase()} e o checklist de cada um`, `<button class="btn primary" data-novo="${tipo}">${ic('plus')}<span class="tx">${T.novo}</span></button>`);
   view().innerHTML = `<div class="card">
     <div class="toolbar">
       <div class="busca">${ic('search')}<input class="inp" data-f="q" placeholder="Filtrar por REF, OP, pessoa ou observação" value="${esc(f.q)}"></div>
       <select class="inp" data-f="cli">${opClientes(f.cli, 'Todos os clientes')}</select>
+      ${tipo === 'consumo' ? `<select class="inp" data-f="sala">${opcoes(salasLista().filter(x => S.db.pecas.some(p => p.sala === x)).map(x => [x, x]), f.sala || '', 'Todas as salas')}</select>` : ''}
       <select class="inp" data-f="pes">${opPessoas(f.pes, 'Todas as pessoas')}</select>
       <select class="inp" data-f="per">${opcoes(PERIODOS, f.per)}</select>
     </div>
@@ -1118,9 +1124,10 @@ function viewPedidos(tipo) {
     const base = S.db.pedidos.filter(p => p.tipo === tipo).filter(p => {
       const pc = peca(p.peca_id) || {};
       if (f.cli && pc.cliente_id !== f.cli) return false;
+      if (f.sala && tipo === 'consumo' && pc.sala !== f.sala) return false;
       if (f.pes && p.de_id !== f.pes && p.para_id !== f.pes) return false;
       if (ini && new Date(p.pedido_em) < ini) return false;
-      if (qn && !norm([pc.ref, p.op, pc.op, (pessoa(p.de_id) || {}).nome, (pessoa(p.para_id) || {}).nome, p.obs, pc.descricao, (cliente(pc.cliente_id) || {}).nome].join(' ')).includes(qn)) return false;
+      if (qn && !norm([pc.ref, p.op, pc.op, (pessoa(p.de_id) || {}).nome, (pessoa(p.para_id) || {}).nome, p.obs, pc.descricao, pc.sala, (cliente(pc.cliente_id) || {}).nome].join(' ')).includes(qn)) return false;
       return true;
     });
     const pos = POS_ETAPAS[tipo];
@@ -1175,7 +1182,7 @@ function linhaPedido(p) {
       const cons = p.tipo === 'consumo', cp = cons ? imgsCons(pc)[0] : capa(pc);
       return cp ? `<button type="button" class="th zoom" data-acao="fotos" data-id="${pc.id}"${cons ? ' data-cons="1"' : ''} data-foto="${esc(cp)}" title="Ver arquivos">${ic('dress')}</button>` : thumb(null);
     })()}
-      <div style="min-width:0"><a href="#/peca/${pc.id}">${esc(pc.ref || '—')}</a><div class="meta">${cbadge(pc.cliente_id)}${op ? `<span>OP ${esc(op)}</span>` : ''}${(p.tipo === 'consumo' ? pdfsCons(pc) : pdfs(pc)).length ? `<span class="tag brand sem" style="height:18px;font-size:10.5px">PDF</span>` : ''}</div>
+      <div style="min-width:0"><a href="#/peca/${pc.id}">${esc(pc.ref || '—')}</a><div class="meta">${cbadge(pc.cliente_id)}${op ? `<span>OP ${esc(op)}</span>` : ''}${p.tipo === 'consumo' && pc.sala ? `<span class="sala">${esc(pc.sala)}</span>` : ''}${(p.tipo === 'consumo' ? pdfsCons(pc) : pdfs(pc)).length ? `<span class="tag brand sem" style="height:18px;font-size:10.5px">PDF</span>` : ''}</div>
       ${pc.descricao ? `<div class="small" style="color:var(--ink);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(pc.descricao)}">${esc(pc.descricao)}</div>` : ''}
       ${p.obs ? `<div class="small" style="color:var(--ink-2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(p.obs)}">${ic('note', 'i obs-ic')} ${esc(p.obs)}</div>` : ''}</div></div></td>
     <td data-l="De">${pchip(p.de_id)}</td>
@@ -1225,9 +1232,10 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
         <label class="fld span2"><span>Referência *</span><input name="ref" list="dl-refs" value="${esc(pcAtual ? pcAtual.ref : '')}" placeholder="Ex.: BL115546 CeA" autofocus style="text-transform:uppercase;font-weight:600"></label>
         <label class="fld"><span>OP</span><input name="op" value="${esc(p.op || (pcAtual && !pedido ? pcAtual.op : '') || '')}" inputmode="numeric" placeholder="Ex.: 13972"></label>
         <label class="fld"><span>Cliente</span><select name="cliente">${opClientes(pcAtual ? pcAtual.cliente_id : '', '—')}</select></label>
+        ${tipo === 'consumo' ? `<label class="fld"><span>Sala</span>${selSala(pcAtual ? pcAtual.sala : '')}</label>` : ''}
         <label class="fld"><span>Data do pedido</span><input type="date" name="data" value="${inData(quando)}"></label>
         <label class="fld"><span>Hora</span><input type="time" name="hora" value="${inHora(quando)}"></label>
-        <label class="fld span3"><span>Descrição <span class="hint">· da peça, aparece no catálogo</span></span><input name="descricao" value="${esc((pcAtual && pcAtual.descricao) || '')}" placeholder="Ex.: colete de tricô com bolso"></label>
+        <label class="fld ${tipo === 'consumo' ? 'span2' : 'span3'}"><span>Descrição <span class="hint">· da peça, aparece no catálogo</span></span><input name="descricao" value="${esc((pcAtual && pcAtual.descricao) || '')}" placeholder="Ex.: colete de tricô com bolso"></label>
       </div>
       <div id="peca-info"></div>
       <div class="fld"><span class="lbl">Quem pediu (de)</span>${pickPessoas('de', p.de_id)}</div>
@@ -1247,6 +1255,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
       const form = m.$('#fp');
       fotos = editorFotos(m.$('#fotos'), pcAtual ? (pcAtual[campoArq(tipo)] || []) : []);
       ligarNovaPessoa(form);
+      ligarSala(form);
       const fimInp = form.fim;
       const valorEt = k => { const b = form.querySelector(`[data-et="${k}"]`); return b.dataset.v === 'true' ? true : (b.dataset.v || false); };
       form.querySelector('#etapas-form').addEventListener('click', e => {
@@ -1278,6 +1287,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
           if (achada !== pcAtual) {
             pcAtual = achada;
             if (achada.cliente_id) form.cliente.value = achada.cliente_id;
+            if (form.sala && achada.sala) { if (![...form.sala.options].some(o => o.value === achada.sala)) form.sala.insertAdjacentHTML('afterbegin', `<option>${esc(achada.sala)}</option>`); form.sala.value = achada.sala; }
             if (!form.op.value && achada.op) form.op.value = achada.op;
             if (!form.descricao.value && achada.descricao) form.descricao.value = achada.descricao;
             fotos.trocar(achada[campoArq(tipo)] || []);
@@ -1302,9 +1312,12 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
           const op = String(fd.get('op') || '').trim() || null;
           const cliId = fd.get('cliente') || (c && c.id) || null;
           const descricao = String(fd.get('descricao') || '').trim() || null;
+          const sala = form.sala ? (String(fd.get('sala') || '').replace('__outra', '') || null) : undefined;
           let pc = S.db.pecas.find(x => x.ref === ref);
-          if (!pc) pc = await salvarReg('pecas', { ref, op, cliente_id: cliId, descricao, fotos: [], detalhes: [] });
-          else if ((op && op !== pc.op) || cliId !== pc.cliente_id || descricao !== (pc.descricao || null)) pc = await salvarReg('pecas', { op: op || pc.op, cliente_id: cliId, descricao }, pc.id);
+          if (!pc) pc = await salvarReg('pecas', { ref, op, cliente_id: cliId, descricao, fotos: [], detalhes: [], ...(sala ? { sala } : {}) });
+          else if ((op && op !== pc.op) || cliId !== pc.cliente_id || descricao !== (pc.descricao || null) || (sala !== undefined && sala !== (pc.sala || null))) {
+            pc = await salvarReg('pecas', { op: op || pc.op, cliente_id: cliId, descricao, ...(sala !== undefined ? { sala } : {}) }, pc.id);
+          }
           const novas = await enviarFotos(pc.id, fotos.novas());
           const campo = campoArq(tipo);
           const rem = fotos.removidas().filter(x => (pc[campo] || []).includes(x));
@@ -1587,10 +1600,10 @@ function viewPeca(id) {
     <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
       <div class="card">
         <div class="ficha-h">
-          <div class="row">${c ? `<span class="cbadge" style="--c:${esc(c.cor)}">${esc(c.nome)}</span>` : '<span class="tag gray sem">Sem cliente</span>'}${tagStatus('desenho', st.desenho)}${tagStatus('consumo', st.consumo)}</div>
+          <div class="row">${c ? `<span class="cbadge" style="--c:${esc(c.cor)}">${esc(c.nome)}</span>` : '<span class="tag gray sem">Sem cliente</span>'}${pc.sala ? `<span class="tag gray sem">Sala ${esc(pc.sala)}</span>` : ''}${tagStatus('desenho', st.desenho)}${tagStatus('consumo', st.consumo)}</div>
           <div class="ref">${esc(pc.ref)}</div>
           ${pc.descricao ? `<div style="color:var(--ink-2);font-size:15px">${esc(pc.descricao)}</div>` : ''}
-          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button><a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}Ficha técnica e consumo</a></div>
+          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button><a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}Ficha técnica e consumo</a><a class="btn sm" href="#/etapas/${pc.id}">${ic('flow')}${fluxoDe(pc.id) ? `Etapas · ${esc(situacaoFluxo(pc).atual ? nomeFluxo(situacaoFluxo(pc).atual) : 'concluído')}` : 'Colocar nas etapas'}</a></div>
         </div>
         <div class="info">
           <div><small>OP</small><b>${ops.length ? esc(ops.join(', ')) : '—'}</b></div>
@@ -1661,7 +1674,10 @@ function formPeca(pc) {
         <label class="fld"><span>OP</span><input name="op" value="${esc(pc.op || '')}"></label>
         <label class="fld"><span>Cliente</span><select name="cliente">${opClientes(pc.cliente_id, '—')}</select></label>
       </div>
-      <label class="fld"><span>Descrição</span><input name="descricao" value="${esc(pc.descricao || '')}" placeholder="Ex.: vestido midi com amarração"></label>
+      <div class="grid3">
+        <label class="fld span2"><span>Descrição</span><input name="descricao" value="${esc(pc.descricao || '')}" placeholder="Ex.: vestido midi com amarração"></label>
+        <label class="fld"><span>Sala</span>${selSala(pc.sala || '')}</label>
+      </div>
       <label class="fld"><span>Informações <span class="hint">· uma por linha (viram a lista 1, 2, 3…)</span></span><textarea name="detalhes" rows="5" placeholder="Tecido: viscose&#10;Botões forrados (8 un.)&#10;Forro somente no corpo">${esc((pc.detalhes || []).join('\n'))}</textarea></label>
       <div class="fld"><span class="lbl">Fotos e PDFs do desenho <span class="hint">· aparecem no catálogo</span></span><div class="fotos-edit" id="fotos"></div></div>
       <div class="fld"><span class="lbl">Arquivos do consumo <span class="hint">· não aparecem no catálogo</span></span><div class="fotos-edit" id="fotos-cons"></div></div>
@@ -1670,6 +1686,7 @@ function formPeca(pc) {
     aoAbrir: m => {
       fotos = editorFotos(m.$('#fotos'), pc.fotos || []);
       const cons = editorFotos(m.$('#fotos-cons'), arqCons(pc));
+      ligarSala(m.$('#fpc'));
       m.$('#fpc').addEventListener('submit', async e => {
         e.preventDefault();
         const fd = new FormData(e.target);
@@ -1684,6 +1701,7 @@ function formPeca(pc) {
             arquivos_consumo: arqCons(pc).filter(x => !rem.includes(x)).concat(novasC),
             ref, op: String(fd.get('op') || '').trim() || null, cliente_id: fd.get('cliente') || null,
             descricao: String(fd.get('descricao') || '').trim() || null,
+            sala: String(fd.get('sala') || '').replace('__outra', '') || null,
             detalhes: String(fd.get('detalhes') || '').split('\n').map(s => s.trim()).filter(Boolean),
             fotos: (pc.fotos || []).filter(x => !rem.includes(x)).concat(novas),
           }, pc.id);
@@ -2541,6 +2559,402 @@ function demoPonto() {
 setInterval(() => { const t = inHora(agoraISO()); $$('[data-relogio]').forEach(e => { e.textContent = t; }); }, 10000);
 
 /* ================================================================
+   ETAPAS — o caminho de cada modelo, da criação ao corte de produção
+   ================================================================ */
+const FLUXO = [
+  ['criacao', 'Criação'], ['ficha_desenv', 'Ficha de desenvolvimento'], ['modelagem', 'Modelagem'], ['aguardando_mp', 'Aguardando MP'],
+  ['corte_piloto', 'Corte piloto'], ['pilotagem', 'Pilotagem'], ['medicao', 'Medição'], ['consumo', 'Consumo - mini risco'],
+  ['envio_cliente', 'Envio para o cliente'], ['negociacao', 'Negociação'], ['ajuste_modelagem', 'Ajuste de modelagem'], ['envio_cliente2', 'Envio cliente'],
+  ['liberacao_produto', 'Liberação produto'], ['ficha_tecnica', 'Ficha técnica'], ['liberacao_modelagem', 'Liberação modelagem'],
+  ['engenharia', 'Engenharia e graduação'], ['corte_producao', 'Corte produção - PCP'],
+];
+const ST_FLUXO = [['fazer', 'A fazer', '#8E8287'], ['feito', 'Feito', '#17925A'], ['pular', 'Pular', '#6B7F99'], ['revisao', 'Revisão', '#C98A06']];
+const IC_FLUXO = { fazer: 'list', feito: 'check', pular: 'arrowR', revisao: 'alert' };
+// etapas que se marcam sozinhas pelo resto do sistema (dá para mudar à mão)
+const LIGA_FLUXO = { ficha_desenv: 'desenho', consumo: 'consumo' };
+const nomeFluxo = k => (FLUXO.find(([x]) => x === k) || [])[1] || k;
+const nomeSt = s => (ST_FLUXO.find(([x]) => x === s) || [])[1] || s;
+const fluxoDe = pcId => S.db.fluxos.find(f => f.peca_id === pcId) || null;
+const pendAbertas = e => (e.pend || []).filter(p => !p.ok).length;
+
+function estadoEtapa(pc, fl, k) {
+  const e = ((fl && fl.etapas) || {})[k] || {};
+  if (e.st) return { ...e };
+  const t = LIGA_FLUXO[k];
+  if (t) {
+    const peds = S.db.pedidos.filter(p => p.peca_id === pc.id && p.tipo === t);
+    if (peds.length && peds.every(p => p.finalizado_em)) {
+      return { ...e, st: 'feito', em: peds.map(p => p.finalizado_em).sort().pop(), auto: `${TIPO[t].nome === 'Consumo' ? 'Mini consumo' : TIPO[t].nome} finalizado` };
+    }
+    if (peds.length) return { ...e, st: 'fazer', andamento: `${TIPO[t].nome === 'Consumo' ? 'Mini consumo' : TIPO[t].nome} em andamento` };
+  }
+  return { ...e, st: 'fazer' };
+}
+// etapa atual = a primeira que não está feita nem pulada
+function situacaoFluxo(pc) {
+  const fl = fluxoDe(pc.id);
+  const est = Object.fromEntries(FLUXO.map(([k]) => [k, estadoEtapa(pc, fl, k)]));
+  const atual = (FLUXO.find(([k]) => !['feito', 'pular'].includes(est[k].st)) || [])[0] || null;
+  const feitas = FLUXO.filter(([k]) => est[k].st === 'feito').length;
+  const ultimo = FLUXO.map(([k]) => est[k]).filter(e => ['feito', 'pular'].includes(e.st) && e.em).map(e => e.em).sort().pop();
+  const desde = ultimo || (fl && fl.criado_em) || pc.criado_em;
+  const pend = FLUXO.reduce((n, [k]) => n + pendAbertas(est[k]), 0);
+  return { fl, est, atual, feitas, desde, pend };
+}
+function textoDias(desde) {
+  if (!desde) return '';
+  const d = Math.floor((Date.now() - new Date(desde)) / 864e5);
+  return d <= 0 ? 'hoje' : plural(d, 'dia');
+}
+
+/* ---------- sala (linha / marca do cliente) ---------- */
+const SALAS = ['Arrumada', 'Brasileira', 'Mindset', 'Trendy', 'Atitudes', 'Farm', 'Patrícia Foster', 'Boby Blues', 'Blue Steel', 'Plus size', 'Casual', 'Urbano'];
+const salasLista = (sel = '') => [...new Set([...SALAS, ...S.db.pecas.map(p => p.sala).filter(Boolean), ...(sel ? [sel] : [])])];
+const selSala = (sel = '', nome = 'sala') => `<select name="${nome}" data-sala>${opcoes(salasLista(sel).map(s => [s, s]), sel || '', '—')}<option value="__outra">Outra…</option></select>`;
+function ligarSala(form) {
+  form.addEventListener('change', e => {
+    const s = e.target.closest('[data-sala]'); if (!s || s.value !== '__outra') return;
+    const v = (prompt('Nome da sala:') || '').trim();
+    if (!v) { s.value = ''; return; }
+    if (![...s.options].some(o => o.value === v)) s.querySelector('option[value="__outra"]').insertAdjacentHTML('beforebegin', `<option value="${esc(v)}">${esc(v)}</option>`);
+    s.value = v;
+  });
+}
+
+/* ---------- tela ---------- */
+function viewEtapas(arg) {
+  const f = S.f.etapas || (S.f.etapas = { q: '', cli: '', sala: '', st: 'andamento' });
+  const modo = pref.get('etapasModo', 'linha');
+  setPage('Etapas', 'O caminho de cada modelo, da criação ao corte de produção', `<button class="btn primary" id="et-add">${ic('plus')}<span class="tx">Adicionar modelo</span></button>`);
+  view().innerHTML = `<div class="card">
+    <div class="toolbar">
+      <div class="busca">${ic('search')}<input class="inp" data-f="q" placeholder="Filtrar por REF, OP, descrição ou responsável" value="${esc(f.q)}"></div>
+      <select class="inp" data-f="cli">${opClientes(f.cli, 'Todos os clientes')}</select>
+      <select class="inp" data-f="sala">${opcoes(salasLista().filter(s => S.db.pecas.some(p => p.sala === s)).map(s => [s, s]), f.sala, 'Todas as salas')}</select>
+      <div class="chips" id="et-modo"><button class="chip${modo === 'linha' ? ' on' : ''}" data-modo="linha">${ic('flow')}Linha do tempo</button><button class="chip${modo === 'quadro' ? ' on' : ''}" data-modo="quadro">${ic('grid')}Quadro</button></div>
+    </div>
+    <div class="chips chips-row" id="et-st"></div>
+    <div id="et-lista"></div>
+  </div>`;
+  const desenhar = () => {
+    const qn = norm(f.q);
+    const base = S.db.fluxos.map(fl => peca(fl.peca_id)).filter(Boolean).filter(pc => {
+      if (f.cli && pc.cliente_id !== f.cli) return false;
+      if (f.sala && pc.sala !== f.sala) return false;
+      if (qn) {
+        const fl = fluxoDe(pc.id), resp = Object.values((fl && fl.etapas) || {}).map(e => (pessoa(e.resp) || {}).nome);
+        if (!norm([pc.ref, pc.descricao, pc.sala, ...opsDaPeca(pc), (cliente(pc.cliente_id) || {}).nome, ...resp].join(' ')).includes(qn)) return false;
+      }
+      return true;
+    }).map(pc => ({ pc, s: situacaoFluxo(pc) }));
+    const filtros = { andamento: x => !!x.s.atual, pend: x => x.s.pend > 0, ok: x => !x.s.atual, todos: () => true };
+    const n = Object.fromEntries(Object.keys(filtros).map(k => [k, base.filter(filtros[k]).length]));
+    $('#et-st').innerHTML = [['andamento', 'Em andamento'], ['pend', 'Com pendências'], ['ok', 'Concluídos'], ['todos', 'Todos']]
+      .map(([v, t]) => `<button class="chip${f.st === v ? ' on' : ''}" data-st="${v}">${t}<span class="n">${n[v]}</span></button>`).join('');
+    const lista = base.filter(filtros[f.st] || filtros.todos)
+      .sort((a, b) => (FLUXO.findIndex(([k]) => k === a.s.atual) - FLUXO.findIndex(([k]) => k === b.s.atual)) || String(a.s.desde).localeCompare(String(b.s.desde)));
+    const box = $('#et-lista');
+    if (!lista.length) {
+      box.innerHTML = vazio('flow', S.db.fluxos.length ? 'Nada encontrado com esses filtros' : 'Nenhum modelo nas etapas ainda',
+        S.db.fluxos.length ? '' : 'Adicione os modelos que estão em desenvolvimento para acompanhar cada etapa.', `<button class="btn primary" data-et-add>${ic('plus')}Adicionar modelo</button>`);
+      return;
+    }
+    box.innerHTML = modo === 'quadro' ? quadroFluxo(lista, f.st) : linhaFluxo(lista);
+    hidratarFotos(box);
+    const qd = $('.kb', box); if (qd && S.kbScroll) qd.scrollLeft = S.kbScroll;
+  };
+  $$('[data-f]', view()).forEach(el => el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', () => { f[el.dataset.f] = el.value; desenhar(); }));
+  $('#et-st').addEventListener('click', e => { const b = e.target.closest('[data-st]'); if (b) { f.st = b.dataset.st; desenhar(); } });
+  $('#et-modo').addEventListener('click', e => { const b = e.target.closest('[data-modo]'); if (b) { pref.set('etapasModo', b.dataset.modo); rerender(); } });
+  $('#et-add').onclick = () => formAddFluxo();
+  $('#et-lista').addEventListener('click', e => {
+    if (e.target.closest('[data-et-add]')) return formAddFluxo();
+    const b = e.target.closest('[data-et]'); if (!b) return;
+    const [id, k] = b.dataset.et.split('|');
+    const kb = $('.kb'); if (kb) S.kbScroll = kb.scrollLeft;
+    const pc = peca(id); if (pc) formEtapa(pc, k || situacaoFluxo(pc).atual || FLUXO[FLUXO.length - 1][0]);
+  });
+  desenhar();
+  // #/etapas/<id da peça>: abre a etapa atual da peça (ou coloca a peça nas etapas)
+  if (arg && peca(arg)) {
+    const pc = peca(arg);
+    history.replaceState(null, '', '#/etapas');
+    if (fluxoDe(pc.id)) formEtapa(pc, situacaoFluxo(pc).atual || FLUXO[FLUXO.length - 1][0]);
+    else formAddFluxo(pc);
+  }
+}
+
+function linhaFluxo(lista) {
+  return `<div class="fx-wrap"><table class="fx"><thead><tr><th class="fx-pc">Modelo</th>${FLUXO.map(([, l]) => `<th><span>${esc(l)}</span></th>`).join('')}<th class="fx-d">Na etapa</th></tr></thead>
+    <tbody>${lista.map(({ pc, s }) => {
+      const resp = s.atual && s.est[s.atual].resp;
+      return `<tr><td class="fx-pc"><button type="button" class="fx-m" data-et="${pc.id}|">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${pc.sala ? `<span>${esc(pc.sala)}</span>` : ''}</small>${resp ? `<small>${pchip(resp)}</small>` : ''}</div></button></td>
+        ${FLUXO.map(([k, l]) => {
+          const e = s.est[k], np = pendAbertas(e), cur = k === s.atual;
+          const tit = `${l}: ${nomeSt(e.st)}${e.em && e.st !== 'fazer' ? ' ' + fQuando(e.em) : ''}${e.auto ? ` (${e.auto})` : ''}${e.andamento ? ` (${e.andamento})` : ''}${np ? ` · ${plural(np, 'pendência')}` : ''}${e.resp ? ` · ${(pessoa(e.resp) || {}).nome || ''}` : ''}`;
+          return `<td class="${cur ? 'cur' : ''}"><button type="button" class="fx-b ${e.st}${cur ? ' atual' : ''}${e.andamento ? ' and' : ''}" data-et="${pc.id}|${k}" title="${esc(tit)}" aria-label="${esc(tit)}">${ic(IC_FLUXO[e.st])}${np ? `<i class="np">${np}</i>` : ''}${(e.arquivos || []).length ? '<i class="ax"></i>' : ''}</button></td>`;
+        }).join('')}
+        <td class="fx-d">${s.atual ? `<b>${textoDias(s.desde)}</b><small>${esc(nomeFluxo(s.atual))}</small>` : `<span class="tag green">Concluído</span>`}</td></tr>`;
+    }).join('')}</tbody></table></div>
+    <div class="fx-leg">${ST_FLUXO.map(([k, l]) => `<span><i class="fx-b ${k}">${ic(IC_FLUXO[k])}</i>${l}</span>`).join('')}<span><i class="fx-b fazer atual">${ic('list')}</i>Etapa atual</span><span><i class="fx-b fazer"><i class="np">1</i></i>Pendências</span></div>`;
+}
+
+function quadroFluxo(lista, st) {
+  const cols = FLUXO.concat(st === 'andamento' || st === 'pend' ? [] : [['_fim', 'Concluídos']]);
+  return `<div class="kb">${cols.map(([k, l]) => {
+    const cs = lista.filter(x => (x.s.atual || '_fim') === k);
+    const np = cs.filter(x => pendAbertas(x.s.est[k] || {}) > 0).length;
+    return `<div class="kb-col"><div class="kb-h"><b>${esc(l)}</b><span class="n">${cs.length}</span></div>
+      ${np ? `<div class="kb-p">${ic('alert')}${plural(np, 'com pendências', 'com pendências')}</div>` : ''}
+      <div class="kb-b">${cs.map(({ pc, s }) => {
+        const e = s.atual ? s.est[s.atual] : {}, n = pendAbertas(e);
+        return `<button type="button" class="kb-c" data-et="${pc.id}|${s.atual || FLUXO[FLUXO.length - 1][0]}">${thumb(capa(pc) || imgsCons(pc)[0])}
+          <div class="tx"><b>${esc(pc.ref)}</b>${pc.descricao ? `<small>${esc(pc.descricao)}</small>` : ''}
+            <div class="mt">${cbadge(pc.cliente_id)}${pc.sala ? `<span class="tag gray sem">${esc(pc.sala)}</span>` : ''}</div>
+            <div class="mt">${e.resp ? pchip(e.resp) : ''}${n ? `<span class="tag red">${plural(n, 'pendência')}</span>` : ''}${e.st === 'revisao' ? '<span class="tag amber">Revisão</span>' : ''}${s.atual ? `<span class="dias">${ic('clock')}${textoDias(s.desde)}</span>` : ''}</div>
+            <div class="kb-pr"><i style="width:${s.feitas / FLUXO.length * 100}%"></i></div></div></button>`;
+      }).join('') || '<div class="kb-v">—</div>'}</div></div>`;
+  }).join('')}</div>`;
+}
+
+/* ---------- colocar um modelo nas etapas ---------- */
+function formAddFluxo(pcPre = null) {
+  modal({
+    titulo: 'Adicionar modelo às etapas',
+    corpo: `<form class="form" id="fad" autocomplete="off" novalidate>
+      <div class="grid2">
+        <label class="fld"><span>Referência *</span><input name="ref" list="dl-refs-fx" value="${esc(pcPre ? pcPre.ref : '')}" placeholder="Ex.: V116577MAR" autofocus style="text-transform:uppercase;font-weight:600"></label>
+        <label class="fld"><span>Cliente</span><select name="cliente">${opClientes(pcPre ? pcPre.cliente_id : '', '—')}</select></label>
+        <label class="fld"><span>Sala</span>${selSala(pcPre ? pcPre.sala : '')}</label>
+        <label class="fld"><span>OP</span><input name="op" value="${esc((pcPre && pcPre.op) || '')}" inputmode="numeric"></label>
+      </div>
+      <label class="fld"><span>Descrição</span><input name="descricao" value="${esc((pcPre && pcPre.descricao) || '')}" placeholder="Ex.: vestido longo com babados"></label>
+      <div id="fad-info"></div>
+      <datalist id="dl-refs-fx">${S.db.pecas.filter(p => !fluxoDe(p.id)).map(x => `<option value="${esc(x.ref)}">${esc(x.descricao || '')}</option>`).join('')}</datalist>
+    </form>`,
+    rodape: `<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fad" class="btn primary">Adicionar</button>`,
+    aoAbrir: m => {
+      const form = m.$('#fad');
+      ligarSala(form);
+      const info = () => {
+        const { ref, cliente: c } = separarSufixo(form.ref.value);
+        if (c) { form.cliente.value = c.id; form.ref.value = ref; }
+        const pc = S.db.pecas.find(x => x.ref === ref), box = m.$('#fad-info');
+        if (pc) {
+          if (pc.cliente_id) form.cliente.value = pc.cliente_id;
+          if (pc.sala) { if (![...form.sala.options].some(o => o.value === pc.sala)) form.sala.insertAdjacentHTML('afterbegin', `<option>${esc(pc.sala)}</option>`); form.sala.value = pc.sala; }
+          if (!form.op.value && pc.op) form.op.value = pc.op;
+          if (!form.descricao.value && pc.descricao) form.descricao.value = pc.descricao;
+          box.innerHTML = `<div class="peca-info">${thumb(capa(pc))}<div>${fluxoDe(pc.id) ? 'Essa peça já está nas etapas.' : 'Peça já cadastrada · o desenho, o mini consumo e a ficha técnica dela ficam ligados às etapas.'}</div></div>`;
+          hidratarFotos(box);
+        } else box.innerHTML = ref ? `<div class="peca-info">${ic('info')}<div>Referência nova — a peça <b>${esc(ref)}</b> será criada no catálogo.</div></div>` : '';
+      };
+      form.ref.addEventListener('change', info); form.ref.addEventListener('blur', info);
+      if (pcPre) info();
+      form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const fd = new FormData(form);
+        const { ref, cliente: c } = separarSufixo(fd.get('ref'));
+        if (!ref) { toast('Informe a referência.', 'erro'); form.ref.focus(); return; }
+        const btn = m.$('.btn.primary'); ocupado(btn, true);
+        try {
+          const cliId = fd.get('cliente') || (c && c.id) || null, sala = (fd.get('sala') || '').replace('__outra', '') || null;
+          const op = String(fd.get('op') || '').trim() || null, descricao = String(fd.get('descricao') || '').trim() || null;
+          let pc = S.db.pecas.find(x => x.ref === ref);
+          if (!pc) pc = await salvarReg('pecas', { ref, op, cliente_id: cliId, descricao, sala, fotos: [], detalhes: [] });
+          else if (cliId !== pc.cliente_id || sala !== (pc.sala || null) || (op && !pc.op) || (descricao && descricao !== pc.descricao)) {
+            pc = await salvarReg('pecas', { cliente_id: cliId, sala, op: pc.op || op, descricao: descricao || pc.descricao }, pc.id);
+          }
+          if (!fluxoDe(pc.id)) await salvarReg('fluxos', { peca_id: pc.id, etapas: {} });
+          m.fechar(); toast(`${ref} nas etapas.`);
+          if (S.rota.nome === 'etapas') rerender(); else location.hash = '#/etapas';
+        } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); }
+      });
+    },
+  });
+}
+
+/* ---------- tudo da peça, ligado às etapas ---------- */
+function ligacoesEtapa(pc, k) {
+  const resumo = t => {
+    const a = S.db.pedidos.filter(p => p.peca_id === pc.id && p.tipo === t);
+    if (!a.length) return ['Nenhum pedido', ''];
+    if (a.some(p => !p.finalizado_em)) return ['Em andamento', 'amber'];
+    return [`Finalizado ${fDia(a.map(p => p.finalizado_em).sort().pop())}`, 'green'];
+  };
+  const fi = fichaDe(pc.id), c = cliente(pc.cliente_id);
+  const ft = fi && !fichaVazia(fi.tecnica) ? [`Atualizada ${fDia(fi.atualizado_em)}`, 'green'] : ['Ainda não feita', ''];
+  const fc = fi && !fichaVazia(fi.consumo) ? [`Atualizada ${fDia(fi.atualizado_em)}`, 'green'] : ['Ainda não feita', ''];
+  const itens = [
+    ['peca', `#/peca/${pc.id}`, 'dress', 'Peça', [plural(imagens(pc).length, 'imagem', 'imagens'), '']],
+    ['desenho', `#/filtro/desenho/${encodeURIComponent(pc.ref)}`, 'pen', 'Desenho', resumo('desenho')],
+    ['consumo', `#/filtro/consumo/${encodeURIComponent(pc.ref)}`, 'scissors', 'Mini consumo', resumo('consumo')],
+    ['ficha_tecnica', `#/ficha-tecnica/${pc.id}`, 'file', 'Ficha técnica', ft],
+    ['ficha_consumo', `#/ficha-tecnica/${pc.id}`, 'tag', 'Ficha de consumo', fc],
+  ];
+  if (c && S.db.guia_manuais.some(x => x.cliente_id === c.id)) itens.push(['medidas', `#/medidas/${c.id}`, 'ruler', 'Guia de medidas', [c.nome, '']]);
+  const destaque = { ficha_desenv: 'desenho', consumo: 'consumo', ficha_tecnica: 'ficha_tecnica', medicao: 'medidas', modelagem: 'ficha_tecnica', ajuste_modelagem: 'ficha_tecnica' }[k];
+  return `<div class="lig">${itens.map(([id, href, icn, nome, [txt, cor]]) => `<a class="lig-i${id === destaque ? ' on' : ''}" href="${href}">${ic(icn)}<div><b>${nome}</b><small class="${cor ? 'c-' + cor : ''}">${esc(txt)}</small></div></a>`).join('')}</div>`;
+}
+
+/* ---------- uma etapa: status, arquivos, pendências e responsável ---------- */
+const ehImgArq = n => /\.(jpe?g|png|webp|gif|bmp|heic)$/i.test(n || '');
+function formEtapa(pc, k) {
+  const fl0 = fluxoDe(pc.id);
+  if (!fl0) return formAddFluxo(pc);
+  const e0 = (fl0.etapas || {})[k] || {};
+  const est = estadoEtapa(pc, fl0, k);
+  const idx = FLUXO.findIndex(([x]) => x === k);
+  let arqs = (e0.arquivos || []).slice();
+  const novos = [], removidos = [];
+  const pend = clone(e0.pend || []);
+  modal({
+    titulo: pc.ref, tamanho: 'lg',
+    corpo: `<div class="et-top">
+        <div class="et-sub">Atualizar etapa: <b>${esc(nomeFluxo(k))}</b><span class="muted"> · ${idx + 1} de ${FLUXO.length}</span></div>
+        <div class="et-nav"><button type="button" class="icon-btn" data-ir="${idx - 1}" ${idx ? '' : 'disabled'} title="Etapa anterior">${ic('chevL')}</button><button type="button" class="icon-btn" data-ir="${idx + 1}" ${idx < FLUXO.length - 1 ? '' : 'disabled'} title="Próxima etapa">${ic('chevR')}</button></div>
+      </div>
+      <div class="et-pc">${cbadge(pc.cliente_id)}${pc.sala ? `<span class="tag gray sem">${esc(pc.sala)}</span>` : ''}${pc.descricao ? `<span class="muted small">${esc(pc.descricao)}</span>` : ''}</div>
+      <div class="abas" id="abas"><button type="button" class="on" data-aba="status">Status</button><button type="button" data-aba="pend">Pendências<span class="n" id="n-pend"></span></button><button type="button" data-aba="resp">Responsável</button></div>
+      <form class="form" id="fet" autocomplete="off" novalidate>
+        <div data-p="status">
+          <div class="fld"><span class="lbl">Ligado a esta peça</span>${ligacoesEtapa(pc, k)}</div>
+          <div class="fld"><span class="lbl">Arquivos desta etapa</span>
+            <label class="drop" id="drop">${ic('download')}<b>Selecione um arquivo ou arraste e solte aqui</b><small>até 15 MB cada · foto, PDF, planilha, molde…</small><span class="btn sm">Selecionar arquivo</span><input type="file" multiple hidden id="et-file"></label>
+            <div class="et-arqs" id="arqs"></div></div>
+          <div class="fld"><span class="lbl">Selecione um status para a etapa</span>
+            <div class="pick">${ST_FLUXO.map(([s, l, cor]) => `<label><input type="radio" name="st" value="${s}"${est.st === s ? ' checked' : ''}><span class="pk" style="--c:${cor}">${l}</span></label>`).join('')}</div>
+            ${est.auto ? `<span class="hint">Marcado sozinho: ${esc(est.auto)}${est.em ? ' em ' + fQuando(est.em) : ''}. Pode mudar se precisar.</span>` : est.andamento ? `<span class="hint">${esc(est.andamento)}. Fica “Feito” sozinho quando finalizar.</span>` : ''}</div>
+          <label class="fld"><span>Observação</span><textarea name="obs" rows="2" placeholder="Anotações desta etapa">${esc(e0.obs || '')}</textarea></label>
+          ${(e0.hist || []).length ? `<div class="fld"><span class="lbl">Histórico</span><ul class="et-hist">${e0.hist.slice().reverse().map(h => `<li><span class="dot" style="--c:${(ST_FLUXO.find(([s]) => s === h.st) || [])[2]}"></span><b>${esc(nomeSt(h.st))}</b><span class="muted">${fQuando(h.em)}${h.por ? ' · ' + esc(h.por) : ''}</span></li>`).join('')}</ul></div>` : ''}
+        </div>
+        <div data-p="pend" hidden>
+          <div class="et-pend" id="pend"></div>
+          <div class="et-add"><input class="inp" id="pend-txt" placeholder="Nova pendência (ex.: faltou o aviamento do bolso)"><button type="button" class="btn" id="pend-add">${ic('plus')}Adicionar</button></div>
+        </div>
+        <div data-p="resp" hidden>
+          <div class="fld"><span class="lbl">Quem é responsável por esta etapa</span>${pickPessoas('resp', e0.resp || null)}</div>
+          <label class="fld" style="max-width:240px"><span>Prazo</span><input type="date" name="prazo" value="${esc(e0.prazo || '')}"></label>
+        </div>
+      </form>`,
+    rodape: `<button type="button" class="btn danger esq" id="et-del" title="Tira o modelo da tela Etapas (a peça continua no catálogo)">${ic('trash')}<span class="tx">Tirar das etapas</span></button><button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fet" class="btn primary">Salvar alterações</button>`,
+    aoAbrir: m => {
+      const form = m.$('#fet');
+      ligarNovaPessoa(form);
+      setTimeout(() => { if (document.activeElement && m.el.contains(document.activeElement)) document.activeElement.blur(); m.$('.modal-b').scrollTop = 0; }, 60);
+      m.el.addEventListener('click', e => { if (e.target.closest('a[href^="#/"]')) m.fechar(); });
+      m.$('#abas').addEventListener('click', e => {
+        const b = e.target.closest('[data-aba]'); if (!b) return;
+        m.$$('[data-aba]').forEach(x => x.classList.toggle('on', x === b));
+        m.$$('[data-p]').forEach(p => { p.hidden = p.dataset.p !== b.dataset.aba; });
+        if (b.dataset.aba === 'pend') setTimeout(() => m.$('#pend-txt').focus(), 30);
+      });
+      m.$$('[data-ir]').forEach(b => { b.onclick = () => { const i = +b.dataset.ir; if (FLUXO[i]) { m.fechar(); formEtapa(peca(pc.id), FLUXO[i][0]); } }; });
+      const desenhaArqs = () => {
+        const todos = arqs.map((a, i) => ({ ...a, i, velho: true })).concat(novos.map((f, i) => ({ n: f.name, f, i, velho: false })));
+        m.$('#arqs').innerHTML = todos.map(a => `<div class="et-arq">${a.velho && ehImgArq(a.n) ? `<button type="button" class="th" data-ver="${a.i}" data-foto="${esc(a.p)}" data-fit="contain">${ic('image')}</button>` : `<span class="arq-ic">${esc((a.n.split('.').pop() || 'arq').slice(0, 4).toUpperCase())}</span>`}
+          <div class="tx"><b title="${esc(a.n)}">${esc(a.n)}</b><small>${a.velho ? (a.em ? `enviado ${fQuando(a.em)}` : 'enviado') : `novo · ${tamanhoArq(a.f.size)}`}</small></div>
+          ${a.velho ? `<button type="button" class="icon-btn" data-abrir="${a.i}" title="Abrir">${ic('external')}</button>` : ''}<button type="button" class="icon-btn danger" data-tirar="${a.velho ? 'v' : 'n'}${a.i}" title="Tirar">${ic('x')}</button></div>`).join('');
+        hidratarFotos(m.$('#arqs'));
+      };
+      const addFiles = fs => {
+        const grandes = fs.filter(f => f.size > 15 * 1048576);
+        if (grandes.length) toast(`${grandes.map(f => f.name).join(', ')} passa de 15 MB.`, 'erro');
+        novos.push(...fs.filter(f => f.size <= 15 * 1048576)); desenhaArqs();
+      };
+      m.$('#et-file').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+      const drop = m.$('#drop');
+      ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('on'); }));
+      ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, () => drop.classList.remove('on')));
+      drop.addEventListener('drop', e => { e.preventDefault(); addFiles([...e.dataTransfer.files]); });
+      m.$('#arqs').addEventListener('click', e => {
+        const t = e.target.closest('[data-tirar]'), ab = e.target.closest('[data-abrir]'), v = e.target.closest('[data-ver]');
+        if (t) { const tipo = t.dataset.tirar[0], i = +t.dataset.tirar.slice(1); if (tipo === 'v') { removidos.push(arqs[i].p); arqs.splice(i, 1); } else novos.splice(i, 1); desenhaArqs(); }
+        if (ab) abrirArquivo(arqs[+ab.dataset.abrir].p);
+        if (v) lightbox(arqs.filter(a => ehImgArq(a.n)).map(a => a.p), arqs.filter(a => ehImgArq(a.n)).indexOf(arqs[+v.dataset.ver]));
+      });
+      desenhaArqs();
+      const desenhaPend = () => {
+        m.$('#pend').innerHTML = pend.length ? pend.map((p, i) => `<label class="et-pi${p.ok ? ' ok' : ''}"><input type="checkbox" data-pi="${i}"${p.ok ? ' checked' : ''}><span>${esc(p.t)}</span><small class="muted">${fDia(p.em)}</small><button type="button" class="icon-btn danger" data-prm="${i}" title="Apagar">${ic('x')}</button></label>`).join('')
+          : '<div class="muted small" style="padding:6px 2px 10px">Nenhuma pendência nesta etapa.</div>';
+        const n = pend.filter(p => !p.ok).length;
+        m.$('#n-pend').textContent = n ? ` ${n}` : '';
+      };
+      const addPend = () => { const i = m.$('#pend-txt'), t = i.value.trim(); if (!t) return; pend.push({ id: uid(), t, ok: false, em: agoraISO() }); i.value = ''; desenhaPend(); i.focus(); };
+      m.$('#pend-add').onclick = addPend;
+      m.$('#pend-txt').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addPend(); } });
+      m.$('#pend').addEventListener('change', e => { const c = e.target.closest('[data-pi]'); if (c) { const p = pend[+c.dataset.pi]; p.ok = c.checked; p.ok_em = c.checked ? agoraISO() : null; desenhaPend(); } });
+      m.$('#pend').addEventListener('click', e => { const b = e.target.closest('[data-prm]'); if (b) { e.preventDefault(); pend.splice(+b.dataset.prm, 1); desenhaPend(); } });
+      desenhaPend();
+      m.$('#et-del').onclick = async () => {
+        if (!await confirmar(`Tirar <b>${esc(pc.ref)}</b> da tela Etapas? Os status, pendências e arquivos das etapas dela serão apagados. A peça, o desenho, o consumo e a ficha continuam.`, { ok: 'Tirar das etapas' })) return;
+        try {
+          const fl = fluxoDe(pc.id);
+          const todos = Object.values(fl.etapas || {}).flatMap(e => (e.arquivos || []).map(a => a.p));
+          await excluirReg('fluxos', fl.id);
+          if (todos.length) S.api.removerArquivos(todos).catch(() => {});
+          m.fechar(); toast(`${pc.ref} saiu das etapas.`); rerender();
+        } catch (err) { toast(msgErro(err), 'erro'); }
+      };
+      form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = m.$('.btn.primary'); ocupado(btn, true);
+        try {
+          const enviados = [];
+          for (const f of novos) {
+            const b = f.type.startsWith('image/') ? await comprimir(f, 2400, 0.88) : f;
+            const nome = nomeSeguro(f.name);
+            const path = `pecas/${pc.id}/etapas/${uid()}-${nome}`;
+            await S.api.enviar(path, b.type ? b : new Blob([b], { type: 'application/octet-stream' }));
+            enviados.push({ p: path, n: f.name, em: agoraISO() });
+          }
+          const fd = new FormData(form);
+          const st = fd.get('st') || 'fazer';
+          const fl = fluxoDe(pc.id) || fl0;
+          const atual = (fl.etapas || {})[k] || {};
+          const novo = { ...atual, arquivos: arqs.concat(enviados), pend, obs: String(fd.get('obs') || '').trim() || null, resp: fd.get('resp') || null, prazo: fd.get('prazo') || null };
+          const automatico = !atual.st && st === est.st;
+          if (!automatico && st !== atual.st) {
+            novo.st = st; novo.em = agoraISO();
+            novo.hist = (atual.hist || []).concat({ st, em: novo.em, por: nomeUsuario().split(' ')[0] });
+          }
+          await salvarReg('fluxos', { etapas: { ...(fl.etapas || {}), [k]: novo } }, fl.id);
+          if (removidos.length) S.api.removerArquivos(removidos).catch(() => {});
+          m.fechar();
+          toast(`${nomeFluxo(k)} · ${nomeSt(novo.st || est.st)}`);
+          rerender();
+        } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); }
+      });
+    },
+  });
+}
+
+/* atalho #/filtro/<desenho|consumo>/<ref>: abre a lista já filtrada pela referência */
+function irFiltro(arg) {
+  const [tipo, ...r] = String(arg || '').split('/');
+  if (!TIPO[tipo]) { location.replace('#/inicio'); return; }
+  S.f[tipo] = { q: r.join('/'), st: 'todos', cli: '', pes: '', per: 'tudo', sala: '' };
+  location.replace(`#/${TIPO[tipo].rota}`);
+}
+
+function demoFluxos(pecas, pessoas) {
+  const D = 864e5, ag = Date.now();
+  const em = d => new Date(ag - d * D).toISOString();
+  const mk = (i, feitos, extra = {}) => ({
+    id: uid(), peca_id: pecas[i].id, criado_em: em(20), atualizado_em: em(1),
+    etapas: Object.fromEntries(FLUXO.slice(0, feitos).map(([k], j) => [k, { st: 'feito', em: em(18 - j * 2), hist: [{ st: 'feito', em: em(18 - j * 2), por: 'Nathany' }] }]).concat(Object.entries(extra))),
+  });
+  return [
+    mk(0, 2, { modelagem: { resp: pessoas[2].id, pend: [{ id: uid(), t: 'Conferir a altura do decote com a compradora', ok: false, em: em(1) }] } }),
+    mk(1, 4),
+    mk(2, 1),
+    mk(3, 5, { pilotagem: { st: 'revisao', em: em(2), resp: pessoas[1].id } }),
+    mk(4, 2),
+    mk(5, 17),
+  ];
+}
+
+/* ================================================================
    FICHA TÉCNICA e FICHA DE CONSUMO (uma por peça, tudo editável)
    ================================================================ */
 const GRADE_PADRAO = ['PP', 'P', 'M', 'G', 'GG'];
@@ -2551,6 +2965,7 @@ const MODELOS_LINHA = {
   'tecnica.avi_tam': () => ({ desc: '', v: {} }),
   'consumo.tecidos': () => ({ codigo: '', tecido: '', gramatura: '', largura: '', consumo: '', composicao: '', cor: '' }),
   'consumo.aviamentos': () => ({ codigo: '', material: '', aplicacao: '0 - Geral', un: '', cor: '', consumo: '' }),
+  'consumo.etiquetas': () => ({ codigo: '', etiqueta: '', tipo: '', aplicacao: '', un: 'UN', cor: '', consumo: '' }),
 };
 const ROTA_FICHA = { tecnica: 'ficha-tecnica', consumo: 'ficha-consumo' };
 const NOME_FICHA = { tecnica: 'Ficha técnica', consumo: 'Ficha de consumo' };
@@ -2733,7 +3148,7 @@ function folhaTecnicaHtml(E) {
 function folhaConsumoHtml(E) {
   const { F } = E, k = F.consumo;
   const grade = gradeDe(F);
-  const tec = k.tecidos || [], avi = k.aviamentos || [];
+  const tec = k.tecidos || [], avi = k.aviamentos || [], etq = k.etiquetas || [];
   return `${tituloFolha(E, 'Ficha de consumo')}
   <div class="ft-grid">
     ${fcCliente(E)}${fcPeca(E, 'OP', 'op')}${fcPeca(E, 'Descrição', 'descricao', 'span2')}
@@ -2768,6 +3183,21 @@ function folhaConsumoHtml(E) {
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.aviamentos">${ic('plus')}Adicionar aviamento</button>
       <span class="small muted">Os aviamentos daqui aparecem como sugestão em “Consumos de aviamentos”, mais acima.</span></div>
   </section>
+  <section class="fs">
+    <div class="fs-h"><h3>Etiquetas</h3><div class="r small muted">${plural(etq.length, 'etiqueta')}</div></div>
+    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Etiqueta</th><th>Tipo</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print"></th></tr></thead>
+    <tbody>${etq.map((r, i) => `<tr>
+      <td><input class="cod" data-k="consumo.etiquetas.${i}.codigo" value="${esc(r.codigo || '')}" placeholder="20.03.0818"></td>
+      <td><input data-k="consumo.etiquetas.${i}.etiqueta" value="${esc(r.etiqueta || '')}"></td>
+      <td><input data-k="consumo.etiquetas.${i}.tipo" value="${esc(r.tipo || '')}" list="dl-etq" style="min-width:150px"></td>
+      <td><input data-k="consumo.etiquetas.${i}.aplicacao" value="${esc(r.aplicacao || '')}"></td>
+      <td><input data-k="consumo.etiquetas.${i}.un" value="${esc(r.un || '')}" list="dl-un" style="max-width:70px"></td>
+      <td><input data-k="consumo.etiquetas.${i}.cor" value="${esc(r.cor || '')}"></td>
+      <td class="n pil"><input class="num" data-k="consumo.etiquetas.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.etiquetas.${i}" title="Tirar etiqueta">${ic('x')}</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.etiquetas">${ic('plus')}Adicionar etiqueta</button></div>
+  </section>
+  <datalist id="dl-etq"><option value="Marca / tamanho"><option value="Composição"><option value="Tag cód. barras"><option value="Tag de preço"><option value="Pino / alarme"><option value="Lacre"><option value="Etiqueta interna"></datalist>
   <datalist id="dl-un"><option value="MT"><option value="UN"><option value="KG"><option value="CM"><option value="PC"></datalist>`;
 }
 
