@@ -263,3 +263,26 @@ drop policy if exists "logado" on public.fichas;
 create policy "logado" on public.fichas for all to authenticated using (true) with check (true);
 revoke all on public.fichas from anon;
 grant select, insert, update, delete on public.fichas to authenticated;
+
+-- =====================================================================
+-- ETAPAS e SALA (adicionado em 2026-10-08)
+-- fluxos: uma linha por modelo na tela Etapas
+--   etapas = { <etapa>: { st, em, hist[], arquivos[{p,n,em}], pend[{id,t,ok,em}], resp, prazo, obs } }
+-- pecas.sala: sala/linha do cliente (Farm, Blue Steel, Plus size…)
+-- =====================================================================
+alter table public.pecas add column if not exists sala text;
+
+create table if not exists public.fluxos (
+  id            uuid primary key default gen_random_uuid(),
+  peca_id       uuid not null unique references public.pecas(id) on delete cascade,
+  etapas        jsonb not null default '{}'::jsonb,
+  criado_em     timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+drop trigger if exists t_fluxos_upd on public.fluxos;
+create trigger t_fluxos_upd before update on public.fluxos for each row execute function public.tocar_atualizado();
+alter table public.fluxos enable row level security;
+drop policy if exists "logado" on public.fluxos;
+create policy "logado" on public.fluxos for all to authenticated using (true) with check (true);
+revoke all on public.fluxos from anon;
+grant select, insert, update, delete on public.fluxos to authenticated;
