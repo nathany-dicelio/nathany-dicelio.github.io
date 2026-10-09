@@ -286,3 +286,6 @@ drop policy if exists "logado" on public.fluxos;
 create policy "logado" on public.fluxos for all to authenticated using (true) with check (true);
 revoke all on public.fluxos from anon;
 grant select, insert, update, delete on public.fluxos to authenticated;
+
+-- Modelista do mini consumo (adicionado em 2026-10-09)
+alter table public.pedidos add column if not exists modelista_id uuid references public.pessoas(id) on delete set null;

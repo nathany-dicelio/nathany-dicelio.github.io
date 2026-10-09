@@ -295,7 +295,7 @@ function DemoAPI() {
     async excluir(tab, id) {
       db[tab] = (db[tab] || []).filter(x => x.id !== id);
       if (tab === 'pecas') { db.pedidos = db.pedidos.filter(p => p.peca_id !== id); ['fichas', 'fluxos'].forEach(t => { db[t] = (db[t] || []).filter(x => x.peca_id !== id); }); db.tarefas.forEach(t => { if (t.peca_id === id) t.peca_id = null; }); }
-      if (tab === 'pessoas') { db.pedidos.forEach(p => { if (p.de_id === id) p.de_id = null; if (p.para_id === id) p.para_id = null; }); db.tarefas.forEach(t => { if (t.por_id === id) t.por_id = null; if (t.entregue_para_id === id) t.entregue_para_id = null; }); }
+      if (tab === 'pessoas') { db.pedidos.forEach(p => { if (p.de_id === id) p.de_id = null; if (p.para_id === id) p.para_id = null; if (p.modelista_id === id) p.modelista_id = null; }); db.tarefas.forEach(t => { if (t.por_id === id) t.por_id = null; if (t.entregue_para_id === id) t.entregue_para_id = null; }); }
       if (tab === 'clientes') { db.pecas.forEach(p => { if (p.cliente_id === id) p.cliente_id = null; }); db.medidas = db.medidas.filter(m => m.cliente_id !== id); }
       gravar();
     },
@@ -426,7 +426,7 @@ async function excluirReg(tab, id) {
   S.db[tab] = S.db[tab].filter(x => x.id !== id);
   if (tab === 'pecas') { S.db.pedidos = S.db.pedidos.filter(p => p.peca_id !== id); S.db.fichas = S.db.fichas.filter(x => x.peca_id !== id); S.db.fluxos = S.db.fluxos.filter(x => x.peca_id !== id); S.db.tarefas.forEach(t => { if (t.peca_id === id) t.peca_id = null; }); }
   if (tab === 'pessoas') {
-    S.db.pedidos.forEach(p => { if (p.de_id === id) p.de_id = null; if (p.para_id === id) p.para_id = null; });
+    S.db.pedidos.forEach(p => { if (p.de_id === id) p.de_id = null; if (p.para_id === id) p.para_id = null; if (p.modelista_id === id) p.modelista_id = null; });
     S.db.tarefas.forEach(t => { if (t.por_id === id) t.por_id = null; if (t.entregue_para_id === id) t.entregue_para_id = null; });
   }
   if (tab === 'clientes') { S.db.pecas.forEach(p => { if (p.cliente_id === id) p.cliente_id = null; }); S.db.medidas = S.db.medidas.filter(m => m.cliente_id !== id); }
@@ -1125,9 +1125,9 @@ function viewPedidos(tipo) {
       const pc = peca(p.peca_id) || {};
       if (f.cli && pc.cliente_id !== f.cli) return false;
       if (f.sala && tipo === 'consumo' && pc.sala !== f.sala) return false;
-      if (f.pes && p.de_id !== f.pes && p.para_id !== f.pes) return false;
+      if (f.pes && p.de_id !== f.pes && p.para_id !== f.pes && p.modelista_id !== f.pes) return false;
       if (ini && new Date(p.pedido_em) < ini) return false;
-      if (qn && !norm([pc.ref, p.op, pc.op, (pessoa(p.de_id) || {}).nome, (pessoa(p.para_id) || {}).nome, p.obs, pc.descricao, pc.sala, (cliente(pc.cliente_id) || {}).nome].join(' ')).includes(qn)) return false;
+      if (qn && !norm([pc.ref, p.op, pc.op, (pessoa(p.de_id) || {}).nome, (pessoa(p.para_id) || {}).nome, (pessoa(p.modelista_id) || {}).nome, p.obs, pc.descricao, pc.sala, (cliente(pc.cliente_id) || {}).nome].join(' ')).includes(qn)) return false;
       return true;
     });
     const pos = POS_ETAPAS[tipo];
@@ -1140,7 +1140,7 @@ function viewPedidos(tipo) {
     $('#st').innerHTML = chips.map(([v, t]) => `<button class="chip${f.st === v ? ' on' : ''}" data-st="${v}">${t}<span class="n">${n[v]}</span></button>`).join('');
     const lista = base.filter(filtros[f.st]).sort((a, b) => new Date(b.pedido_em) - new Date(a.pedido_em));
     $('#lista').innerHTML = lista.length ? `<table class="tbl tbl-ped"><thead><tr>
-        <th>Pedido</th><th>Referência</th><th>De</th><th>Para</th><th>Etapas</th><th>Finalizado</th>${pos.map(([, l]) => `<th>${l}</th>`).join('')}<th></th></tr></thead>
+        <th>Pedido</th><th>Referência</th><th>De</th><th>Para</th>${tipo === 'consumo' ? '<th>Modelista</th>' : ''}<th>Etapas</th><th>Finalizado</th>${pos.map(([, l]) => `<th>${l}</th>`).join('')}<th></th></tr></thead>
       <tbody>${lista.map(p => linhaPedido(p)).join('')}</tbody></table>`
       : vazio(T.icone, S.db.pedidos.some(p => p.tipo === tipo) ? 'Nada encontrado com esses filtros' : `Nenhum ${T.nome.toLowerCase()} cadastrado ainda`,
         '', `<button class="btn primary" data-novo="${tipo}">${ic('plus')}${T.novo}</button>`);
@@ -1187,6 +1187,7 @@ function linhaPedido(p) {
       ${p.obs ? `<div class="small" style="color:var(--ink-2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(p.obs)}">${ic('note', 'i obs-ic')} ${esc(p.obs)}</div>` : ''}</div></div></td>
     <td data-l="De">${pchip(p.de_id)}</td>
     <td data-l="Para">${pchip(p.para_id)}</td>
+    ${p.tipo === 'consumo' ? `<td data-l="Modelista">${pchip(p.modelista_id)}</td>` : ''}
     <td class="full" data-l="Etapas">${etapasHtml(p)}</td>
     <td class="full" data-l="Finalizado"><div class="fim">${p.finalizado_em ? `<b>${fQuando(p.finalizado_em)}</b><small>${duracao(p.pedido_em, p.finalizado_em)}</small>`
       : `<div class="prog"><i style="width:${n / tot * 100}%"></i></div><small>${n} de ${tot}</small>`}</div></td>
@@ -1240,6 +1241,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
       <div id="peca-info"></div>
       <div class="fld"><span class="lbl">Quem pediu (de)</span>${pickPessoas('de', p.de_id)}</div>
       <div class="fld"><span class="lbl">Para quem</span>${pickPessoas('para', p.para_id)}</div>
+      ${tipo === 'consumo' ? `<div class="fld"><span class="lbl">Modelista</span>${pickPessoas('modelista', p.modelista_id)}</div>` : ''}
       <div class="fld"><span class="lbl">Etapas <span class="hint">· ${DICA_ETAPA}</span></span><div class="etapas" id="etapas-form">${ETAPAS[tipo].map(([k, l]) => { const v = (p.etapas || {})[k];
         return `<button type="button" class="etp${ehNC(v) ? ' nc' : v ? ' on' : ''}" data-et="${k}" data-v="${esc(v === true ? 'true' : v || '')}"><span class="bx">${ic(ehNC(v) ? 'x' : 'check')}</span>${l}${ehNC(v) ? '<small>não cadastrado</small>' : ''}</button>`; }).join('')}</div></div>
       <div class="grid2">
@@ -1334,6 +1336,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
           const row = {
             tipo, peca_id: pc.id, op, pedido_em: juntar(fd.get('data'), fd.get('hora')),
             de_id: fd.get('de') || null, para_id: fd.get('para') || null, etapas,
+            ...(tipo === 'consumo' ? { modelista_id: fd.get('modelista') || null } : {}),
             finalizado_em: todas ? (fimTxt ? new Date(fimTxt).toISOString() : agoraISO()) : null,
             obs: String(fd.get('obs') || '').trim() || null,
           };
