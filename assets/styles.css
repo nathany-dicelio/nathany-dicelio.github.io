@@ -1049,7 +1049,7 @@ body.exportando .folha input, body.exportando .folha select, body.exportando .fo
 }
 @media print {
   /* folha 1 ocupa a A4 inteira: o desenho cresce e as etiquetas descem até o fim da página */
-  .pg1 { height: 255mm; display: flex; flex-direction: column; overflow: hidden; }
+  .pg1 { height: var(--pg-h, 277mm); display: flex; flex-direction: column; overflow: hidden; }
   .pg1 > .fs-des { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
   .pg1 .ft-des { flex: 1 1 auto; min-height: 0; display: flex !important; flex-direction: column; }
   .pg1 .des-imgs { flex: 1 1 auto; min-height: 70mm; padding: 3px; gap: 4px; grid-auto-rows: minmax(0, 1fr); }
@@ -1217,7 +1217,7 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
   .folha .fc .pv { font-size: 12.5pt; font-weight: 800; padding: 0 3px; }
   /* obs. de modelagem dentro de um quadro */
   .pg1 .ft-obs { padding: 5px 10px 6px; }
-  .pg1 .ft-obs .pv { border: 1.5px solid #781026; border-radius: 6px; min-height: 22mm; padding: 5px 8px; font-size: 11.5pt; }
+  .pg1 .ft-obs .pv { border: 1.5px solid #781026; border-radius: 6px; min-height: 10mm; padding: 5px 8px; font-size: 11.5pt; }
   /* folha 2: desenho das cotas menor, medidas maiores e em negrito */
   .slot.cotas { height: 64mm; }
   .slot.livre .th > img.ft { max-height: 105mm; }
@@ -1238,4 +1238,20 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 }
 
 /* PDF/impressão: cada folha começa numa página nova e não quebra no meio */
-@media print { .pg1, .folha-consumo { break-inside: avoid; } }
+@media print {
+  .pg1, .folha-consumo { break-inside: avoid; }
+  html.ios .folha { --pg-h: 255mm; }
+  /* folha 2: altura fixa; as imagens dividem o espaço que sobra e o contorno vai até o fim */
+  .pg2 { height: var(--pg-h, 277mm); display: flex; flex-direction: column; overflow: hidden; break-inside: avoid; }
+  .pg2 > .so-papel { flex: none; }
+  .pg2 > .ft-medidas { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .pg2 .ft-medidas > * { flex: none; }
+  .pg2 .ft-b-cotas, .pg2 .ft-b-tab { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .pg2 .ft-b-tab { flex-grow: 1.25; }
+  .pg2 .ft-bloco .fs-sub { flex: none; }
+  .pg2 .slot.cotas, .pg2 .slot.livre, .ft-medidas:has(.ft-med tbody tr):has(.slot.livre .slot-img) .slot.cotas { flex: 1 1 auto; height: auto; min-height: 0; }
+  .pg2 .slot .slot-img { height: 100%; display: block; }
+  .pg2 .slot.livre .th > img.ft, .ft-medidas:has(.ft-med tbody tr):has(.slot.livre .slot-img) .slot.livre .th > img.ft { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; object-fit: contain; }
+  .pg2 .slot.livre .slot-img { position: relative; }
+  .pg2 .ft-minis { margin-top: auto; }
+}
