@@ -3087,11 +3087,14 @@ const fcCliente = E => `<label class="fc"><span>Cliente</span><select data-peca=
 const slotHtml = (k, p, rot = 'Imagem', cls = '', dica = '') => `<div class="slot ${cls}" data-slot="${k}">${p
   ? `<button type="button" class="th slot-img" data-foto="${esc(p)}" data-fit="contain" data-lb="${esc(p)}" title="Ampliar">${ic('image')}</button><button type="button" class="slot-x no-print" data-slot-x="${k}" title="Tirar imagem">${ic('x')}</button>`
   : `<label class="slot-add no-print">${ic('camera')}<span>${rot}</span>${dica ? `<small>${dica}</small>` : ''}<input type="file" accept="image/*" hidden data-slot-up="${k}"></label>`}</div>`;
-const tituloFolha = (E, nome) => {
+const siglaCli = id => { const c = cliente(id); return c ? (c.sigla || c.nome) : ''; };
+const tituloFolha = (E, nome, cls = '') => {
   const fi = fichaDe(E.pc.id);
-  return `<div class="ft-titulo">
+  return `<div class="ft-titulo ${cls}">
     <img src="assets/img/logo.png" alt="Nathany Di Celio" class="ft-logo">
-    <div class="ft-nome"><small>${nome}</small><b>${esc(E.pc.ref)}</b></div>
+    <div class="ft-nome"><small>${nome}</small><b>${esc(E.pc.ref)} <span class="ft-sig" data-banda="cliente_id">${esc(siglaCli(E.pc.cliente_id))}</span></b></div>
+    <div class="ft-op"><small>OP</small><b data-banda="op">${esc(E.pc.op || '—')}</b></div>
+    <div class="ft-desc"><small>Descrição</small><b data-banda="descricao">${esc(E.pc.descricao || '—')}</b></div>
     <div class="ft-atual">${fi ? `Atualizada em ${fData(fi.atualizado_em)} às ${fHora(fi.atualizado_em)}` : 'Ainda não preenchida'}</div>
   </div>`;
 };
@@ -3123,13 +3126,12 @@ function folhaTecnicaHtml(E) {
     <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="tecnica.medidas.${i}" title="Tirar medida">${ic('x')}</button></td></tr>`;
   return `<div class="pg1">${tituloFolha(E, 'Ficha técnica do produto')}
   <div class="ft-grid">
-    ${fcCliente(E)}${fcPeca(E, 'OP', 'op')}${fcInput(E, 'Pedido', 'tecnica.pedido')}${fcInput(E, 'Código 2', 'tecnica.codigo2')}
-    ${fcPeca(E, 'Descrição', 'descricao', 'span2')}${fcInput(E, 'Coleção', 'tecnica.colecao')}${fcInput(E, 'Mod. aprovada', 'tecnica.mod_aprovada', 'type="date"')}
+    ${fcCliente(E).replace('class="fc"', 'class="fc na-faixa"')}${fcPeca(E, 'OP', 'op', 'na-faixa')}${fcInput(E, 'Pedido', 'tecnica.pedido')}${fcInput(E, 'Código 2', 'tecnica.codigo2')}
+    ${fcPeca(E, 'Descrição', 'descricao', 'span2 na-faixa')}${fcInput(E, 'Coleção', 'tecnica.colecao')}${fcInput(E, 'Mod. aprovada', 'tecnica.mod_aprovada', 'type="date"')}
     ${fcInput(E, 'Etiqueta', 'tecnica.etiqueta')}${fcInput(E, 'Compradora', 'tecnica.compradora')}${fcInput(E, 'Modelista', 'tecnica.modelista')}${fcInput(E, 'Lacre cliente', 'tecnica.lacre')}
     <label class="fc"><span>Grade</span><input data-grade value="${esc(grade.join(', '))}" placeholder="PP, P, M, G, GG" autocomplete="off"></label>
     <label class="fc"><span>Tamanho base</span><select data-k="tecnica.piloto">${opcoes(grade.map(g => [g, g]), piloto)}</select></label>
-    ${fcInput(E, 'Rota', 'tecnica.rota')}${fcInput(E, 'M.O.', 'tecnica.mo')}
-    ${fcInput(E, 'Resp. Kabriolli', 'tecnica.resp', '', 'span2')}${fcInput(E, 'Cor do produto', 'consumo.cor', '', 'span2')}
+    ${fcInput(E, 'Resp. Kabriolli', 'tecnica.resp', '', 'span2 p1')}${fcInput(E, 'Cor do produto', 'consumo.cor', '', 'span2 p1')}
   </div>
   <section class="fs fs-des">
     <div class="fs-h"><h3>Desenho técnico</h3><div class="r no-print"><button type="button" class="btn sm" data-escolher>${ic('image')}Escolher imagens</button></div></div>
@@ -3143,7 +3145,8 @@ function folhaTecnicaHtml(E) {
     <div class="ft-caixas">${CAIXAS_FT.map(([k, l]) => { const cx = (t.caixas || {})[k] || {};
       return `<div class="cx"><div class="cx-h">${l}</div>${slotHtml(`tecnica.caixas.${k}.img`, cx.img)}<textarea data-k="tecnica.caixas.${k}.txt" rows="3" placeholder="Instruções">${esc(cx.txt || '')}</textarea></div>`; }).join('')}</div>
   </section></div>
-  <section class="fs quebra ft-medidas">
+  <div class="quebra so-papel">${tituloFolha(E, 'Tabela de medidas')}</div>
+  <section class="fs ft-medidas">
     <div class="fs-h"><h3>Tabela de medidas</h3><div class="r small muted">em cm · tamanho base <b>${esc(piloto)}</b></div></div>
     <div class="ft-bloco ft-b-cotas"><div class="fs-sub">Desenho das cotas</div>${slotHtml('tecnica.img_cotas', t.img_cotas, 'Desenho com as cotas', 'cotas', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
     <div class="ft-bloco ft-b-tab"><div class="fs-sub">Medidas (foto da tabela)</div>${slotHtml('tecnica.img_tabela', t.img_tabela, 'Foto ou print da tabela de medidas', 'livre', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
@@ -3164,7 +3167,7 @@ function folhaConsumoHtml(E) {
   const tec = k.tecidos || [], avi = k.aviamentos || [], etq = k.etiquetas || [];
   return `${tituloFolha(E, 'Ficha de consumo')}
   <div class="ft-grid">
-    ${fcCliente(E)}${fcPeca(E, 'OP', 'op')}${fcPeca(E, 'Descrição', 'descricao', 'span2')}
+    ${fcCliente(E).replace('class="fc"', 'class="fc na-faixa"')}${fcPeca(E, 'OP', 'op', 'na-faixa')}${fcPeca(E, 'Descrição', 'descricao', 'span2 na-faixa')}
     ${fcInput(E, 'Cor do produto', 'consumo.cor', '', 'span2')}
     <label class="fc span2"><span>Grade (da ficha técnica)</span><input value="${esc(grade.join(' / '))}" readonly tabindex="-1"></label>
   </div>
@@ -3256,6 +3259,7 @@ function ligarFolha(E) {
     if (t.tagName === 'TEXTAREA') autoAltura(t);
     const sel = t.dataset.k ? `[data-k="${t.dataset.k}"]` : t.dataset.peca ? `[data-peca="${t.dataset.peca}"]` : null;
     if (sel) el.querySelectorAll(sel).forEach(o => { if (o !== t) o.value = t.value; });
+    if (t.dataset.peca && t.tagName === 'INPUT') el.querySelectorAll(`[data-banda="${t.dataset.peca}"]`).forEach(x => { x.textContent = t.value.trim() || '—'; });
     if (t.dataset.k) { setPath(E.F, t.dataset.k, t.value); agendarSalvar(E); }
     else if (t.dataset.peca && t.tagName === 'INPUT') agendarPeca(E, t.dataset.peca, t.value.trim() || null);
   });
@@ -3263,6 +3267,7 @@ function ligarFolha(E) {
     const t = e.target;
     if (t.dataset.peca && t.tagName === 'SELECT') {
       el.querySelectorAll(`select[data-peca="${t.dataset.peca}"]`).forEach(o => { if (o !== t) o.value = t.value; });
+      el.querySelectorAll(`[data-banda="${t.dataset.peca}"]`).forEach(x => { x.textContent = siglaCli(t.value); });
       agendarPeca(E, t.dataset.peca, t.value || null); return;
     }
     if (t.dataset.pom !== undefined) {
