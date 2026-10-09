@@ -3283,7 +3283,7 @@ function folhaTecnicaHtml(E) {
     <div class="ft-caixas">${CAIXAS_FT.map(([k, l]) => { const cx = (t.caixas || {})[k] || {};
       return `<div class="cx"><div class="cx-h">${l}</div>${slotHtml(`tecnica.caixas.${k}.img`, cx.img)}<textarea data-k="tecnica.caixas.${k}.txt" rows="3" placeholder="Instruções">${esc(cx.txt || '')}</textarea></div>`; }).join('')}</div>
   </section></div>
-  <div class="quebra so-papel">${tituloFolha(E, 'Tabela de medidas')}</div>
+  <div class="pg2 quebra"><div class="so-papel">${tituloFolha(E, 'Tabela de medidas')}</div>
   <section class="fs ft-medidas">
     <div class="fs-h"><h3>Tabela de medidas</h3><div class="r small muted">em cm · tamanho base <b>${esc(piloto)}</b></div></div>
     <div class="ft-bloco ft-b-cotas"><div class="fs-sub">Desenho das cotas</div>${slotHtml('tecnica.img_cotas', t.img_cotas, 'Desenho com as cotas', 'cotas', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
@@ -3294,7 +3294,7 @@ function folhaTecnicaHtml(E) {
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="tecnica.medidas">${ic('plus')}Adicionar medida</button>
       ${poms ? `<span class="small muted">Digite o código (ex.: ${esc(Object.keys(poms).slice(0, 1)[0] || 'B6')}) e a descrição vem do guia de medidas da ${esc(cli.nome)}.</span>` : ''}</div>
     <div class="ft-minis">${miniTabela(E, 'Medidas de acabamento', 'tecnica.acabamento', grade)}${miniTabela(E, 'Consumos de aviamentos', 'tecnica.avi_tam', grade, 'dl-avi')}</div>
-  </section>
+  </section></div>
   ${poms ? `<datalist id="dl-pom">${Object.entries(poms).map(([c, n]) => `<option value="${esc(c)}">${esc(n)}</option>`).join('')}</datalist>` : ''}
   <datalist id="dl-avi">${avis.map(a => `<option value="${esc(a)}">`).join('')}</datalist>`;
 }
@@ -3505,6 +3505,7 @@ function prepararImpressao() {
   $$('input, select, textarea', f).forEach(el => {
     if (el.type === 'file' || el.type === 'hidden') return;
     let v = el.tagName === 'SELECT' ? ((el.selectedOptions[0] || {}).text || '') : el.value;
+    if (el.tagName === 'TEXTAREA') v = v.split('\n').map(l => l.trimEnd()).join('\n').replace(/\n{3,}/g, '\n\n').replace(/^(\s*[.\-_]?\s*\n)+/, '').replace(/(\n\s*[.\-_]?\s*)+$/, '').trim();
     if (el.type === 'date' && v) v = v.split('-').reverse().join('/');
     const t = document.createElement('div');
     t.className = 'pv'; t.textContent = v;
@@ -3513,6 +3514,7 @@ function prepararImpressao() {
 }
 function limparImpressao() { $$('.folha .pv').forEach(x => x.remove()); }
 window.addEventListener('beforeprint', prepararImpressao);
+if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) document.documentElement.classList.add('ios');
 window.addEventListener('afterprint', limparImpressao);
 function imprimirFicha() { prepararImpressao(); setTimeout(() => window.print(), 50); }
 /* PDF com as 3 folhas A4, igual à impressão (funciona também no celular) */
@@ -3537,12 +3539,12 @@ async function baixarFichaImagem(E) {
     const canvas = await window.html2canvas(folha, {
       useCORS: true, scale: 2, backgroundColor: '#ffffff', logging: false, windowWidth: 1280,
       onclone: doc => {
+        doc.documentElement.classList.remove('ios');
         const st = doc.createElement('style'); st.textContent = cssImpressao(); doc.head.append(st);
         const f = doc.getElementById('folha');
         f.style.width = `${LARG}px`; f.style.maxWidth = 'none'; f.style.margin = '0';
         // o html2canvas não entende object-fit: imagem inteira sem esticar
         $$('img.ft', f).forEach(img => {
-          if (img.closest('.slot.livre')) { Object.assign(img.style, { width: 'auto', maxWidth: '100%', margin: '0 auto', display: 'block' }); return; }
           const box = img.parentElement;
           Object.assign(box.style, { backgroundImage: `url("${img.src}")`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundColor: '#fff' });
           img.style.display = 'none';
