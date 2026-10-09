@@ -1255,3 +1255,5 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
   .pg2 .slot.livre .slot-img { position: relative; }
   .pg2 .ft-minis { margin-top: auto; }
 }
+/* no papel, a última seção de cada folha também fecha o contorno embaixo */
+@media print { .folha .fs:last-of-type, .folha .pg2 > .ft-medidas { border-bottom: 2px solid #5E0A1C !important; } }
