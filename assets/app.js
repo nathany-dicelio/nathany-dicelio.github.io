@@ -1972,6 +1972,134 @@ async function importarGuia(dados, arquivos, prog) {
   }
   prog('Pronto!', 1);
 }
+/* ---------- importar a planilha antiga (desenhos e consumos) ---------- */
+const chavePedido = (tipo, ref, quando) => `${tipo}|${ref}|${inData(quando)}`;
+function planoImportacao(lista) {
+  const existentes = new Set(S.db.pedidos.map(p => chavePedido(p.tipo, (peca(p.peca_id) || {}).ref, p.pedido_em)));
+  const novos = lista.filter(p => !existentes.has(chavePedido(p.tipo, p.ref, p.pedido_em)));
+  const temPessoa = n => S.db.pessoas.some(x => norm(x.nome) === norm(n));
+  return {
+    novos, jaTem: lista.length - novos.length,
+    pecasNovas: [...new Set(novos.map(p => p.ref))].filter(r => !S.db.pecas.some(x => x.ref === r)),
+    pessoasNovas: [...new Set(novos.flatMap(p => [p.de, p.para]).filter(Boolean))].filter(n => !temPessoa(n)),
+    fotos: novos.filter(p => p.img).length,
+  };
+}
+function formImportarPlanilha() {
+  let plano = null, arquivos = null;
+  modal({
+    titulo: 'Importar planilha de desenhos e consumos', tamanho: 'sm',
+    corpo: `<div class="form">
+      <div class="aviso">${ic('info')}<span>Escolha a pasta <b>planilha-importar</b>. O que já está no sistema (mesma REF, mesmo tipo e mesmo dia) é pulado, então dá para importar de novo sem duplicar.</span></div>
+      <label class="btn" style="align-self:flex-start">${ic('download')}Escolher a pasta<input type="file" id="ppasta" webkitdirectory multiple hidden></label>
+      <div id="pres"></div>
+    </div>`,
+    rodape: '<button type="button" class="btn" data-cancelar>Cancelar</button><button type="button" class="btn primary" id="pimp" disabled>Importar</button>',
+    aoAbrir: m => {
+      const res = m.$('#pres'), btn = m.$('#pimp');
+      m.$('#ppasta').addEventListener('change', async e => {
+        const mapa = {};
+        [...e.target.files].forEach(f => { mapa[(f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name] = f; });
+        if (!mapa['dados.json']) { res.innerHTML = `<div class="aviso erro">${ic('alert')}<span>Essa pasta não tem o arquivo dados.json.</span></div>`; btn.disabled = true; return; }
+        let dados;
+        try { dados = JSON.parse(await mapa['dados.json'].text()); } catch (err) { res.innerHTML = `<div class="aviso erro">${ic('alert')}<span>Não consegui ler o dados.json.</span></div>`; return; }
+        arquivos = mapa; plano = planoImportacao(dados.pedidos || []);
+        const n = t => plano.novos.filter(p => p.tipo === t).length;
+        res.innerHTML = `<ul class="imp-lista">
+          <li>${ic('pen')}<b>${n('desenho')}</b> desenhos e <b>${n('consumo')}</b> consumos para importar</li>
+          <li>${ic('dress')}<b>${plano.pecasNovas.length}</b> peças novas no catálogo</li>
+          <li>${ic('image')}<b>${plano.fotos}</b> fotos</li>
+          ${plano.pessoasNovas.length ? `<li>${ic('users')}Pessoas novas: <b>${esc(plano.pessoasNovas.join(', '))}</b></li>` : ''}
+          <li>${ic('check')}${plural(plano.jaTem, 'pedido já estava', 'pedidos já estavam')} no sistema e ${plano.jaTem === 1 ? 'vai ser pulado' : 'vão ser pulados'}</li>
+        </ul><div class="prog imp-prog hidden"><i style="width:0"></i></div><div class="small muted" id="pst"></div>`;
+        btn.disabled = !plano.novos.length;
+      });
+      btn.onclick = async () => {
+        ocupado(btn, true, 'Importando…');
+        m.$('[data-cancelar]').disabled = true;
+        const bar = m.$('.imp-prog'), stx = m.$('#pst');
+        bar.classList.remove('hidden');
+        try {
+          const r = await importarPlanilha(plano, arquivos, (txt, frac) => { stx.textContent = txt; bar.firstElementChild.style.width = `${Math.round(frac * 100)}%`; });
+          m.fechar(); toast(`${plural(r, 'pedido importado', 'pedidos importados')}.`); rerender();
+        } catch (err) { ocupado(btn, false); m.$('[data-cancelar]').disabled = false; toast(msgErro(err), 'erro'); stx.textContent = 'Parou no meio. Pode clicar em Importar de novo: o que já entrou é pulado.'; }
+      };
+    },
+  });
+}
+async function importarPlanilha(plano, arquivos, prog) {
+  const { novos } = plano;
+  const arq = p => arquivos[p] || arquivos[String(p).split('/').pop()];
+  const paralelo = async (itens, fn, n = 5) => { const fila = itens.slice(); await Promise.all(Array.from({ length: n }, async () => { while (fila.length) await fn(fila.shift()); })); };
+  // 1. pessoas que faltam
+  prog('Criando pessoas…', 0.01);
+  for (const [i, nome] of plano.pessoasNovas.entries()) await salvarReg('pessoas', { nome, cor: CORES[(S.db.pessoas.length + i) % CORES.length], ativo: true });
+  const idPessoa = n => (n ? (S.db.pessoas.find(x => norm(x.nome) === norm(n)) || {}).id || null : null);
+  const so = t => norm(t).replace(/[^a-z0-9]/g, '');
+  const idCliente = sig => {
+    if (!sig) return null;
+    const c = S.db.clientes.find(x => (x.sigla && so(x.sigla) === so(sig)) || so(x.nome) === so(sig) || (so(sig) === 'ca' && so(x.nome) === 'ca'));
+    return c ? c.id : null;
+  };
+  // 2. peças novas (dados do primeiro pedido de cada REF; descrição do desenho tem preferência)
+  prog('Criando as peças…', 0.04);
+  const porRef = {};
+  novos.forEach(p => { const a = porRef[p.ref] || (porRef[p.ref] = []); a.push(p); });
+  const info = ref => {
+    const a = porRef[ref], des = a.find(p => p.tipo === 'desenho' && p.descricao) || a.find(p => p.descricao) || {};
+    return { cliente_id: idCliente((a.find(p => p.cliente) || {}).cliente), descricao: des.descricao || null, op: (a.find(p => p.op) || {}).op || null };
+  };
+  const linhasPecas = plano.pecasNovas.filter(r => !S.db.pecas.some(x => x.ref === r)).map(ref => ({ ref, ...info(ref), fotos: [], detalhes: [] }));
+  for (let i = 0; i < linhasPecas.length; i += 200) {
+    const feitas = await S.api.inserirVarios('pecas', linhasPecas.slice(i, i + 200));
+    S.db.pecas.push(...feitas);
+    prog(`Criando as peças… ${Math.min(i + 200, linhasPecas.length)} de ${linhasPecas.length}`, 0.04 + 0.08 * (i + 200) / Math.max(1, linhasPecas.length));
+  }
+  const pecaRef = ref => S.db.pecas.find(x => x.ref === ref);
+  // peças que já existiam: completa cliente e descrição se estiverem vazios
+  const completar = Object.keys(porRef).map(pecaRef).filter(pc => pc && (!pc.cliente_id || !pc.descricao)).map(pc => {
+    const x = info(pc.ref), patch = {};
+    if (!pc.cliente_id && x.cliente_id) patch.cliente_id = x.cliente_id;
+    if (!pc.descricao && x.descricao) patch.descricao = x.descricao;
+    return [pc, patch];
+  }).filter(([, patch]) => Object.keys(patch).length);
+  await paralelo(completar, async ([pc, patch]) => { await salvarReg('pecas', patch, pc.id); });
+  // 3. fotos: desenho vai para o catálogo, consumo para os arquivos do consumo
+  const comFoto = novos.filter(p => p.img && arq(p.img));
+  const porPeca = {};
+  let enviadas = 0;
+  await paralelo(comFoto, async p => {
+    const pc = pecaRef(p.ref);
+    const path = `pecas/${pc.id}/planilha-${p.img.split('/').pop()}`;
+    await S.api.enviar(path, arq(p.img), true);
+    const k = p.tipo === 'consumo' ? 'arquivos_consumo' : 'fotos';
+    const a = porPeca[pc.id] || (porPeca[pc.id] = { fotos: [], arquivos_consumo: [] });
+    a[k].push(path);
+    enviadas++;
+    prog(`Enviando fotos… ${enviadas} de ${comFoto.length}`, 0.12 + 0.6 * enviadas / Math.max(1, comFoto.length));
+  });
+  let salvas = 0;
+  const ids = Object.keys(porPeca);
+  await paralelo(ids, async id => {
+    const pc = peca(id), novas = porPeca[id], patch = {};
+    ['fotos', 'arquivos_consumo'].forEach(k => { const add = novas[k].filter(x => !(pc[k] || []).includes(x)); if (add.length) patch[k] = (pc[k] || []).concat(add); });
+    if (Object.keys(patch).length) await salvarReg('pecas', patch, id);
+    salvas++;
+    prog(`Ligando as fotos às peças… ${salvas} de ${ids.length}`, 0.72 + 0.1 * salvas / Math.max(1, ids.length));
+  });
+  // 4. pedidos
+  const linhas = novos.map(p => ({
+    tipo: p.tipo, peca_id: pecaRef(p.ref).id, op: p.op || null, pedido_em: p.pedido_em, finalizado_em: p.finalizado_em || null,
+    de_id: idPessoa(p.de), para_id: idPessoa(p.para), etapas: p.etapas || {}, obs: p.obs || null,
+  }));
+  for (let i = 0; i < linhas.length; i += 200) {
+    const feitos = await S.api.inserirVarios('pedidos', linhas.slice(i, i + 200));
+    S.db.pedidos.push(...feitos);
+    prog(`Salvando os pedidos… ${Math.min(i + 200, linhas.length)} de ${linhas.length}`, 0.82 + 0.18 * (i + 200) / linhas.length);
+  }
+  prog('Pronto!', 1);
+  return linhas.length;
+}
 async function abrirMedida(m) {
   if (!m || !m.arquivo) return;
   if (/^image\//.test(m.tipo_arquivo || '')) return lightbox([m.arquivo]);
@@ -2050,6 +2178,7 @@ function viewAjustes() {
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         ${S.api.demo ? '' : `<button class="btn sm" id="senha">${ic('key')}Trocar senha</button>`}
         <button class="btn sm" id="backup">${ic('download')}Baixar cópia dos dados</button>
+        <button class="btn sm" id="imp-planilha">${ic('file')}Importar planilha antiga</button>
       </div></div></div>
   </div>`;
   const ligarLista = (box, tab, uso) => {
@@ -2091,6 +2220,7 @@ function viewAjustes() {
     try { await salvarReg('clientes', { nome, sigla: String(fd.get('sigla')).trim() || null, cor: fd.get('cor'), ordem: S.db.clientes.length + 1 }); toast('Cliente adicionado.'); rerender(); } catch (err) { toast(msgErro(err), 'erro'); }
   });
   const bs = $('#senha'); if (bs) bs.onclick = pedirNovaSenha;
+  $('#imp-planilha').onclick = () => formImportarPlanilha();
   $('#backup').onclick = () => {
     const blob = new Blob([JSON.stringify({ exportado_em: agoraISO(), ...S.db }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
