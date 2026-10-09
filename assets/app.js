@@ -2709,7 +2709,14 @@ const nomeFluxo = k => (FLUXO.find(([x]) => x === k) || [])[1] || k;
 const nomeSt = s => (ST_FLUXO.find(([x]) => x === s) || [])[1] || s;
 const fluxoDe = pcId => S.db.fluxos.find(f => f.peca_id === pcId) || null;
 const pendAbertas = e => (e.pend || []).filter(p => !p.ok).length;
-const ocultoFluxo = pc => { const fl = fluxoDe(pc.id); return !!(fl && fl.etapas && fl.etapas._oculto); };
+// escondido: marcado à mão, ou peça antiga (sem nada nas etapas e sem pedido nos últimos 45 dias)
+const ocultoFluxo = pc => {
+  const fl = fluxoDe(pc.id);
+  if (fl) return !!(fl.etapas && fl.etapas._oculto);
+  const peds = S.db.pedidos.filter(p => p.peca_id === pc.id).map(p => p.pedido_em);
+  const ult = (peds.length ? peds : [pc.criado_em]).filter(Boolean).map(x => new Date(x).getTime());
+  return !ult.length || Date.now() - Math.max(...ult) > 45 * 864e5;
+};
 async function salvarFluxo(pc, etapas) {
   const fl = fluxoDe(pc.id);
   return fl ? salvarReg('fluxos', { etapas }, fl.id) : salvarReg('fluxos', { peca_id: pc.id, etapas });
@@ -3035,6 +3042,7 @@ function formEtapa(pc, k) {
         try {
           const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
           if (oculto) delete et._oculto; else et._oculto = true;
+          if (oculto && !fl) et._visivel = true;
           await salvarFluxo(pc, et);
           m.fechar(); toast(oculto ? `${pc.ref} voltou para as etapas.` : `${pc.ref} escondido. Ele fica em “Escondidos”.`); rerender();
         } catch (err) { toast(msgErro(err), 'erro'); }
