@@ -1180,3 +1180,59 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .fx thead th { position: sticky; top: 0; z-index: 3; background-color: var(--card); box-shadow: inset 0 -1.5px 0 var(--line); }
 .fx thead th:nth-child(odd):not(.fx-pc):not(.fx-d) { background: linear-gradient(color-mix(in srgb, var(--brand) 5%, transparent), color-mix(in srgb, var(--brand) 5%, transparent)), var(--card); }
 .fx thead th.fx-pc { left: 0; z-index: 4; box-shadow: inset 0 -1.5px 0 var(--line), 1px 0 0 var(--line-2); }
+
+/* faixa da ficha: REF + sigla, OP e descrição em destaque */
+.ft-titulo { flex-wrap: wrap; row-gap: 6px; }
+.ft-nome { flex: 0 0 auto; }
+.ft-sig { font-family: var(--sans, inherit); font-size: .55em; font-weight: 700; letter-spacing: .06em; opacity: .9; margin-left: 4px; }
+.ft-op, .ft-desc { display: flex; flex-direction: column; line-height: 1.15; padding-left: 18px; border-left: 1px solid rgba(255, 255, 255, .35); }
+.ft-op small, .ft-desc small { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .8; }
+.ft-op b { font-size: 24px; font-weight: 700; }
+.ft-desc { flex: 1; min-width: 180px; }
+.ft-desc b { font-size: 18px; font-weight: 600; }
+.ft-atual { align-self: flex-end; }
+.so-papel { display: none; }
+.obs-quadro { }
+@media (max-width: 640px) { .ft-op, .ft-desc { border-left: 0; padding-left: 0; } }
+@media print {
+  .so-papel { display: block; }
+  .folha .na-faixa { display: none !important; }
+  /* faixa grande em todas as folhas */
+  .folha .ft-titulo { padding: 7px 12px !important; gap: 14px; flex-wrap: nowrap; align-items: center; }
+  .folha .ft-logo { height: 30px; }
+  .folha .ft-nome small, .folha .ft-op small, .folha .ft-desc small { font-size: 7.5pt; letter-spacing: .1em; opacity: .85; }
+  .folha .ft-nome b { font-size: 26pt !important; line-height: 1; white-space: nowrap; }
+  .folha .ft-sig { font-size: 15pt; font-family: Arial, Helvetica, sans-serif; font-weight: 800; }
+  .folha .ft-op { padding-left: 12px; border-left: 1.5px solid rgba(255, 255, 255, .5) !important; }
+  .folha .ft-op b { font-size: 20pt; font-weight: 800; white-space: nowrap; }
+  .folha .ft-desc { padding-left: 12px; border-left: 1.5px solid rgba(255, 255, 255, .5) !important; min-width: 0; }
+  .folha .ft-desc b { font-size: 14pt; font-weight: 800; line-height: 1.15; }
+  .folha .ft-titulo { position: relative; padding-bottom: 12px !important; }
+  .folha .ft-atual { position: absolute; right: 10px; bottom: 2px; font-size: 6.5pt; white-space: nowrap; opacity: .85; }
+  .folha .ft-desc b { font-size: 13.5pt; }
+  /* dados da folha 1: 3 linhas de 4, letra maior */
+  .folha .ft-grid .fc.p1 { grid-column: span 1 !important; }
+  .folha .fc { padding: 2px 7px 3px; }
+  .folha .fc > span { font-size: 8pt; }
+  .folha .fc .pv { font-size: 12.5pt; font-weight: 800; padding: 0 3px; }
+  /* obs. de modelagem dentro de um quadro */
+  .pg1 .ft-obs { padding: 5px 10px 6px; }
+  .pg1 .ft-obs .pv { border: 1.5px solid #781026; border-radius: 6px; min-height: 22mm; padding: 5px 8px; font-size: 11.5pt; }
+  /* folha 2: desenho das cotas menor, medidas maiores e em negrito */
+  .slot.cotas { height: 74mm; }
+  .slot.livre .th > img.ft { max-height: 115mm; }
+  .folha .ft-med .pv { font-size: 11pt !important; font-weight: 800; padding: 3px 3px !important; }
+  .folha .ft-med th { font-size: 8.5pt !important; padding: 4px 3px !important; }
+  .folha .mini-tab .pv { font-size: 11.5pt; font-weight: 800; }
+  .folha .mini-tab th { font-size: 9pt; }
+  .slot.livre .th > img.ft { max-height: 100mm; }
+  /* foto da tabela + medidas digitadas juntas: imagens um pouco menores para caber na folha */
+  .ft-medidas:has(.ft-med tbody tr):has(.slot.livre .slot-img) .slot.cotas { height: 62mm; }
+  .ft-medidas:has(.ft-med tbody tr):has(.slot.livre .slot-img) .slot.livre .th > img.ft { max-height: 70mm; }
+  .folha .ft-tab .cod + .pv { white-space: nowrap; }
+  /* folha 3: tudo maior */
+  .folha-consumo .ft-tab .pv { font-size: 12pt; font-weight: 800; padding: 4px 4px; }
+  .folha-consumo .ft-tab th { font-size: 9pt; padding: 5px 4px; }
+  .folha-consumo .fs-h h3 { font-size: 17pt !important; }
+  .folha-consumo .fs-h .r { font-size: 10pt; }
+}
