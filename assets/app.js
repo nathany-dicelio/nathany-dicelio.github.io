@@ -3203,7 +3203,7 @@ function folhaFicha(tipo, pecaId) {
         <a class="btn sm" href="#/peca/${pc.id}">${ic('dress')}<span class="tx">Peça</span></a>
         <button type="button" class="btn sm" id="ir-consumo">${ic('tag')}<span class="tx">Ir para o consumo</span></button>
         <button type="button" class="btn sm" id="f-print">${ic('download')}<span class="tx">Imprimir / PDF</span></button>
-        <button type="button" class="btn sm primary" id="f-img">${ic('image')}<span class="tx">Baixar imagem</span></button>
+        <button type="button" class="btn sm primary" id="f-img">${ic('download')}<span class="tx">Baixar PDF</span></button>
       </div>
     </div>
     <div class="folha" id="folha"></div>`;
@@ -3515,18 +3515,58 @@ function limparImpressao() { $$('.folha .pv').forEach(x => x.remove()); }
 window.addEventListener('beforeprint', prepararImpressao);
 window.addEventListener('afterprint', limparImpressao);
 function imprimirFicha() { prepararImpressao(); setTimeout(() => window.print(), 50); }
+/* PDF com as 3 folhas A4, igual à impressão (funciona também no celular) */
+function cssImpressao() {
+  let css = '';
+  for (const sh of document.styleSheets) {
+    let regras; try { regras = sh.cssRules; } catch (e) { continue; }
+    for (const r of regras) if (r.media && [...r.media].includes('print')) css += [...r.cssRules].map(x => x.cssText).join('\n');
+  }
+  return css.replace(/@page[^}]*\}/g, '');
+}
 async function baixarFichaImagem(E) {
   const btn = $('#f-img'); ocupado(btn, true, 'Gerando…');
   try {
-    await carregarScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
-    document.body.classList.add('exportando');
-    const canvas = await window.html2canvas($('#folha'), { useCORS: true, scale: 2, backgroundColor: '#ffffff', logging: false });
-    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = `${E.tipo === 'tecnica' ? 'ficha-tecnica' : 'ficha-consumo'}-${nomeSeguro(E.pc.ref)}.png`;
-    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    await Promise.all([carregarScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
+      carregarScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')]);
+    prepararImpressao();
+    const folha = $('#folha'), LARG = 733; // largura útil da A4 (194 mm) em px
+    $$('img', folha).forEach(i => { i.loading = 'eager'; });
+    await Promise.all($$('img', folha).map(i => (i.complete ? null : new Promise(r => { i.onload = i.onerror = r; }))));
+    let cortes = [];
+    const canvas = await window.html2canvas(folha, {
+      useCORS: true, scale: 2, backgroundColor: '#ffffff', logging: false, windowWidth: 1280,
+      onclone: doc => {
+        const st = doc.createElement('style'); st.textContent = cssImpressao(); doc.head.append(st);
+        const f = doc.getElementById('folha');
+        f.style.width = `${LARG}px`; f.style.maxWidth = 'none'; f.style.margin = '0';
+        // o html2canvas não entende object-fit: imagem inteira sem esticar
+        $$('img.ft', f).forEach(img => {
+          if (img.closest('.slot.livre')) { Object.assign(img.style, { width: 'auto', maxWidth: '100%', margin: '0 auto', display: 'block' }); return; }
+          const box = img.parentElement;
+          Object.assign(box.style, { backgroundImage: `url("${img.src}")`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundColor: '#fff' });
+          img.style.display = 'none';
+        });
+        const topo = f.getBoundingClientRect().top;
+        cortes = [0, ...$$('.quebra', f).map(q => q.getBoundingClientRect().top - topo), f.getBoundingClientRect().height];
+      },
+    });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const k = canvas.width / LARG;
+    cortes.slice(1).forEach((fimY, i) => {
+      const y0 = Math.round(cortes[i] * k), h = Math.round(fimY * k) - y0;
+      if (h <= 4) return;
+      const pg = document.createElement('canvas'); pg.width = canvas.width; pg.height = h;
+      pg.getContext('2d').drawImage(canvas, 0, y0, canvas.width, h, 0, 0, canvas.width, h);
+      let w = 194, alt = h / canvas.width * 194;
+      if (alt > 281) { w = w * 281 / alt; alt = 281; }
+      if (i) pdf.addPage();
+      pdf.addImage(pg.toDataURL('image/jpeg', 0.92), 'JPEG', (210 - w) / 2, 8, w, alt);
+    });
+    pdf.save(`ficha-${nomeSeguro(E.pc.ref)}.pdf`);
   } catch (err) { toast(msgErro(err), 'erro'); }
-  finally { document.body.classList.remove('exportando'); ocupado(btn, false); }
+  finally { limparImpressao(); ocupado(btn, false); }
 }
 
 /* exemplo para o modo demonstração */
