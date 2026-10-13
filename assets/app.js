@@ -3458,7 +3458,7 @@ function ligarFolha(E) {
       catch (err) { statusSalvo('Imagem não enviada', 'erro'); toast(msgErro(err), 'erro'); }
     });
   }
-  $('#f-print').onclick = () => imprimirFicha();
+  $('#f-print').onclick = () => imprimirFicha(E);
   const ir = $('#ir-consumo'); if (ir) ir.onclick = () => $('#folha-consumo').scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('#f-img').onclick = () => baixarFichaImagem(E);
 }
@@ -3516,7 +3516,17 @@ function limparImpressao() { $$('.folha .pv').forEach(x => x.remove()); }
 window.addEventListener('beforeprint', prepararImpressao);
 if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) document.documentElement.classList.add('ios');
 window.addEventListener('afterprint', limparImpressao);
-function imprimirFicha() { prepararImpressao(); setTimeout(() => window.print(), 50); }
+const ehIOS = () => document.documentElement.classList.contains('ios');
+// no iPhone o Safari amplia a página ao imprimir e as folhas transbordam: lá o botão gera o nosso PDF de 3 folhas e abre para imprimir
+function imprimirFicha(E) {
+  if (E && ehIOS()) {
+    const w = window.open('', '_blank');
+    if (w) w.document.write('<p style="font:16px -apple-system,sans-serif;padding:24px">Gerando o PDF da ficha…</p>');
+    baixarFichaImagem(E, w || 'baixar', '#f-print');
+    return;
+  }
+  prepararImpressao(); setTimeout(() => window.print(), 50);
+}
 /* PDF com as 3 folhas A4, igual à impressão (funciona também no celular) */
 function cssImpressao() {
   let css = '';
@@ -3526,8 +3536,8 @@ function cssImpressao() {
   }
   return css.replace(/@page[^}]*\}/g, '');
 }
-async function baixarFichaImagem(E) {
-  const btn = $('#f-img'); ocupado(btn, true, 'Gerando…');
+async function baixarFichaImagem(E, destino = 'baixar', idBtn = '#f-img') {
+  const btn = $(idBtn); ocupado(btn, true, 'Gerando…');
   try {
     await Promise.all([carregarScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
       carregarScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')]);
@@ -3566,8 +3576,9 @@ async function baixarFichaImagem(E) {
       if (i) pdf.addPage();
       pdf.addImage(pg.toDataURL('image/jpeg', 0.92), 'JPEG', (210 - w) / 2, 8, w, alt);
     });
-    pdf.save(`ficha-${nomeSeguro(E.pc.ref)}.pdf`);
-  } catch (err) { toast(msgErro(err), 'erro'); }
+    if (destino === 'baixar') pdf.save(`ficha-${nomeSeguro(E.pc.ref)}.pdf`);
+    else destino.location.href = URL.createObjectURL(pdf.output('blob'));
+  } catch (err) { if (destino !== 'baixar') destino.close(); toast(msgErro(err), 'erro'); }
   finally { limparImpressao(); ocupado(btn, false); }
 }
 
