@@ -1312,3 +1312,6 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
   .folha .folha-consumo > .fs { flex: 1 1 0; min-height: 0; overflow: hidden; margin-top: 4mm; border: 2px solid #5E0A1C !important; }
   .folha .folha-consumo .ft-tab .pv { font-size: 10.5pt !important; }
 }
+
+.pc .op .sala { font-weight: 600; color: var(--ink-2); }
+#salas:empty { display: none; }

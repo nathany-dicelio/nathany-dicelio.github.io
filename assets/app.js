@@ -469,7 +469,7 @@ function pecasQue(q) {
     const ref = norm(pc.ref).replace(/\s+/g, '');
     const os = [...(ops[pc.id] || [])]; if (pc.op) os.push(norm(pc.op));
     const score = (ref === n || os.includes(n)) ? 4 : (ref.startsWith(n) || os.some(o => o.startsWith(n))) ? 3
-      : (ref.includes(n) || os.some(o => o.includes(n))) ? 2 : norm(pc.descricao).includes(norm(q)) ? 1 : 0;
+      : (ref.includes(n) || os.some(o => o.includes(n))) ? 2 : (norm(pc.descricao).includes(norm(q)) || norm(pc.sala).includes(norm(q))) ? 1 : 0;
     return { pc, score };
   }).filter(x => x.score).sort((a, b) => (b.score - a.score) || String(b.pc.atualizado_em).localeCompare(String(a.pc.atualizado_em))).map(x => x.pc);
 }
@@ -1513,20 +1513,21 @@ function cartaoPeca(pc) {
   const st = statusPeca(pc.id), ops = opsDaPeca(pc), nf = imagens(pc).length, np = pdfs(pc).length;
   return `<a class="pc" href="#/peca/${pc.id}">
     ${thumb(capa(pc), 'th', `${cbadge(pc.cliente_id)}${nf > 1 || np ? `<span class="nf">${nf > 1 ? `${ic('image')}${nf}` : ''}${np ? `${nf > 1 ? ' · ' : ''}${ic('file')}${np}` : ''}</span>` : ''}`)}
-    <div class="bd"><b>${esc(pc.ref)}</b><div class="op">${tipoPeca(pc.ref) ? `${tipoPeca(pc.ref).nome} · ` : ''}${ops.length ? `OP ${esc(ops.join(' · '))}` : 'Sem OP'}</div>
+    <div class="bd"><b>${esc(pc.ref)}</b><div class="op">${tipoPeca(pc.ref) ? `${tipoPeca(pc.ref).nome} · ` : ''}${ops.length ? `OP ${esc(ops.join(' · '))}` : 'Sem OP'}${pc.sala ? ` · <span class="sala">${esc(pc.sala)}</span>` : ''}</div>
       ${pc.descricao ? `<div class="desc">${esc(pc.descricao)}</div>` : ''}
       <div class="st">${tagStatus('desenho', st.desenho)}${tagStatus('consumo', st.consumo)}</div></div></a>`;
 }
 function viewCatalogo() {
-  const f = S.f.cat || (S.f.cat = { q: '', cli: '', tipo: '', ord: 'recentes' });
+  const f = S.f.cat || (S.f.cat = { q: '', cli: '', tipo: '', sala: '', ord: 'recentes' });
   setPage('Catálogo', 'Todas as peças, com fotos e informações', `<button class="btn primary" data-novo="desenho">${ic('plus')}<span class="tx">Nova peça</span></button>`);
   view().innerHTML = `<div class="card">
     <div class="toolbar">
-      <div class="busca">${ic('search')}<input class="inp" data-f="q" placeholder="Buscar por REF, OP ou descrição" value="${esc(f.q)}"></div>
+      <div class="busca">${ic('search')}<input class="inp" data-f="q" placeholder="Buscar por REF, OP, descrição ou sala" value="${esc(f.q)}"></div>
       <select class="inp" data-f="ord">${opcoes([['recentes', 'Mais recentes'], ['ref', 'Referência (A–Z)'], ['antigas', 'Mais antigas']], f.ord)}</select>
     </div>
     <div class="chips chips-row tipos-peca" id="tipos"></div>
     <div class="chips chips-row" id="cli"></div>
+    <div class="chips chips-row" id="salas"></div>
     <div id="grade"></div>
   </div>`;
   const desenhar = () => {
@@ -1534,7 +1535,8 @@ function viewCatalogo() {
     const tipoK = p => (tipoPeca(p.ref) || { k: 'outros' }).k;
     const doTipo = p => !f.tipo || tipoK(p) === f.tipo;
     const doCli = p => !f.cli || p.cliente_id === f.cli;
-    const porCli = base.filter(doCli), porTipo = base.filter(doTipo);
+    const doSala = p => !f.sala || (p.sala || '') === f.sala;
+    const porCli = base.filter(p => doCli(p) && doSala(p)), porTipo = base.filter(p => doTipo(p) && doSala(p));
     const outros = porCli.filter(p => tipoK(p) === 'outros').length;
     $('#tipos').innerHTML = `<button class="chip${!f.tipo ? ' on' : ''}" data-tipo="">Todas as peças<span class="n">${porCli.length}</span></button>`
       + TIPOS_PECA.map(t => { const n = porCli.filter(p => tipoK(p) === t.k).length;
@@ -1543,7 +1545,11 @@ function viewCatalogo() {
     const cont = id => porTipo.filter(p => (p.cliente_id || '') === id).length;
     $('#cli').innerHTML = `<button class="chip${!f.cli ? ' on' : ''}" data-cli="">Todos os clientes<span class="n">${porTipo.length}</span></button>`
       + clientesOrd().map(c => `<button class="chip${f.cli === c.id ? ' on' : ''}" data-cli="${c.id}" style="--c:${esc(c.cor)}"><i class="d"></i>${esc(c.nome)}<span class="n">${cont(c.id)}</span></button>`).join('');
-    let lista = base.filter(p => doCli(p) && doTipo(p));
+    const porSala = base.filter(p => doCli(p) && doTipo(p));
+    const salas = salasLista().filter(x => porSala.some(p => p.sala === x) || x === f.sala);
+    $('#salas').innerHTML = salas.length || f.sala ? `<button class="chip${!f.sala ? ' on' : ''}" data-sala="">Todas as salas<span class="n">${porSala.length}</span></button>`
+      + salas.map(x => `<button class="chip${f.sala === x ? ' on' : ''}" data-sala="${esc(x)}">${esc(x)}<span class="n">${porSala.filter(p => p.sala === x).length}</span></button>`).join('') : '';
+    let lista = base.filter(p => doCli(p) && doTipo(p) && doSala(p));
     if (!f.q.trim() || f.ord !== 'recentes') {
       if (f.ord === 'ref') lista.sort((a, b) => a.ref.localeCompare(b.ref, 'pt-BR', { numeric: true }));
       else if (f.ord === 'antigas') lista.sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)));
@@ -1556,6 +1562,7 @@ function viewCatalogo() {
   $$('[data-f]', view()).forEach(el => el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', () => { f[el.dataset.f] = el.value; desenhar(); }));
   $('#cli').addEventListener('click', e => { const b = e.target.closest('[data-cli]'); if (b) { f.cli = b.dataset.cli; desenhar(); } });
   $('#tipos').addEventListener('click', e => { const b = e.target.closest('[data-tipo]'); if (b) { f.tipo = b.dataset.tipo; desenhar(); } });
+  $('#salas').addEventListener('click', e => { const b = e.target.closest('[data-sala]'); if (b) { f.sala = b.dataset.sala; desenhar(); } });
   desenhar();
 }
 
