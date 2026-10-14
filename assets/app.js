@@ -591,7 +591,7 @@ async function enviarFotos(pecaId, files) {
       paths.push(path);
       continue;
     }
-    const b = await comprimir(f);
+    const b = await comprimir(f, 2600, 0.9);
     const path = `pecas/${pecaId}/${uid()}.${extDe(b, f.name)}`;
     await S.api.enviar(path, b);
     paths.push(path);
@@ -3242,7 +3242,7 @@ function miniTabela(E, titulo, key, grade, lista = '') {
     <table class="ft-tab"><thead><tr><th>Descrição</th>${grade.map(g => `<th class="n">${esc(g)}</th>`).join('')}<th class="no-print"></th></tr></thead>
     <tbody>${linhas.map((r, i) => `<tr><td><input data-k="${key}.${i}.desc" value="${esc(r.desc || '')}"${lista ? ` list="${lista}"` : ''}></td>
       ${grade.map(g => `<td class="n"><input class="num" data-k="${key}.${i}.v.${g}" value="${esc((r.v || {})[g] ?? '')}" inputmode="decimal"></td>`).join('')}
-      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="${key}.${i}" title="Tirar linha">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 4 - linhas.length) }, () => `<tr class="so-print"><td></td>${grade.map(() => '<td></td>').join('')}</tr>`).join('')}</tbody></table>
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="${key}.${i}" title="Tirar linha">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 8 - linhas.length) }, () => `<tr class="so-print"><td></td>${grade.map(() => '<td></td>').join('')}</tr>`).join('')}</tbody></table>
     <button type="button" class="btn sm add-linha no-print" data-add="${key}">${ic('plus')}Linha</button></div>`;
 }
 
@@ -3264,30 +3264,32 @@ function folhaTecnicaHtml(E) {
     <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="tecnica.medidas.${i}" title="Tirar medida">${ic('x')}</button></td></tr>`;
   return `<div class="pg1">${tituloFolha(E, 'Ficha técnica do produto')}
   <div class="ft-grid">
-    ${fcCliente(E).replace('class="fc"', 'class="fc na-faixa"')}${fcPeca(E, 'OP', 'op', 'na-faixa')}${fcInput(E, 'Pedido', 'tecnica.pedido')}${fcInput(E, 'Código 2', 'tecnica.codigo2')}
-    ${fcPeca(E, 'Descrição', 'descricao', 'span2 na-faixa')}${fcInput(E, 'Coleção', 'tecnica.colecao')}${fcInput(E, 'Mod. aprovada', 'tecnica.mod_aprovada', 'type="date"')}
-    ${fcInput(E, 'Etiqueta', 'tecnica.etiqueta')}${fcInput(E, 'Compradora', 'tecnica.compradora')}${fcInput(E, 'Modelista', 'tecnica.modelista')}${fcInput(E, 'Lacre cliente', 'tecnica.lacre')}
-    <label class="fc"><span>Grade</span><input data-grade value="${esc(grade.join(', '))}" placeholder="PP, P, M, G, GG" autocomplete="off"></label>
+    ${fcCliente(E).replace('class="fc"', 'class="fc na-faixa"')}${fcPeca(E, 'OP', 'op', 'na-faixa')}${fcPeca(E, 'Descrição', 'descricao', 'span2 na-faixa')}
+    ${fcInput(E, 'Modelista', 'tecnica.modelista')}${fcInput(E, 'Responsável', 'tecnica.resp')}${fcInput(E, 'Compradora', 'tecnica.compradora')}
     <label class="fc"><span>Tamanho base</span><select data-k="tecnica.piloto">${opcoes(grade.map(g => [g, g]), piloto)}</select></label>
-    ${fcInput(E, 'Resp. Kabriolli', 'tecnica.resp', '', 'span2 p1')}${fcInput(E, 'Cor do produto', 'consumo.cor', '', 'span2 p1')}
+    ${fcInput(E, 'Coleção', 'tecnica.colecao')}${fcInput(E, 'Etiqueta', 'tecnica.etiqueta')}${fcInput(E, 'Lacre', 'tecnica.lacre')}
+    <label class="fc"><span>Grade</span><input data-grade value="${esc(grade.join(', '))}" placeholder="PP, P, M, G, GG" autocomplete="off"></label>
+    ${fcInput(E, 'Pedido', 'tecnica.pedido')}${fcInput(E, 'Código', 'tecnica.codigo2')}${fcInput(E, 'Cor', 'consumo.cor')}${fcInput(E, 'Mod. aprovada', 'tecnica.mod_aprovada', 'type="date"')}
   </div>
   <section class="fs fs-des">
     <div class="fs-h"><h3>Desenho técnico</h3><div class="r no-print"><button type="button" class="btn sm" data-escolher>${ic('image')}Escolher imagens</button></div></div>
     <div class="ft-des">
       <div class="des-imgs n${Math.min(des.length, 2)}">${des.length ? des.map(p => `<button type="button" class="th des-img" data-foto="${esc(p)}" data-fit="contain" data-lb="${esc(p)}" title="Ampliar">${ic('dress')}</button>`).join('')
         : `<button type="button" class="des-vazio" data-escolher>${ic('image')}<span>Escolha o desenho técnico<br><small>frente e costas · as imagens da peça já aparecem aqui</small></span></button>`}</div>
+      <div class="ft-lf">${fcInput(E, 'Linha', 'tecnica.linha')}${fcInput(E, 'Fio', 'tecnica.fio')}</div>
       <div class="ft-obs"><div class="fs-sub">Obs. de modelagem</div><textarea data-k="tecnica.obs_modelagem" rows="7" placeholder="1- Seguir tabela de medidas&#10;2- Atenção aos acabamentos e tolerâncias">${esc(t.obs_modelagem || '')}</textarea></div>
     </div>
   </section>
-  <section class="fs">
-    <div class="ft-caixas">${CAIXAS_FT.map(([k, l]) => { const cx = (t.caixas || {})[k] || {};
-      return `<div class="cx"><div class="cx-h">${l}</div>${slotHtml(`tecnica.caixas.${k}.img`, cx.img)}<textarea data-k="tecnica.caixas.${k}.txt" rows="3" placeholder="Instruções">${esc(cx.txt || '')}</textarea></div>`; }).join('')}</div>
+  <section class="fs fs-etq">
+    <div class="cx-letra no-print"><span>Letra das etiquetas no papel</span><select data-k="tecnica.etq_letra">${opcoes([['p', 'Pequena'], ['m', 'Média'], ['g', 'Grande']], t.etq_letra || 'm')}</select></div>
+    <div class="ft-caixas letra-${esc(t.etq_letra || 'm')}">${CAIXAS_FT.map(([k, l]) => { const cx = (t.caixas || {})[k] || {};
+      return `<div class="cx"><div class="cx-h">${l}</div><textarea data-k="tecnica.caixas.${k}.txt" rows="3" placeholder="Instruções">${esc(cx.txt || '')}</textarea>${slotHtml(`tecnica.caixas.${k}.img`, cx.img)}</div>`; }).join('')}</div>
   </section></div>
   <div class="pg2 quebra"><div class="so-papel">${tituloFolha(E, 'Tabela de medidas')}</div>
   <section class="fs ft-medidas">
     <div class="fs-h"><h3>Tabela de medidas</h3><div class="r small muted">em cm · tamanho base <b>${esc(piloto)}</b></div></div>
-    <div class="ft-bloco ft-b-cotas"><div class="fs-sub">Desenho das cotas</div>${slotHtml('tecnica.img_cotas', t.img_cotas, 'Desenho com as cotas', 'cotas', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
-    <div class="ft-bloco ft-b-tab"><div class="fs-sub">Medidas (foto da tabela)</div>${slotHtml('tecnica.img_tabela', t.img_tabela, 'Foto ou print da tabela de medidas', 'livre', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
+    <div class="ft-bloco ft-b-cotas"><div class="fs-sub no-print">Desenho das cotas</div>${slotHtml('tecnica.img_cotas', t.img_cotas, 'Desenho com as cotas', 'cotas', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
+    <div class="ft-bloco ft-b-tab"><div class="fs-sub">Tabela</div>${slotHtml('tecnica.img_tabela', t.img_tabela, 'Foto ou print da tabela de medidas', 'livre', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
     <div class="ft-bloco ft-b-dig"><div class="fs-sub">Medidas digitadas <span class="muted no-print" style="text-transform:none;letter-spacing:0;font-weight:500">· opcional, se preferir digitar em vez da foto</span></div></div>
     <div class="tbl-wrap"><table class="ft-tab ft-med"><thead><tr><th>Dim</th><th>Descrição</th><th>Descrição (inglês)</th><th>Tipo de cota</th><th>Crítica</th><th class="n">Tol −</th><th class="n">Tol +</th>${grade.map(g => `<th class="n${g === piloto ? ' pil' : ''}">${esc(g)}</th>`).join('')}<th class="no-print"></th></tr></thead>
       <tbody>${(t.medidas || []).map(linhaMed).join('')}</tbody></table></div>
@@ -3320,7 +3322,7 @@ function folhaConsumoHtml(E) {
       <td class="n pil"><input class="num" data-k="consumo.tecidos.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
       <td><input data-k="consumo.tecidos.${i}.composicao" value="${esc(r.composicao || '')}"></td>
       <td><input data-k="consumo.tecidos.${i}.cor" value="${esc(r.cor || '')}"></td>
-      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.tecidos.${i}" title="Tirar tecido">${ic('x')}</button></td></tr>`).join('')}</tbody></table></div>
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.tecidos.${i}" title="Tirar tecido">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - tec.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.tecidos">${ic('plus')}Adicionar tecido</button></div>
   </section>
   <section class="fs">
@@ -3333,7 +3335,7 @@ function folhaConsumoHtml(E) {
       <td><input data-k="consumo.aviamentos.${i}.un" value="${esc(r.un || '')}" list="dl-un" style="max-width:70px"></td>
       <td><input data-k="consumo.aviamentos.${i}.cor" value="${esc(r.cor || '')}"></td>
       <td class="n pil"><input class="num" data-k="consumo.aviamentos.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
-      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.aviamentos.${i}" title="Tirar aviamento">${ic('x')}</button></td></tr>`).join('')}</tbody></table></div>
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.aviamentos.${i}" title="Tirar aviamento">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - avi.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.aviamentos">${ic('plus')}Adicionar aviamento</button>
       <span class="small muted">Os aviamentos daqui aparecem como sugestão em “Consumos de aviamentos”, mais acima.</span></div>
   </section>
@@ -3348,7 +3350,7 @@ function folhaConsumoHtml(E) {
       <td><input data-k="consumo.etiquetas.${i}.un" value="${esc(r.un || '')}" list="dl-un" style="max-width:70px"></td>
       <td><input data-k="consumo.etiquetas.${i}.cor" value="${esc(r.cor || '')}"></td>
       <td class="n pil"><input class="num" data-k="consumo.etiquetas.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
-      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.etiquetas.${i}" title="Tirar etiqueta">${ic('x')}</button></td></tr>`).join('')}</tbody></table></div>
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.etiquetas.${i}" title="Tirar etiqueta">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - etq.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.etiquetas">${ic('plus')}Adicionar etiqueta</button></div>
   </section>
   <datalist id="dl-etq"><option value="Marca / tamanho"><option value="Composição"><option value="Tag cód. barras"><option value="Tag de preço"><option value="Pino / alarme"><option value="Lacre"><option value="Etiqueta interna"></datalist>
@@ -3413,7 +3415,7 @@ function ligarFolha(E) {
       const r = E.F.tecnica.medidas[i];
       if (poms && poms[cod] && !r.desc) { r.desc = poms[cod].toUpperCase(); const d = el.querySelector(`[data-k="tecnica.medidas.${i}.desc"]`); if (d) d.value = r.desc; agendarSalvar(E); }
     }
-    if (t.dataset.k === 'tecnica.piloto') desenharFolha(E);
+    if (t.dataset.k === 'tecnica.piloto' || t.dataset.k === 'tecnica.etq_letra') desenharFolha(E);
     if (t.dataset.grade !== undefined) {
       E.F.tecnica.grade = t.value.split(/[,/;\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
       agendarSalvar(E, 0); desenharFolha(E);
@@ -3547,7 +3549,7 @@ async function baixarFichaImagem(E, destino = 'baixar', idBtn = '#f-img') {
     await Promise.all($$('img', folha).map(i => (i.complete ? null : new Promise(r => { i.onload = i.onerror = r; }))));
     let cortes = [];
     const canvas = await window.html2canvas(folha, {
-      useCORS: true, scale: 2, backgroundColor: '#ffffff', logging: false, windowWidth: 1280,
+      useCORS: true, scale: ehIOS() ? 2.5 : 3, backgroundColor: '#ffffff', logging: false, windowWidth: 1280,
       onclone: doc => {
         doc.documentElement.classList.remove('ios');
         const st = doc.createElement('style'); st.textContent = cssImpressao(); doc.head.append(st);
@@ -3574,7 +3576,7 @@ async function baixarFichaImagem(E, destino = 'baixar', idBtn = '#f-img') {
       let w = 194, alt = h / canvas.width * 194;
       if (alt > 281) { w = w * 281 / alt; alt = 281; }
       if (i) pdf.addPage();
-      pdf.addImage(pg.toDataURL('image/jpeg', 0.92), 'JPEG', (210 - w) / 2, 8, w, alt);
+      pdf.addImage(pg.toDataURL('image/jpeg', 0.95), 'JPEG', (210 - w) / 2, 8, w, alt);
     });
     if (destino === 'baixar') pdf.save(`ficha-${nomeSeguro(E.pc.ref)}.pdf`);
     else destino.location.href = URL.createObjectURL(pdf.output('blob'));
