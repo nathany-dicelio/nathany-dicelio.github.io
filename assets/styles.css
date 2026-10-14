@@ -1257,3 +1257,58 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 }
 /* no papel, a última seção de cada folha também fecha o contorno embaixo */
 @media print { .folha .fs:last-of-type, .folha .pg2 > .ft-medidas { border-bottom: 2px solid #5E0A1C !important; } }
+
+/* ---------- ficha: Linha/Fio e letra das etiquetas (tela) ---------- */
+.ft-lf { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line-2); }
+.cx-letra { display: flex; align-items: center; gap: 10px; justify-content: flex-end; padding: 8px 14px 0; font-size: 12px; color: var(--mute); }
+.cx-letra select { width: auto; height: 30px; font-size: 12.5px; }
+
+/* ---------- impressão: modelo novo (pedido de 14/10) ---------- */
+@media print {
+  /* faixa: só REF + sigla | OP | descrição, e a atualização embaixo */
+  .folha .ft-logo, .folha .ft-nome small, .folha .ft-op small, .folha .ft-desc small { display: none !important; }
+  .folha .ft-titulo { padding: 7px 12px 14px !important; }
+  .folha .ft-nome b { font-size: 28pt !important; }
+  .folha .ft-op b { font-size: 22pt !important; }
+  .folha .ft-desc b { font-size: 14pt !important; }
+  /* dados em linha: "Modelista: Marina Soares" */
+  .folha .ft-grid .fc { flex-direction: row !important; align-items: baseline; flex-wrap: wrap; gap: 0 5px; padding: 4px 7px !important; }
+  .folha .ft-grid .fc > span { padding-left: 0; white-space: nowrap; }
+  .folha .ft-grid .fc > span::after { content: ':'; }
+  .folha .ft-grid .fc .pv { font-size: 10pt !important; padding: 0 !important; }
+  .folha .ft-grid .fc > span { font-size: 7.5pt !important; }
+  /* todas as tabelas com risquinhos entre colunas e linhas */
+  .folha .ft-tab th, .folha .ft-tab td { border: 1px solid #C9A9B0 !important; }
+  .folha .ft-tab tr.so-print td { height: 6mm; }
+
+  /* folha 1: espaços fixos (desenho, linha/fio, obs. em 2 colunas, etiquetas) */
+  .pg1 .ft-lf { display: grid !important; grid-template-columns: 1fr 1fr; flex: none; border-top: 1.5px solid #C9A9B0; }
+  .pg1 .ft-lf .fc { flex-direction: row !important; align-items: baseline; gap: 5px; padding: 4px 10px !important; border-bottom: 0 !important; }
+  .pg1 .ft-lf .fc > span::after { content: ':'; }
+  .pg1 .ft-lf .fc .pv { font-size: 11pt; padding: 0; }
+  .pg1 .ft-obs { flex: none !important; height: 58mm; display: flex; flex-direction: column; border-top: 1.5px solid #C9A9B0; }
+  .pg1 .ft-obs .pv { flex: 1 1 auto; min-height: 0 !important; overflow: hidden; column-count: 2; column-gap: 7mm; column-rule: 1.5px solid #C9A9B0; column-fill: auto; font-size: 9.5pt !important; line-height: 1.22 !important; }
+  .pg1 > .fs-etq { flex: none !important; height: 52mm; }
+  .pg1 .ft-caixas { height: 100%; }
+  .pg1 .cx { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .pg1 .cx .slot { flex: 1 1 auto; height: auto !important; min-height: 0; }
+  .pg1 .cx .pv { font-size: 8pt !important; line-height: 1.2; }
+  .pg1 .letra-p .cx .pv { font-size: 6.5pt !important; }
+  .pg1 .letra-g .cx .pv { font-size: 10pt !important; }
+
+  /* folha 2: espaços fixos para o desenho, a tabela e as tabelas de baixo */
+  .folha .pg2 .ft-bloco.ft-b-cotas, .folha .pg2 .ft-bloco.ft-b-tab { display: flex !important; flex-direction: column; min-height: 0; overflow: hidden; }
+  .folha .pg2 .ft-b-cotas { flex: 0 0 80mm !important; }
+  .folha .pg2 .ft-b-tab { flex: 0 0 88mm !important; border-top: 1.5px solid #C9A9B0; }
+  .folha .pg2 .ft-minis { flex: 1 1 auto !important; min-height: 0; overflow: hidden; margin-top: 0 !important; }
+  .folha .mini-tab .fs-sub { background: #F3DDE1 !important; color: #781026 !important; font-size: 11pt; font-weight: 800; padding: 4px 8px; border-radius: 4px; margin-bottom: 4px; }
+  .folha .mini-tab .pv { font-size: 9pt !important; font-weight: 700 !important; }
+  .folha .mini-tab th { font-size: 7.5pt !important; }
+  .folha .ft-med .pv { font-size: 9.5pt !important; }
+
+  /* folha 3: tecidos, aviamentos e etiquetas em blocos separados, do mesmo tamanho */
+  .folha .folha-consumo { height: var(--pg-h, 277mm); display: flex; flex-direction: column; overflow: hidden; }
+  .folha .folha-consumo > .ft-titulo, .folha .folha-consumo > .ft-grid { flex: none; }
+  .folha .folha-consumo > .fs { flex: 1 1 0; min-height: 0; overflow: hidden; margin-top: 4mm; border: 2px solid #5E0A1C !important; }
+  .folha .folha-consumo .ft-tab .pv { font-size: 10.5pt !important; }
+}
