@@ -1546,9 +1546,10 @@ function viewCatalogo() {
     $('#cli').innerHTML = `<button class="chip${!f.cli ? ' on' : ''}" data-cli="">Todos os clientes<span class="n">${porTipo.length}</span></button>`
       + clientesOrd().map(c => `<button class="chip${f.cli === c.id ? ' on' : ''}" data-cli="${c.id}" style="--c:${esc(c.cor)}"><i class="d"></i>${esc(c.nome)}<span class="n">${cont(c.id)}</span></button>`).join('');
     const porSala = base.filter(p => doCli(p) && doTipo(p));
-    const salas = salasLista().filter(x => porSala.some(p => p.sala === x) || x === f.sala);
-    $('#salas').innerHTML = salas.length || f.sala ? `<button class="chip${!f.sala ? ' on' : ''}" data-sala="">Todas as salas<span class="n">${porSala.length}</span></button>`
-      + salas.map(x => `<button class="chip${f.sala === x ? ' on' : ''}" data-sala="${esc(x)}">${esc(x)}<span class="n">${porSala.filter(p => p.sala === x).length}</span></button>`).join('') : '';
+    const salas = salasLista();
+    $('#salas').innerHTML = salas.length ? `<button class="chip${!f.sala ? ' on' : ''}" data-sala="">Todas as salas<span class="n">${porSala.length}</span></button>`
+      + salas.map(x => { const n = porSala.filter(p => p.sala === x).length;
+        return `<button class="chip${f.sala === x ? ' on' : ''}${n ? '' : ' sem-itens'}" data-sala="${esc(x)}">${esc(x)}<span class="n">${n}</span></button>`; }).join('') : '';
     let lista = base.filter(p => doCli(p) && doTipo(p) && doSala(p));
     if (!f.q.trim() || f.ord !== 'recentes') {
       if (f.ord === 'ref') lista.sort((a, b) => a.ref.localeCompare(b.ref, 'pt-BR', { numeric: true }));
@@ -3116,6 +3117,7 @@ function demoFluxos(pecas, pessoas) {
    FICHA TÉCNICA e FICHA DE CONSUMO (uma por peça, tudo editável)
    ================================================================ */
 const GRADE_PADRAO = ['PP', 'P', 'M', 'G', 'GG'];
+const LETRA_ETQ = 8; // pt, letra padrão das etiquetas no papel
 const CAIXAS_FT = [['marca', 'Etiqueta de marca / tamanho'], ['composicao', 'Etiqueta de composição'], ['tag', 'Tag cód. barras'], ['alarme', 'Pino / alarme']];
 const MODELOS_LINHA = {
   'tecnica.medidas': () => ({ dim: '', desc: '', desc_en: '', tipo: 'Primária', critica: 'Não', tmenos: '', tmais: '', v: {} }),
@@ -3288,9 +3290,10 @@ function folhaTecnicaHtml(E) {
     </div>
   </section>
   <section class="fs fs-etq">
-    <div class="cx-letra no-print"><span>Letra das etiquetas no papel</span><select data-k="tecnica.etq_letra">${opcoes([['p', 'Pequena'], ['m', 'Média'], ['g', 'Grande']], t.etq_letra || 'm')}</select></div>
-    <div class="ft-caixas letra-${esc(t.etq_letra || 'm')}">${CAIXAS_FT.map(([k, l]) => { const cx = (t.caixas || {})[k] || {};
-      return `<div class="cx"><div class="cx-h">${l}</div><textarea data-k="tecnica.caixas.${k}.txt" rows="3" placeholder="Instruções">${esc(cx.txt || '')}</textarea>${slotHtml(`tecnica.caixas.${k}.img`, cx.img)}</div>`; }).join('')}</div>
+    <div class="ft-caixas">${CAIXAS_FT.map(([k, l]) => { const cx = (t.caixas || {})[k] || {}, pt = cx.letra || LETRA_ETQ;
+      return `<div class="cx"><div class="cx-h">${l}</div>
+        <div class="cx-letra no-print" title="Tamanho da letra desta etiqueta no papel"><span>Letra</span><button type="button" class="icon-btn" data-letra="${k}|-0.5" aria-label="Diminuir a letra">A−</button><b>${pt}</b><button type="button" class="icon-btn" data-letra="${k}|0.5" aria-label="Aumentar a letra">A+</button></div>
+        <textarea data-k="tecnica.caixas.${k}.txt" data-letra="${pt}" style="font-size:${(pt * 1.333).toFixed(1)}px" rows="3" placeholder="Instruções">${esc(cx.txt || '')}</textarea>${slotHtml(`tecnica.caixas.${k}.img`, cx.img)}</div>`; }).join('')}</div>
   </section></div>
   <div class="pg2 quebra"><div class="so-papel">${tituloFolha(E, 'Tabela de medidas')}</div>
   <section class="fs ft-medidas">
@@ -3422,7 +3425,7 @@ function ligarFolha(E) {
       const r = E.F.tecnica.medidas[i];
       if (poms && poms[cod] && !r.desc) { r.desc = poms[cod].toUpperCase(); const d = el.querySelector(`[data-k="tecnica.medidas.${i}.desc"]`); if (d) d.value = r.desc; agendarSalvar(E); }
     }
-    if (t.dataset.k === 'tecnica.piloto' || t.dataset.k === 'tecnica.etq_letra') desenharFolha(E);
+    if (t.dataset.k === 'tecnica.piloto') desenharFolha(E);
     if (t.dataset.grade !== undefined) {
       E.F.tecnica.grade = t.value.split(/[,/;\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
       agendarSalvar(E, 0); desenharFolha(E);
@@ -3435,6 +3438,15 @@ function ligarFolha(E) {
     }
   });
   el.addEventListener('click', e => {
+    const lt = e.target.closest('button[data-letra]');
+    if (lt) {
+      const [k, d] = lt.dataset.letra.split('|'), key = `tecnica.caixas.${k}.letra`;
+      const novo = Math.min(14, Math.max(5, (getPath(E.F, key) || LETRA_ETQ) + Number(d)));
+      setPath(E.F, key, novo); agendarSalvar(E);
+      lt.parentElement.querySelector('b').textContent = novo;
+      const ta = lt.closest('.cx').querySelector('textarea'); ta.dataset.letra = novo; ta.style.fontSize = `${(novo * 1.333).toFixed(1)}px`; autoAltura(ta);
+      return;
+    }
     const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]'), lb = e.target.closest('[data-lb]');
     const sx = e.target.closest('[data-slot-x]'), esc0 = e.target.closest('[data-escolher]');
     if (add) {
@@ -3518,7 +3530,18 @@ function prepararImpressao() {
     if (el.type === 'date' && v) v = v.split('-').reverse().join('/');
     const t = document.createElement('div');
     t.className = 'pv'; t.textContent = v;
+    if (el.dataset.letra) t.style.fontSize = `${el.dataset.letra}pt`;
     el.after(t);
+  });
+  // cada dado de cima numa linha só: diminui a letra o quanto precisar para caber
+  // (a mesma letra em todos, no tamanho em que o mais comprido ainda cabe)
+  $$('.ft-grid', f).forEach(g => {
+    const cels = $$('.fc', g).filter(fc => !fc.classList.contains('na-faixa') && fc.querySelector('.pv')).map(fc => {
+      const lb = ((fc.querySelector(':scope > span') || {}).textContent || '').length + 1;
+      return { fc, k: Math.min(1, (fc.classList.contains('span2') && !fc.classList.contains('p1') ? 250 : 124) / (lb * 4.9 + fc.querySelector('.pv').textContent.length * 6.1)) };
+    });
+    const k = Math.max(0.68, Math.min(1, ...cels.map(c => c.k)));
+    cels.forEach(c => { c.fc.style.setProperty('--fit', k.toFixed(3)); c.fc.classList.toggle('fit-quebra', c.k < k - 0.001); });
   });
 }
 function limparImpressao() { $$('.folha .pv').forEach(x => x.remove()); }
