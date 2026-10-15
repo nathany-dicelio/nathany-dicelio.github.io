@@ -3146,7 +3146,7 @@ const TIPOS_MAT = {
   aviamento: { nome: 'Aviamento', plural: 'Aviamentos', rota: 'aviamentos', icone: 'tag',
     campos: [['codigo', 'Código'], ['nome', 'Material / insumo'], ['un', 'UN'], ['aplicacao', 'Aplicação'], ['fornecedor', 'Fornecedor']] },
   etiqueta: { nome: 'Etiqueta', plural: 'Etiquetas', rota: 'etiquetas', icone: 'tag',
-    campos: [['codigo', 'Código'], ['nome', 'Etiqueta'], ['tipo', 'Tipo'], ['un', 'UN'], ['aplicacao', 'Aplicação'], ['fornecedor', 'Fornecedor']] },
+    campos: [['cliente_id', 'Cliente / marca'], ['codigo', 'Código'], ['nome', 'Etiqueta'], ['tipo', 'Tipo'], ['un', 'UN'], ['aplicacao', 'Aplicação'], ['fornecedor', 'Fornecedor']] },
 };
 // na ficha de consumo: qual campo da linha corresponde a cada campo do material
 const MAT_FICHA = {
@@ -3171,18 +3171,30 @@ function viewMateriais(arg) {
   view().innerHTML = `<div class="card">
     <div class="chips chips-row mat-abas">${Object.entries(TIPOS_MAT).map(([k, t]) => `<a class="chip${k === tipo ? ' on' : ''}" href="#/materiais/${t.rota}">${t.plural}<span class="n">${matsDo(k).length}</span></a>`).join('')}</div>
     <div class="toolbar"><div class="busca">${ic('search')}<input class="inp" id="mq" placeholder="Buscar ${T.plural.toLowerCase()} por nome, código, fornecedor…" value="${esc(f.q)}"></div></div>
+    ${tipo === 'etiqueta' ? '<div class="chips chips-row" id="mcli"></div>' : ''}
     <div class="tbl-wrap" id="ml"></div>
   </div>`;
   const desenhar = () => {
     const q = norm(f.q);
-    const lista = matsDo(tipo).filter(m => !q || norm([m.codigo, m.nome, ...Object.values(m.dados || {}), ...(m.cores || []).map(c => c.nome)].join(' ')).includes(q))
-      .sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+    const nomeCli = m => ((cliente(valMat(m, 'cliente_id')) || {}).nome || '');
+    const busca = matsDo(tipo).filter(m => !q || norm([m.codigo, m.nome, nomeCli(m), ...Object.values(m.dados || {}), ...(m.cores || []).map(c => c.nome)].join(' ')).includes(q));
+    if (tipo === 'etiqueta') {
+      const n = id => busca.filter(m => (valMat(m, 'cliente_id') || '-') === id).length;
+      const cls = clientesOrd().filter(c => n(c.id) || f.cli === c.id);
+      $('#mcli').innerHTML = `<button class="chip${!f.cli ? ' on' : ''}" data-mcli="">Todas<span class="n">${busca.length}</span></button>`
+        + cls.map(c => `<button class="chip${f.cli === c.id ? ' on' : ''}" data-mcli="${c.id}" style="--c:${esc(c.cor)}"><i class="d"></i>${esc(c.sigla || c.nome)}<span class="n">${n(c.id)}</span></button>`).join('')
+        + (n('-') || f.cli === '-' ? `<button class="chip${f.cli === '-' ? ' on' : ''}" data-mcli="-">Sem cliente<span class="n">${n('-')}</span></button>` : '')
+        + (cls.length ? '' : '<span class="small muted" style="align-self:center">Coloque o cliente em cada etiqueta para separar por marca.</span>');
+    }
+    const lista = busca.filter(m => tipo !== 'etiqueta' || !f.cli || (valMat(m, 'cliente_id') || '-') === f.cli)
+      .sort((a, b) => nomeCli(a).localeCompare(nomeCli(b), 'pt-BR') || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
     $('#ml').innerHTML = lista.length ? `<table class="tbl mat-tbl"><thead><tr>${T.campos.map(([, l]) => `<th>${l}</th>`).join('')}<th>Cores disponíveis</th></tr></thead>
-      <tbody>${lista.map(m => `<tr data-mat="${m.id}">${T.campos.map(([k, l]) => `<td data-l="${l}"${k === 'nome' ? ' class="mat-nome"' : ''}>${esc(valMat(m, k)) || '<span class="muted">—</span>'}</td>`).join('')}
+      <tbody>${lista.map(m => `<tr data-mat="${m.id}">${T.campos.map(([k, l]) => `<td data-l="${l}"${k === 'nome' ? ' class="mat-nome"' : ''}>${k === 'cliente_id' ? (cbadge(valMat(m, k)) || '<span class="muted">—</span>') : (esc(valMat(m, k)) || '<span class="muted">—</span>')}</td>`).join('')}
         <td data-l="Cores"><div class="cores">${(m.cores || []).map(c => `<span class="cor-it">${corSw(c)}${esc(c.nome)}</span>`).join('') || '<span class="muted">—</span>'}</div></td></tr>`).join('')}</tbody></table>`
       : vazio(T.icone, matsDo(tipo).length ? 'Nada encontrado' : `Nenhum ${T.nome.toLowerCase()} cadastrado ainda`, '', `<button class="btn primary" data-mat-novo>${ic('plus')}Novo ${T.nome.toLowerCase()}</button>`);
   };
   $('#mq').addEventListener('input', e => { f.q = e.target.value; desenhar(); });
+  const mc = $('#mcli'); if (mc) mc.addEventListener('click', e => { const b = e.target.closest('[data-mcli]'); if (b) { f.cli = b.dataset.mcli; desenhar(); } });
   $('#mat-novo').onclick = () => formMaterial(tipo);
   $('#ml').addEventListener('click', e => {
     if (e.target.closest('[data-mat-novo]')) return formMaterial(tipo);
@@ -3197,7 +3209,9 @@ function formMaterial(tipo, m = null) {
   modal({
     titulo: m ? `${T.nome}: ${m.nome}` : `Novo ${T.nome.toLowerCase()}`, tamanho: 'lg',
     corpo: `<form class="form" id="fmat" autocomplete="off" novalidate>
-      <div class="grid3">${T.campos.map(([k, l]) => `<label class="fld${k === 'nome' ? ' span2' : ''}"><span>${l}${k === 'nome' ? ' *' : ''}</span><input name="${k}" value="${esc(m ? valMat(m, k) : '')}"${k === 'nome' ? ' autofocus' : ''}${k === 'un' ? ' list="dl-un-mat"' : ''}></label>`).join('')}</div>
+      <div class="grid3">${T.campos.map(([k, l]) => (k === 'cliente_id'
+        ? `<label class="fld"><span>${l}</span><select name="cliente_id">${opClientes(m ? valMat(m, 'cliente_id') : (S.f.mat && S.f.mat.cli && S.f.mat.cli !== '-' ? S.f.mat.cli : ''), '—')}</select></label>`
+        : `<label class="fld${k === 'nome' ? ' span2' : ''}"><span>${l}${k === 'nome' ? ' *' : ''}</span><input name="${k}" value="${esc(m ? valMat(m, k) : '')}"${k === 'nome' ? ' autofocus' : ''}${k === 'un' ? ' list="dl-un-mat"' : ''}></label>`)).join('')}</div>
       <label class="fld"><span>Observação</span><input name="obs" value="${esc(m ? valMat(m, 'obs') : '')}"></label>
       <div class="fld"><span class="lbl">Cores disponíveis <span class="hint">· aparecem como opção de cor na ficha</span></span><div class="cores-ed" id="cores"></div>
         <div class="cores-sug">${CORES_SUGERIDAS.map(([n, h]) => `<button type="button" class="chip" data-sug="${esc(n)}|${h}">${corSw({ hex: h })}${n}</button>`).join('')}</div></div>
@@ -3249,9 +3263,9 @@ function formMaterial(tipo, m = null) {
 }
 
 /* ficha de consumo: sugestões do cadastro e preenchimento automático */
-function datalistsMateriais() {
+function datalistsMateriais(cliId) {
   return Object.entries(MAT_FICHA).map(([, cfg]) => {
-    const l = matsDo(cfg.tipo);
+    const l = matsDo(cfg.tipo).filter(m => cfg.tipo !== 'etiqueta' || !cliId || !valMat(m, 'cliente_id') || valMat(m, 'cliente_id') === cliId);
     return `<datalist id="dl-mt-${cfg.tipo}-c">${l.filter(m => m.codigo).map(m => `<option value="${esc(m.codigo)}">${esc(m.nome)}</option>`).join('')}</datalist>
       <datalist id="dl-mt-${cfg.tipo}-n">${l.map(m => `<option value="${esc(m.nome)}">${esc([m.codigo, valMat(m, 'largura'), valMat(m, 'un')].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>`;
   }).join('');
@@ -3663,7 +3677,7 @@ function folhaConsumoHtml(E) {
       <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.etiquetas.${i}" title="Tirar etiqueta">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - etq.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.etiquetas">${ic('plus')}Adicionar etiqueta</button></div>
   </section>
-  ${datalistsMateriais()}${['tecidos', 'aviamentos', 'etiquetas'].map(l => (k[l] || []).map((r, i) => dlCoresLinha(l, i, r)).join('')).join('')}
+  ${datalistsMateriais(E.pc.cliente_id)}${['tecidos', 'aviamentos', 'etiquetas'].map(l => (k[l] || []).map((r, i) => dlCoresLinha(l, i, r)).join('')).join('')}
   <datalist id="dl-etq"><option value="Marca / tamanho"><option value="Composição"><option value="Tag cód. barras"><option value="Tag de preço"><option value="Pino / alarme"><option value="Lacre"><option value="Etiqueta interna"></datalist>
   <datalist id="dl-un"><option value="MT"><option value="UN"><option value="KG"><option value="CM"><option value="PC"></datalist>`;
 }
