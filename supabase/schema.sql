@@ -289,3 +289,6 @@ grant select, insert, update, delete on public.fluxos to authenticated;
 
 -- Modelista do mini consumo (adicionado em 2026-10-09)
 alter table public.pedidos add column if not exists modelista_id uuid references public.pessoas(id) on delete set null;
+
+-- Atestado / comprovante no ponto (adicionado em 2026-10-15): fotos ou PDFs em ponto/<dia>/
+alter table public.ponto add column if not exists arquivos jsonb not null default '[]'::jsonb;
