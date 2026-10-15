@@ -3161,6 +3161,7 @@ function acharMaterial(tipo, codigo, nome) {
   const c = norm(codigo), n = norm(nome), l = matsDo(tipo);
   return (c && l.find(m => norm(m.codigo) === c)) || (n && l.find(m => norm(m.nome) === n)) || null;
 }
+const fotosMat = m => (valMat(m, 'fotos') || []).filter(p => !ehPdf(p));
 const corSw = c => `<span class="cor-sw" style="--c:${esc(c.hex || '#ccc')}" title="${esc(c.nome || '')}"></span>`;
 
 function viewMateriais(arg) {
@@ -3177,7 +3178,7 @@ function viewMateriais(arg) {
   const desenhar = () => {
     const q = norm(f.q);
     const nomeCli = m => ((cliente(valMat(m, 'cliente_id')) || {}).nome || '');
-    const busca = matsDo(tipo).filter(m => !q || norm([m.codigo, m.nome, nomeCli(m), ...Object.values(m.dados || {}), ...(m.cores || []).map(c => c.nome)].join(' ')).includes(q));
+    const busca = matsDo(tipo).filter(m => !q || norm([m.codigo, m.nome, nomeCli(m), ...Object.entries(m.dados || {}).filter(([k]) => k !== 'fotos').map(([, v]) => v), ...(m.cores || []).map(c => c.nome)].join(' ')).includes(q));
     if (tipo === 'etiqueta') {
       const n = id => busca.filter(m => (valMat(m, 'cliente_id') || '-') === id).length;
       const cls = clientesOrd().filter(c => n(c.id) || f.cli === c.id);
@@ -3188,16 +3189,21 @@ function viewMateriais(arg) {
     }
     const lista = busca.filter(m => tipo !== 'etiqueta' || !f.cli || (valMat(m, 'cliente_id') || '-') === f.cli)
       .sort((a, b) => nomeCli(a).localeCompare(nomeCli(b), 'pt-BR') || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
-    $('#ml').innerHTML = lista.length ? `<table class="tbl mat-tbl"><thead><tr>${T.campos.map(([, l]) => `<th>${l}</th>`).join('')}<th>Cores disponíveis</th></tr></thead>
-      <tbody>${lista.map(m => `<tr data-mat="${m.id}">${T.campos.map(([k, l]) => `<td data-l="${l}"${k === 'nome' ? ' class="mat-nome"' : ''}>${k === 'cliente_id' ? (cbadge(valMat(m, k)) || '<span class="muted">—</span>') : (esc(valMat(m, k)) || '<span class="muted">—</span>')}</td>`).join('')}
+    $('#ml').innerHTML = lista.length ? `<table class="tbl mat-tbl"><thead><tr><th class="mat-ft"></th>${T.campos.map(([, l]) => `<th>${l}</th>`).join('')}<th>Cores disponíveis</th></tr></thead>
+      <tbody>${lista.map(m => `<tr data-mat="${m.id}"><td class="mat-ft">${fotosMat(m).length
+        ? `<button type="button" class="th" data-mat-fotos="${m.id}" data-foto="${esc(fotosMat(m)[0])}" title="Ver fotos">${ic('image')}${fotosMat(m).length > 1 ? `<span class="nf">${fotosMat(m).length}</span>` : ''}</button>`
+        : `<div class="th vazio-ft">${ic('image')}</div>`}</td>${T.campos.map(([k, l]) => `<td data-l="${l}"${k === 'nome' ? ' class="mat-nome"' : ''}>${k === 'cliente_id' ? (cbadge(valMat(m, k)) || '<span class="muted">—</span>') : (esc(valMat(m, k)) || '<span class="muted">—</span>')}</td>`).join('')}
         <td data-l="Cores"><div class="cores">${(m.cores || []).map(c => `<span class="cor-it">${corSw(c)}${esc(c.nome)}</span>`).join('') || '<span class="muted">—</span>'}</div></td></tr>`).join('')}</tbody></table>`
       : vazio(T.icone, matsDo(tipo).length ? 'Nada encontrado' : `Nenhum ${T.nome.toLowerCase()} cadastrado ainda`, '', `<button class="btn primary" data-mat-novo>${ic('plus')}Novo ${T.nome.toLowerCase()}</button>`);
+    hidratarFotos($('#ml'));
   };
   $('#mq').addEventListener('input', e => { f.q = e.target.value; desenhar(); });
   const mc = $('#mcli'); if (mc) mc.addEventListener('click', e => { const b = e.target.closest('[data-mcli]'); if (b) { f.cli = b.dataset.mcli; desenhar(); } });
   $('#mat-novo').onclick = () => formMaterial(tipo);
   $('#ml').addEventListener('click', e => {
     if (e.target.closest('[data-mat-novo]')) return formMaterial(tipo);
+    const fb = e.target.closest('[data-mat-fotos]');
+    if (fb) { const mm = byId('materiais', fb.dataset.matFotos); return lightbox(fotosMat(mm)); }
     const tr = e.target.closest('[data-mat]'); if (tr) formMaterial(tipo, byId('materiais', tr.dataset.mat));
   });
   desenhar();
@@ -3213,12 +3219,14 @@ function formMaterial(tipo, m = null) {
         ? `<label class="fld"><span>${l}</span><select name="cliente_id">${opClientes(m ? valMat(m, 'cliente_id') : (S.f.mat && S.f.mat.cli && S.f.mat.cli !== '-' ? S.f.mat.cli : ''), '—')}</select></label>`
         : `<label class="fld${k === 'nome' ? ' span2' : ''}"><span>${l}${k === 'nome' ? ' *' : ''}</span><input name="${k}" value="${esc(m ? valMat(m, k) : '')}"${k === 'nome' ? ' autofocus' : ''}${k === 'un' ? ' list="dl-un-mat"' : ''}></label>`)).join('')}</div>
       <label class="fld"><span>Observação</span><input name="obs" value="${esc(m ? valMat(m, 'obs') : '')}"></label>
+      <div class="fld"><span class="lbl">Fotos <span class="hint">· ${tipo === 'tecido' ? 'da estampa / do tecido, ajuda a achar na hora de procurar' : `da ${T.nome.toLowerCase()}`}</span></span><div class="fotos-edit" id="mat-fotos"></div></div>
       <div class="fld"><span class="lbl">Cores disponíveis <span class="hint">· aparecem como opção de cor na ficha</span></span><div class="cores-ed" id="cores"></div>
         <div class="cores-sug">${CORES_SUGERIDAS.map(([n, h]) => `<button type="button" class="chip" data-sug="${esc(n)}|${h}">${corSw({ hex: h })}${n}</button>`).join('')}</div></div>
       <datalist id="dl-un-mat"><option value="MT"><option value="UN"><option value="KG"><option value="CM"><option value="PC"></datalist>
     </form>`,
     rodape: `${m ? `<button type="button" class="btn danger esq" id="mat-del">${ic('trash')}Excluir</button>` : ''}<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fmat" class="btn primary">Salvar</button>`,
     aoAbrir: md => {
+      const edFotos = editorFotos(md.$('#mat-fotos'), (m && valMat(m, 'fotos')) || []);
       const box = md.$('#cores');
       const desenhaCores = () => {
         box.innerHTML = cores.map((c, i) => `<div class="cor-ed"><input type="color" data-ci="${i}" value="${esc(c.hex || '#cccccc')}"><input class="inp" data-cn="${i}" value="${esc(c.nome || '')}" placeholder="Nome da cor (ex.: 100 - Branco)"><button type="button" class="icon-btn danger" data-cx="${i}" title="Tirar cor">${ic('x')}</button></div>`).join('')
@@ -3248,15 +3256,24 @@ function formMaterial(tipo, m = null) {
         const obs = String(fd.get('obs') || '').trim(); if (obs) dados.obs = obs;
         const btn = md.$('.btn.primary'); ocupado(btn, true);
         try {
-          await salvarReg('materiais', { tipo, codigo: String(fd.get('codigo') || '').trim() || null, nome, dados,
-            cores: cores.filter(c => (c.nome || '').trim()).map(c => ({ nome: c.nome.trim(), hex: c.hex })) }, m && m.id);
+          const rem = edFotos.removidas();
+          dados.fotos = ((m && valMat(m, 'fotos')) || []).filter(p => !rem.includes(p));
+          const row = { tipo, codigo: String(fd.get('codigo') || '').trim() || null, nome, dados,
+            cores: cores.filter(c => (c.nome || '').trim()).map(c => ({ nome: c.nome.trim(), hex: c.hex })) };
+          let salvo = await salvarReg('materiais', row, m && m.id);
+          const novas = edFotos.novas();
+          if (novas.length) {
+            const paths = await enviarFotos(salvo.id, novas, 'materiais');
+            salvo = await salvarReg('materiais', { dados: { ...dados, fotos: dados.fotos.concat(paths) } }, salvo.id);
+          }
+          if (rem.length) S.api.removerArquivos(rem).catch(() => {});
           md.fechar(); toast(`${T.nome} salvo.`); rerender();
         } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); }
       });
       const del = md.$('#mat-del');
       if (del) del.onclick = async () => {
         if (!await confirmar(`Excluir <b>${esc(m.nome)}</b> do cadastro? As fichas que já usam esse material continuam iguais.`)) return;
-        try { await excluirReg('materiais', m.id); md.fechar(); toast('Excluído.'); rerender(); } catch (err) { toast(msgErro(err), 'erro'); }
+        try { await excluirReg('materiais', m.id); const fs = valMat(m, 'fotos') || []; if (fs.length) S.api.removerArquivos(fs).catch(() => {}); md.fechar(); toast('Excluído.'); rerender(); } catch (err) { toast(msgErro(err), 'erro'); }
       };
     },
   });
