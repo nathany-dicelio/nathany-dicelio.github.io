@@ -581,18 +581,18 @@ async function abrirArquivo(path, pagina) {
   try { let u = await S.api.urlArquivo(path); if (pagina) u += `#page=${pagina}`; if (w) w.location = u; else location.href = u; }
   catch (e) { if (w) w.close(); toast(msgErro(e), 'erro'); }
 }
-async function enviarFotos(pecaId, files) {
+async function enviarFotos(pecaId, files, pasta = 'pecas') {
   const paths = [];
   for (const f of files) {
     if (ehPdfArq(f)) {
       if (f.size > 15 * 1048576) throw new Error(`O PDF ${f.name} passa de 15 MB.`);
-      const path = `pecas/${pecaId}/${uid()}-${nomeSeguro(f.name).replace(/\.pdf$/, '')}.pdf`;
+      const path = `${pasta}/${pecaId}/${uid()}-${nomeSeguro(f.name).replace(/\.pdf$/, '')}.pdf`;
       await S.api.enviar(path, f.type ? f : new Blob([f], { type: 'application/pdf' }));
       paths.push(path);
       continue;
     }
     const b = await comprimir(f, 2600, 0.9);
-    const path = `pecas/${pecaId}/${uid()}.${extDe(b, f.name)}`;
+    const path = `${pasta}/${pecaId}/${uid()}.${extDe(b, f.name)}`;
     await S.api.enviar(path, b);
     paths.push(path);
   }
@@ -929,6 +929,11 @@ document.addEventListener('keydown', e => {
 async function acoesGlobais(e) {
   const bat = e.target.closest('[data-bater]');
   if (bat) return baterPonto(bat.dataset.bater, bat);
+  const ad = e.target.closest('[data-arqs-dia]');
+  if (ad) {
+    const r = regPonto(ad.dataset.arqsDia) || {}, todos = r.arquivos || [], fotos = todos.filter(p => !ehPdf(p));
+    return fotos.length ? lightbox(fotos) : todos[0] && abrirArquivo(todos[0]);
+  }
   const pd = e.target.closest('[data-dia]');
   if (pd) return formPonto(pd.dataset.dia);
   const novo = e.target.closest('[data-novo]');
@@ -1071,6 +1076,10 @@ function viewInicio() {
               <div class="stk">${x.d + x.c ? `<div class="seg d" style="height:${x.d / maxMes * 100}%"></div><div class="seg c" style="height:${x.c / maxMes * 100}%"></div>` : '<div class="seg z"></div>'}</div>
               <div class="m">${x.m}</div></div>`).join('')}</div></div>
         </div>
+        <div class="card">
+          <div class="card-h"><h3>Peças recentes</h3><div class="r"><a class="link-btn" href="#/catalogo">Catálogo</a></div></div>
+          <div class="card-b">${recentes.length ? `<div class="strip">${recentes.map(pc => `<a href="#/peca/${pc.id}">${thumb(capa(pc))}${esc(pc.ref)}</a>`).join('')}</div>` : vazio('dress', 'Nenhuma peça ainda')}</div>
+        </div>
       </div>
       <div>
         <div class="card hoje compacto">${htmlHoje()}<a class="hoje-pe" href="#/ponto">${ic('clock')}<span>Banco de horas <b class="${classeSaldo(resumoPonto().banco)}">${fmtSaldo(resumoPonto().banco)}</b></span><span class="link-btn">Meu ponto ${ic('chevR')}</span></a></div>
@@ -1090,10 +1099,6 @@ function viewInicio() {
             return `<a class="it" href="#/fazer"><div class="datebox ${st.cor === 'red' ? 'red' : st.cor === 'amber' ? 'amber' : ''}">${t.prazo ? `<b>${new Date(t.prazo).getDate()}</b><small>${MESES[new Date(t.prazo).getMonth()]}</small>` : '<b>—</b><small>prazo</small>'}</div>
               <div class="t"><b>${esc(t.tarefa)}</b><small>${st.texto}${t.por_id ? ' · por ' + esc((pessoa(t.por_id) || {}).nome || '') : ''}</small></div></a>`;
           }).join('') : vazio('list', 'Nenhuma tarefa aberta')}</div></div>
-        </div>
-        <div class="card">
-          <div class="card-h"><h3>Peças recentes</h3><div class="r"><a class="link-btn" href="#/catalogo">Catálogo</a></div></div>
-          <div class="card-b">${recentes.length ? `<div class="strip">${recentes.map(pc => `<a href="#/peca/${pc.id}">${thumb(capa(pc))}${esc(pc.ref)}</a>`).join('')}</div>` : vazio('dress', 'Nenhuma peça ainda')}</div>
         </div>
       </div>
     </div>`;
@@ -2492,13 +2497,14 @@ function viewPonto() {
   }));
 }
 
+const clipePonto = (dia, r) => ((r && (r.arquivos || []).length) ? `<button type="button" class="clipe" data-arqs-dia="${dia}" title="Ver atestado / comprovante">${ic('file')}${r.arquivos.length > 1 ? r.arquivos.length : ''}</button>` : '');
 function linhaPonto(dia, r, c, hoje) {
   const d = dataDe(dia);
   const dataTd = `<td class="c-ref" data-l="Data"><div class="when"><b>${pad(d.getDate())}/${pad(d.getMonth() + 1)}</b><small>${DIAS_CURTO[c.dow]}${dia === hoje ? ' · hoje' : ''}</small></div></td>`;
   const acts = `<td class="c-acts"><div class="acts"><button class="icon-btn" data-dia="${dia}" title="Editar">${ic('edit')}</button></div></td>`;
   const especial = r && r.tipo !== 'normal' ? TIPOS_DIA[r.tipo] : (!r && c.fer) ? 'Feriado' : null;
   if (especial) {
-    return `<tr class="esp">${dataTd}<td colspan="6" class="full"><div class="esp-in"><span class="tag sem roxo">${esc(especial)}</span>${c.fer ? `<span>${esc(c.fer)}</span>` : ''}${r && r.obs ? `<span>${esc(r.obs)}</span>` : ''}${c.saldo ? saldoChip(c.saldo) : ''}</div></td>${acts}</tr>`;
+    return `<tr class="esp">${dataTd}<td colspan="6" class="full"><div class="esp-in"><span class="tag sem roxo">${esc(especial)}</span>${c.fer ? `<span>${esc(c.fer)}</span>` : ''}${r && r.obs ? `<span>${esc(r.obs)}</span>` : ''}${clipePonto(dia, r)}${c.saldo ? saldoChip(c.saldo) : ''}</div></td>${acts}</tr>`;
   }
   if (!r) return `<tr class="vaz">${dataTd}<td colspan="6" class="full"><span class="muted small">Sem registro</span> <button class="link-btn" data-dia="${dia}">Registrar</button></td>${acts}</tr>`;
   const P = k => c.partes.find(p => p.k === k);
@@ -2510,7 +2516,7 @@ function linhaPonto(dia, r, c, hoje) {
     <td data-l="Volta" class="hr ${cls(P('almoco'))}">${esc(r.volta || '—')}</td>
     <td data-l="Saída" class="hr ${cls(P('saida'))}">${esc(r.saida || '—')}</td>
     <td data-l="Saldo">${saldoChip(c.saldo)}</td>
-    <td class="full" data-l="Observações"><div class="explica">${expl ? esc(capital(expl)) : '<span class="muted">Tudo no horário</span>'}${r.obs ? `<div class="obs">${ic('note')}${esc(r.obs)}</div>` : ''}</div></td>
+    <td class="full" data-l="Observações"><div class="explica">${expl ? esc(capital(expl)) : '<span class="muted">Tudo no horário</span>'}${r.obs ? `<div class="obs">${ic('note')}${esc(r.obs)}</div>` : ''}${clipePonto(dia, r)}</div></td>
     ${acts}</tr>`;
 }
 function linhaFechamento(x, cfg) {
@@ -2529,11 +2535,13 @@ function formPonto(dia) {
         <label class="fld"><span>Ajuste manual (minutos)</span><input type="number" name="ajuste" step="1" value="${+r.ajuste_min || 0}"><span class="hint">Positivo soma ao banco, negativo desconta.</span></label>
         <label class="fld"><span>Observação</span><input name="obs" value="${esc(r.obs || '')}" placeholder="Ex.: saída mais cedo (aniversário)"></label>
       </div>
+      <div class="fld"><span class="lbl">Atestado / comprovante <span class="hint">· foto ou PDF</span></span><div class="fotos-edit" id="pt-arqs"></div></div>
       <div id="prev"></div>
     </form>`,
     rodape: `${r.id ? `<button type="button" class="btn danger esq" id="del-pt">${ic('trash')}Apagar dia</button>` : ''}<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fpt" class="btn primary">Salvar</button>`,
     aoAbrir: m => {
       const form = m.$('#fpt');
+      const arqs = editorFotos(m.$('#pt-arqs'), r.arquivos || []);
       const ler = () => {
         const fd = new FormData(form);
         return {
@@ -2555,18 +2563,21 @@ function formPonto(dia) {
       form.addEventListener('submit', async e => {
         e.preventDefault();
         const x = ler();
-        const vazio = x.tipo === 'normal' && !x.entrada && !x.almoco && !x.volta && !x.saida && !x.ajuste_min && !x.obs;
         const btn = m.$('.btn.primary'); ocupado(btn, true);
         try {
+          const novos = await enviarFotos(dia, arqs.novas(), 'ponto'), rem = arqs.removidas();
+          x.arquivos = (r.arquivos || []).filter(p => !rem.includes(p)).concat(novos);
+          const vazio = x.tipo === 'normal' && !x.entrada && !x.almoco && !x.volta && !x.saida && !x.ajuste_min && !x.obs && !x.arquivos.length;
           if (vazio) { if (r.id) await excluirReg('ponto', r.id); }
           else await salvarReg('ponto', x, r.id);
+          if (rem.length) S.api.removerArquivos(rem).catch(() => {});
           m.fechar(); toast('Ponto salvo.'); rerender();
         } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); }
       });
       const del = m.$('#del-pt');
       if (del) del.onclick = async () => {
         if (!await confirmar(`Apagar o ponto de ${fDiaStr(dia)}?`)) return;
-        try { await excluirReg('ponto', r.id); m.fechar(); toast('Dia apagado.'); rerender(); } catch (err) { toast(msgErro(err), 'erro'); }
+        try { await excluirReg('ponto', r.id); if ((r.arquivos || []).length) S.api.removerArquivos(r.arquivos).catch(() => {}); m.fechar(); toast('Dia apagado.'); rerender(); } catch (err) { toast(msgErro(err), 'erro'); }
       };
     },
   });
