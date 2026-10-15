@@ -292,3 +292,26 @@ alter table public.pedidos add column if not exists modelista_id uuid references
 
 -- Atestado / comprovante no ponto (adicionado em 2026-10-15): fotos ou PDFs em ponto/<dia>/
 alter table public.ponto add column if not exists arquivos jsonb not null default '[]'::jsonb;
+
+-- =====================================================================
+-- MATERIAIS (adicionado em 2026-10-15): tecidos, aviamentos e etiquetas
+-- dados = { gramatura, largura, composicao, fornecedor, marca, un, aplicacao, tipo, obs }
+-- cores = [{ nome, hex }]  (cores disponíveis)
+-- =====================================================================
+create table if not exists public.materiais (
+  id            uuid primary key default gen_random_uuid(),
+  tipo          text not null check (tipo in ('tecido','aviamento','etiqueta')),
+  codigo        text,
+  nome          text not null,
+  dados         jsonb not null default '{}'::jsonb,
+  cores         jsonb not null default '[]'::jsonb,
+  criado_em     timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+drop trigger if exists t_materiais_upd on public.materiais;
+create trigger t_materiais_upd before update on public.materiais for each row execute function public.tocar_atualizado();
+alter table public.materiais enable row level security;
+drop policy if exists "logado" on public.materiais;
+create policy "logado" on public.materiais for all to authenticated using (true) with check (true);
+revoke all on public.materiais from anon;
+grant select, insert, update, delete on public.materiais to authenticated;

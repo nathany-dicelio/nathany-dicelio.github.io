@@ -11,6 +11,8 @@ Site estático (HTML + CSS + JavaScript puro) com banco **Supabase**, no mesmo e
 | Meu ponto | Bater entrada, almoço, volta e saída; atraso/adiantamento de cada dia, banco de horas, período de assinatura (16 a 15), feriados automáticos, planilha do mês |
 | Desenho | Pedidos de desenho com checklist (Desenho, Conferido, Sisplan, ISA) e a Tabela depois de finalizado |
 | Mini consumo | Pedidos de consumo com checklist (Consumo, Sisplan, Foto, ISA) e a sala da peça (Farm, Blue Steel, Plus size…) |
+| Produto | Página de cada referência: fotos e PDFs, REF grande, status, responsável, modelista, piloteira, OP, informações (marca, sala, preço, peça piloto, datas, quantidade, grade…) e os tecidos, aviamentos e etiquetas |
+| Materiais | Cadastro de tecidos, aviamentos e etiquetas (código, gramatura, largura, composição, fornecedor, cores disponíveis); na ficha de consumo, escolher o material preenche a linha |
 | Ficha técnica | Pesquisa a peça e abre a ficha técnica + ficha de consumo (no final), tudo editável. Impressão em 3 folhas A4: 1) dados, desenho, obs. e etiquetas; 2) desenho das cotas, foto da tabela de medidas, acabamento e aviamentos; 3) ficha de consumo |
 | Fazer | Tarefas: quem pediu, prazo e entrega (data/hora e para quem) |
 | Etapas | Caminho de cada modelo (Criação → Corte produção PCP) em linha do tempo ou quadro; cada etapa tem status (a fazer, feito, pular, revisão), arquivos, pendências, responsável e prazo, com atalhos para a peça, desenho, mini consumo e fichas |
@@ -47,7 +49,7 @@ supabase/schema.sql      tabelas, regras de acesso (RLS) e bucket de fotos
 ## Supabase
 
 - Organização **Nathany Di Celio** → projeto **nathany-atelie** (região São Paulo).
-- Tabelas: `pessoas`, `clientes`, `pecas`, `pedidos` (desenho/consumo), `tarefas`, `medidas`, `ponto`, `ponto_fechamentos`, `config`, `guia_manuais`, `guia_pontos`, `fichas`, `fluxos` (etapas).
+- Tabelas: `pessoas`, `clientes`, `pecas`, `pedidos` (desenho/consumo), `tarefas`, `medidas`, `ponto`, `ponto_fechamentos`, `config`, `guia_manuais`, `guia_pontos`, `fichas`, `fluxos` (etapas), `materiais`.
 - Fotos e arquivos no bucket privado `arquivos` (só quem está logado vê).
 - Só usuários logados acessam os dados (RLS).
 
