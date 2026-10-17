@@ -14,6 +14,9 @@ const ETAPAS = {
 };
 // etapas feitas depois do finalizado: não mudam o "Finalizado"
 const POS_ETAPAS = { desenho: [['tabela', 'Tabela']], consumo: [] };
+// avisos do mini consumo (marcados embaixo da observação)
+const AVISOS_CONSUMO = [['sem_tecido', 'Sem tecido'], ['tecido_sisplan', 'Tecido não cadastrado no Sisplan'], ['entretela_sisplan', 'Entretela não cadastrada no Sisplan'], ['esperando_largura', 'Esperando largura do tecido']];
+const avisosDe = p => ((p.etapas || {})._avisos || []).map(k => (AVISOS_CONSUMO.find(([x]) => x === k) || [])[1]).filter(Boolean);
 const TIPO = {
   desenho: { nome: 'Desenho', plural: 'Desenhos', rota: 'desenhos', novo: 'Novo desenho', icone: 'pen' },
   consumo: { nome: 'Consumo', plural: 'Consumos', rota: 'consumos', novo: 'Novo consumo', icone: 'scissors' },
@@ -1046,7 +1049,7 @@ function viewInicio() {
 
   const andamento = peds.filter(p => !p.finalizado_em).sort((a, b) => new Date(a.pedido_em) - new Date(b.pedido_em)).slice(0, 6);
   const prazos = abertas.slice().sort((a, b) => (a.prazo ? new Date(a.prazo) : 9e15) - (b.prazo ? new Date(b.prazo) : 9e15)).slice(0, 5);
-  const recentes = [...pecasCat].sort((a, b) => String(b.atualizado_em).localeCompare(String(a.atualizado_em))).slice(0, 8);
+  const recentes = [...pecasCat].sort((a, b) => String(b.atualizado_em).localeCompare(String(a.atualizado_em))).slice(0, 30);
 
   view().innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -1082,7 +1085,7 @@ function viewInicio() {
         </div>
         <div class="card">
           <div class="card-h"><h3>Peças recentes</h3><div class="r"><a class="link-btn" href="#/catalogo">Catálogo</a></div></div>
-          <div class="card-b">${recentes.length ? `<div class="strip">${recentes.map(pc => `<a href="#/peca/${pc.id}">${thumb(capa(pc))}${esc(pc.ref)}</a>`).join('')}</div>` : vazio('dress', 'Nenhuma peça ainda')}</div>
+          <div class="card-b">${recentes.length ? `<div class="strip strip-g" id="recentes">${recentes.map(pc => `<a href="#/peca/${pc.id}">${thumb(capa(pc))}${esc(pc.ref)}</a>`).join('')}</div>` : vazio('dress', 'Nenhuma peça ainda')}</div>
         </div>
       </div>
       <div>
@@ -1106,6 +1109,15 @@ function viewInicio() {
         </div>
       </div>
     </div>`;
+  // peças recentes: só as linhas inteiras que cabem no quadro
+  const ajustarRecentes = () => {
+    const box = $('#recentes'); if (!box) return;
+    const itens = [...box.children]; itens.forEach(a => { a.hidden = false; });
+    const lim = box.getBoundingClientRect().bottom;
+    itens.forEach(a => { if (a.getBoundingClientRect().bottom > lim + 1) a.hidden = true; });
+  };
+  requestAnimationFrame(ajustarRecentes); setTimeout(ajustarRecentes, 400);
+  if (!S.recentesResize) { S.recentesResize = true; window.addEventListener('resize', () => { if ($('#recentes')) { $$('#recentes > a').forEach(a => { a.hidden = false; }); requestAnimationFrame(() => { const box = $('#recentes'); if (!box) return; const lim = box.getBoundingClientRect().bottom; [...box.children].forEach(a => { if (a.getBoundingClientRect().bottom > lim + 1) a.hidden = true; }); }); } }); }
   $('#per').addEventListener('click', e => { const b = e.target.closest('[data-per]'); if (b) { pref.set('periodo', b.dataset.per); rerender(); } });
   $('#ano').addEventListener('change', e => { pref.set('ano', +e.target.value); rerender(); });
 }
@@ -1150,7 +1162,17 @@ function viewPedidos(tipo) {
     const lista = base.filter(filtros[f.st]).sort((a, b) => new Date(b.pedido_em) - new Date(a.pedido_em));
     $('#lista').innerHTML = lista.length ? `<table class="tbl tbl-ped"><thead><tr>
         <th>Pedido</th><th>Referência</th><th>De</th><th>Para</th>${tipo === 'consumo' ? '<th>Modelista</th>' : ''}<th>Etapas</th><th>Finalizado</th>${pos.map(([, l]) => `<th>${l}</th>`).join('')}<th></th></tr></thead>
-      <tbody>${lista.map(p => linhaPedido(p)).join('')}</tbody></table>`
+      <tbody>${(() => {
+        const nCols = 7 + (tipo === 'consumo' ? 1 : 0) + pos.length, porDia = {};
+        lista.forEach(p => { const d = inData(p.pedido_em); porDia[d] = (porDia[d] || 0) + 1; });
+        let ultimo = '';
+        return lista.map(p => {
+          const d = inData(p.pedido_em), dt0 = new Date(p.pedido_em);
+          const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="${nCols}"><b>${fDia(p.pedido_em)}</b><span>${DIAS[dt0.getDay()]}${mesmoDia(dt0, new Date()) ? ' · hoje' : ''}</span><span class="dia-n">${plural(porDia[d], 'pedido')}</span></td></tr>` : '';
+          ultimo = d;
+          return sep + linhaPedido(p);
+        }).join('');
+      })()}</tbody></table>`
       : vazio(T.icone, S.db.pedidos.some(p => p.tipo === tipo) ? 'Nada encontrado com esses filtros' : `Nenhum ${T.nome.toLowerCase()} cadastrado ainda`,
         '', `<button class="btn primary" data-novo="${tipo}">${ic('plus')}${T.novo}</button>`);
     hidratarFotos($('#lista'));
@@ -1193,7 +1215,8 @@ function linhaPedido(p) {
     })()}
       <div style="min-width:0"><a href="#/peca/${pc.id}">${esc(pc.ref || '—')}</a><div class="meta">${cbadge(pc.cliente_id)}${op ? `<span>OP ${esc(op)}</span>` : ''}${p.tipo === 'consumo' && pc.sala ? `<span class="sala">${esc(pc.sala)}</span>` : ''}${(p.tipo === 'consumo' ? pdfsCons(pc) : pdfs(pc)).length ? `<span class="tag brand sem" style="height:18px;font-size:10.5px">PDF</span>` : ''}</div>
       ${pc.descricao ? `<div class="small" style="color:var(--ink);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(pc.descricao)}">${esc(pc.descricao)}</div>` : ''}
-      ${p.obs ? `<div class="small" style="color:var(--ink-2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(p.obs)}">${ic('note', 'i obs-ic')} ${esc(p.obs)}</div>` : ''}</div></div></td>
+      ${p.obs ? `<div class="small" style="color:var(--ink-2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(p.obs)}">${ic('note', 'i obs-ic')} ${esc(p.obs)}</div>` : ''}
+      ${avisosDe(p).length ? `<div class="avisos-tags">${avisosDe(p).map(a => `<span class="tag red sem">${esc(a)}</span>`).join('')}</div>` : ''}</div></div></td>
     <td data-l="De">${pchip(p.de_id)}</td>
     <td data-l="Para">${pchip(p.para_id)}</td>
     ${p.tipo === 'consumo' ? `<td data-l="Modelista">${pchip(p.modelista_id)}</td>` : ''}
@@ -1258,6 +1281,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
         ${POS_ETAPAS[tipo].length ? `<div class="fld"><span class="lbl">Depois de finalizado</span><div class="etapas">${POS_ETAPAS[tipo].map(([k, l]) => `<label class="etp"><input type="checkbox" name="pos_${k}"${(p.etapas || {})[k] ? ' checked' : ''}><span class="bx">${ic('check')}</span>${l}</label>`).join('')}</div></div>` : ''}
       </div>
       <label class="fld"><span>Observação <span class="hint">· deste pedido</span></span><textarea name="obs" rows="2" placeholder="Ex.: pedido de bordado">${esc(p.obs || '')}</textarea></label>
+      ${tipo === 'consumo' ? `<div class="avisos">${AVISOS_CONSUMO.map(([k, l]) => `<label class="aviso-chk"><input type="checkbox" name="av_${k}"${((p.etapas || {})._avisos || []).includes(k) ? ' checked' : ''}><span class="bx">${ic('check')}</span>${l}</label>`).join('')}</div>` : ''}
       <div class="fld"><span class="lbl">${tipo === 'consumo' ? 'Arquivos do consumo <span class="hint">· fotos ou PDFs, não aparecem no catálogo</span>' : 'Fotos e PDFs da peça <span class="hint">· aparecem no catálogo</span>'}</span><div class="fotos-edit" id="fotos"></div></div>
       <datalist id="dl-refs">${S.db.pecas.map(x => `<option value="${esc(x.ref)}">`).join('')}</datalist>
     </form>`,
@@ -1340,6 +1364,10 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
           const etapas = { ...(p.etapas || {}),
             ...Object.fromEntries(ETAPAS[tipo].map(([k]) => [k, valorEt(k)])),
             ...Object.fromEntries(POS_ETAPAS[tipo].map(([k]) => [k, marca(k, !!fd.get(`pos_${k}`))])) };
+          if (tipo === 'consumo') {
+            const av = AVISOS_CONSUMO.map(([k]) => k).filter(k => fd.get(`av_${k}`));
+            if (av.length) etapas._avisos = av; else delete etapas._avisos;
+          }
           const todas = ETAPAS[tipo].every(([k]) => etapas[k]);
           const fimTxt = form.fim.value;
           const row = {
