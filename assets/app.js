@@ -17,6 +17,7 @@ const POS_ETAPAS = { desenho: [['tabela', 'Tabela']], consumo: [] };
 // avisos do mini consumo (marcados embaixo da observação)
 const AVISOS_CONSUMO = [['sem_tecido', 'Sem tecido'], ['tecido_sisplan', 'Tecido não cadastrado no Sisplan'], ['entretela_sisplan', 'Entretela não cadastrada no Sisplan'], ['esperando_largura', 'Esperando largura do tecido']];
 const avisosDe = p => ((p.etapas || {})._avisos || []).map(k => (AVISOS_CONSUMO.find(([x]) => x === k) || [])[1]).filter(Boolean);
+const colecaoDe = pc => (pc && ((fichaDe(pc.id) || {}).tecnica || {}).colecao) || '';
 const TIPO = {
   desenho: { nome: 'Desenho', plural: 'Desenhos', rota: 'desenhos', novo: 'Novo desenho', icone: 'pen' },
   consumo: { nome: 'Consumo', plural: 'Consumos', rota: 'consumos', novo: 'Novo consumo', icone: 'scissors' },
@@ -26,7 +27,7 @@ const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
 const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const PERIODOS = [['tudo', 'Qualquer data'], ['mes', 'Este mês'], ['30', 'Últimos 30 dias'], ['ano', 'Este ano']];
 const CORES = ['#781026', '#D23B3B', '#3B4FD2', '#9B3BD2', '#17925A', '#0E8FA0', '#C98A06', '#D9541E', '#B4507A', '#2B2B2B'];
-const TABS = ['pessoas', 'clientes', 'pecas', 'pedidos', 'tarefas', 'medidas', 'ponto', 'ponto_fechamentos', 'config', 'guia_manuais', 'guia_pontos', 'fichas', 'fluxos', 'materiais'];
+const TABS = ['pessoas', 'clientes', 'pecas', 'pedidos', 'tarefas', 'medidas', 'ponto', 'ponto_fechamentos', 'config', 'guia_manuais', 'guia_pontos', 'fichas', 'fluxos', 'materiais', 'cortes'];
 
 const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>',
@@ -271,7 +272,7 @@ function DemoAPI() {
     try { localStorage.setItem(KA, JSON.stringify(arqs)); }
     catch (e) { throw new Error('Sem espaço no navegador para mais arquivos na demonstração.'); }
   }
-  const comAtualizado = ['pecas', 'pedidos', 'tarefas', 'ponto', 'config', 'fichas', 'fluxos', 'materiais'];
+  const comAtualizado = ['pecas', 'pedidos', 'tarefas', 'ponto', 'config', 'fichas', 'fluxos', 'materiais', 'cortes'];
   const blobUrl = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
   return {
     demo: true,
@@ -297,7 +298,7 @@ function DemoAPI() {
     },
     async excluir(tab, id) {
       db[tab] = (db[tab] || []).filter(x => x.id !== id);
-      if (tab === 'pecas') { db.pedidos = db.pedidos.filter(p => p.peca_id !== id); ['fichas', 'fluxos'].forEach(t => { db[t] = (db[t] || []).filter(x => x.peca_id !== id); }); db.tarefas.forEach(t => { if (t.peca_id === id) t.peca_id = null; }); }
+      if (tab === 'pecas') { (db.cortes || []).forEach(c => { if (c.peca_id === id) c.peca_id = null; }); db.pedidos = db.pedidos.filter(p => p.peca_id !== id); ['fichas', 'fluxos'].forEach(t => { db[t] = (db[t] || []).filter(x => x.peca_id !== id); }); db.tarefas.forEach(t => { if (t.peca_id === id) t.peca_id = null; }); }
       if (tab === 'pessoas') { db.pedidos.forEach(p => { if (p.de_id === id) p.de_id = null; if (p.para_id === id) p.para_id = null; if (p.modelista_id === id) p.modelista_id = null; }); db.tarefas.forEach(t => { if (t.por_id === id) t.por_id = null; if (t.entregue_para_id === id) t.entregue_para_id = null; }); }
       if (tab === 'clientes') { db.pecas.forEach(p => { if (p.cliente_id === id) p.cliente_id = null; }); db.medidas = db.medidas.filter(m => m.cliente_id !== id); }
       gravar();
@@ -395,7 +396,7 @@ function demoSeed() {
     return { id: uid(), manual: 'renner', codigo, nome, como_medir, grupo, pagina, imagem, extra: {}, ordem: i + 1, favorito: i === 0, criado_em: em(10) };
   });
   const guia_manuais = [{ id: uid(), manual: 'renner', cliente_id: C('RNN'), titulo: 'Manual de POMs (exemplo)', arquivo: null, paginas: 70, criado_em: em(10) }];
-  return { db: { pessoas, clientes, pecas, pedidos, tarefas, medidas: [], guia_manuais, guia_pontos, fichas: [demoFicha(pecas[0])], fluxos: demoFluxos(pecas, pessoas), materiais: demoMateriais(), ...demoPonto() }, arquivos };
+  return { db: { pessoas, clientes, pecas, pedidos, tarefas, medidas: [], guia_manuais, guia_pontos, fichas: [demoFicha(pecas[0])], fluxos: demoFluxos(pecas, pessoas), materiais: demoMateriais(), cortes: demoCortes(pecas), ...demoPonto() }, arquivos };
 }
 
 /* ================================================================
@@ -427,7 +428,7 @@ async function salvarReg(tab, row, id) {
 async function excluirReg(tab, id) {
   await S.api.excluir(tab, id);
   S.db[tab] = S.db[tab].filter(x => x.id !== id);
-  if (tab === 'pecas') { S.db.pedidos = S.db.pedidos.filter(p => p.peca_id !== id); S.db.fichas = S.db.fichas.filter(x => x.peca_id !== id); S.db.fluxos = S.db.fluxos.filter(x => x.peca_id !== id); S.db.tarefas.forEach(t => { if (t.peca_id === id) t.peca_id = null; }); }
+  if (tab === 'pecas') { S.db.pedidos = S.db.pedidos.filter(p => p.peca_id !== id); S.db.fichas = S.db.fichas.filter(x => x.peca_id !== id); S.db.fluxos = S.db.fluxos.filter(x => x.peca_id !== id); S.db.cortes.forEach(c => { if (c.peca_id === id) c.peca_id = null; }); S.db.tarefas.forEach(t => { if (t.peca_id === id) t.peca_id = null; }); }
   if (tab === 'pessoas') {
     S.db.pedidos.forEach(p => { if (p.de_id === id) p.de_id = null; if (p.para_id === id) p.para_id = null; if (p.modelista_id === id) p.modelista_id = null; });
     S.db.tarefas.forEach(t => { if (t.por_id === id) t.por_id = null; if (t.entregue_para_id === id) t.entregue_para_id = null; });
@@ -829,6 +830,7 @@ function renderShell() {
         <a href="#/consumos" data-r="consumos">${ic('scissors')}Mini consumo<span class="cnt hidden" data-cnt="consumo"></span></a>
         <a href="#/fazer" data-r="fazer">${ic('list')}Fazer<span class="cnt hidden" data-cnt="fazer"></span></a>
         <a href="#/etapas" data-r="etapas">${ic('flow')}Etapas<span class="cnt hidden" data-cnt="etapas"></span></a>
+        <a href="#/corte" data-r="corte">${ic('calendar')}Programação de corte</a>
         <div class="grp">Fichas</div>
         <a href="#/produto" data-r="produto">${ic('dress')}Produto</a>
         <a href="#/ficha-tecnica" data-r="ficha-tecnica">${ic('file')}Ficha técnica</a>
@@ -978,6 +980,7 @@ const ROTAS = {
   ponto: viewPonto,
   etapas: viewEtapas,
   produto: viewProduto,
+  corte: viewCorte,
   materiais: viewMateriais,
   filtro: irFiltro,
   'ficha-tecnica': a => viewFicha('tecnica', a),
@@ -1262,7 +1265,8 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
     titulo: pedido ? `Editar ${T.nome.toLowerCase()}` : T.novo, tamanho: 'lg',
     corpo: `<form class="form" id="fp" autocomplete="off" novalidate>
       <div class="grid3">
-        <label class="fld span2"><span>Referência *</span><input name="ref" list="dl-refs" value="${esc(pcAtual ? pcAtual.ref : '')}" placeholder="Ex.: BL115546 CeA" autofocus style="text-transform:uppercase;font-weight:600"></label>
+        <label class="fld${tipo === 'consumo' ? '' : ' span2'}"><span>Referência *</span><input name="ref" list="dl-refs" value="${esc(pcAtual ? pcAtual.ref : '')}" placeholder="Ex.: BL115546 CeA" autofocus style="text-transform:uppercase;font-weight:600"></label>
+        ${tipo === 'consumo' ? `<label class="fld"><span>Coleção</span><input name="colecao" value="${esc(colecaoDe(pcAtual))}" placeholder="Ex.: FW27"></label>` : ''}
         <label class="fld"><span>OP</span><input name="op" value="${esc(p.op || (pcAtual && !pedido ? pcAtual.op : '') || '')}" inputmode="numeric" placeholder="Ex.: 13972"></label>
         <label class="fld"><span>Cliente</span><select name="cliente">${opClientes(pcAtual ? pcAtual.cliente_id : '', '—')}</select></label>
         ${tipo === 'consumo' ? `<label class="fld"><span>Sala</span>${selSala(pcAtual ? pcAtual.sala : '')}</label>` : ''}
@@ -1325,6 +1329,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
             if (form.sala && achada.sala) { if (![...form.sala.options].some(o => o.value === achada.sala)) form.sala.insertAdjacentHTML('afterbegin', `<option>${esc(achada.sala)}</option>`); form.sala.value = achada.sala; }
             if (!form.op.value && achada.op) form.op.value = achada.op;
             if (!form.descricao.value && achada.descricao) form.descricao.value = achada.descricao;
+            if (form.colecao && !form.colecao.value) form.colecao.value = colecaoDe(achada);
             fotos.trocar(achada[campoArq(tipo)] || []);
           }
         } else {
@@ -1379,6 +1384,13 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
           };
           const antigaPeca = pedido && pedido.peca_id !== pc.id ? peca(pedido.peca_id) : null;
           await salvarReg('pedidos', row, pedido && pedido.id);
+          if (form.colecao) {
+            const col = String(fd.get('colecao') || '').trim(), fi = fichaDe(pc.id);
+            if (col !== colecaoDe(pc)) {
+              await salvarReg('fichas', fi ? { tecnica: { ...fi.tecnica, colecao: col } } : { peca_id: pc.id, tecnica: { colecao: col }, consumo: {} }, fi && fi.id);
+              if (S.fichaAberta && S.fichaAberta.pc.id === pc.id && !S.fichaAberta.pendente) S.fichaAberta = null;
+            }
+          }
           if (antigaPeca) limparPecaOrfa(antigaPeca);
           m.fechar();
           toast(pedido ? 'Alterações salvas.' : `${T.nome} cadastrado.`);
@@ -3470,6 +3482,208 @@ function paginaProduto(pc) {
   });
   $$('textarea', root).forEach(autoAltura);
   hidratarFotos(root);
+}
+
+/* ================================================================
+   PROGRAMAÇÃO DE CORTE — calendário com as OPs de cada dia
+   ================================================================ */
+const ETAPAS_CORTE = [['pedido', 'Pedido'], ['mod', 'Mod'], ['pil_eng', 'Pil. engenharia'], ['eng_rev', 'Engenharia revisão'], ['req_tecido', 'Req. tecido'], ['aviamento', 'Aviamento'], ['encaixe', 'Encaixe']];
+const ST_CORTE = { atrasado: ['Atrasado', 'red'], em_dia: ['Em dia', 'green'], adiantado: ['Adiantado', 'blue'] };
+const DIAS_SEM = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const diaCorte = c => c.data_corte || (c.dados || {}).previsto_corte || null;
+const pecaCorte = c => (c.peca_id && peca(c.peca_id)) || null;
+function statusCorte(c) {
+  const d = c.dados || {};
+  if (d.status && d.status !== 'auto') return d.status;
+  const prev = d.previsto_corte, real = c.data_corte;
+  if (!prev) return null;
+  if (real) return real > prev ? 'atrasado' : real < prev ? 'adiantado' : 'em_dia';
+  return inData(agoraISO()) > prev ? 'atrasado' : 'em_dia';
+}
+function semanaISO(dia) {
+  if (!dia) return '';
+  const d = new Date(`${dia}T12:00:00`);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const w1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - w1) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7);
+}
+const fDiaIso = dia => (dia ? dia.split('-').reverse().slice(0, 2).join('/') : '');
+
+function viewCorte() {
+  const f = S.f.corte || (S.f.corte = { mes: inData(agoraISO()).slice(0, 7) });
+  setPage('Programação de corte', 'O que vai ser cortado em cada dia · clique num dia para programar', `<button class="btn primary" id="corte-novo">${ic('plus')}<span class="tx">Programar corte</span></button>`);
+  const [ano, mes] = f.mes.split('-').map(Number);
+  const ini = new Date(ano, mes - 1, 1), hoje = inData(agoraISO());
+  const comeco = new Date(ini); comeco.setDate(1 - ini.getDay());
+  const dias = Array.from({ length: 42 }, (_, i) => { const d = new Date(comeco); d.setDate(comeco.getDate() + i); return d; });
+  const porDia = {};
+  S.db.cortes.forEach(c => { const d = diaCorte(c); if (d) (porDia[d] ||= []).push(c); });
+  const doMes = S.db.cortes.filter(c => (diaCorte(c) || '').startsWith(f.mes));
+  const semData = S.db.cortes.filter(c => !diaCorte(c));
+  const chip = c => {
+    const pc = pecaCorte(c), st = statusCorte(c), d = c.dados || {};
+    return `<button type="button" class="corte-chip${st ? ' st-' + st : ''}" data-corte="${c.id}" title="${esc([`OP ${c.op || '—'}`, pc ? pc.ref : d.ref, st ? ST_CORTE[st][0] : ''].filter(Boolean).join(' · '))}">
+      <b>OP ${esc(c.op || '—')}</b><small>${esc((pc ? pc.ref : d.ref) || '')}${d.qtd_corte ? ` · ${esc(d.qtd_corte)} pç` : ''}</small></button>`;
+  };
+  view().innerHTML = `<div class="card cal">
+    <div class="cal-top">
+      <button type="button" class="icon-btn" data-mes="-1" title="Mês anterior">${ic('chevL')}</button>
+      <h3>${capital(MESES_LONGO[mes - 1])} de ${ano}</h3>
+      <button type="button" class="icon-btn" data-mes="1" title="Próximo mês">${ic('chevR')}</button>
+      <button type="button" class="btn sm" data-mes="0">Hoje</button>
+      <div class="cal-res">${doMes.length ? `${plural(doMes.length, 'corte')} no mês` : 'Nenhum corte neste mês'}${Object.keys(ST_CORTE).map(k => { const n = doMes.filter(c => statusCorte(c) === k).length; return n ? ` · <span class="c-${ST_CORTE[k][1]}">${n} ${ST_CORTE[k][0].toLowerCase()}</span>` : ''; }).join('')}</div>
+    </div>
+    <div class="cal-grid">${DIAS_SEM.map(d => `<div class="cal-h">${d}</div>`).join('')}
+      ${dias.map(d => { const iso = inData(d.toISOString()), lista = porDia[iso] || [];
+        return `<div class="cal-d${d.getMonth() !== mes - 1 ? ' fora' : ''}${iso === hoje ? ' hoje' : ''}${d.getDay() === 0 || d.getDay() === 6 ? ' fds' : ''}" data-dia-corte="${iso}">
+          <span class="cal-n">${d.getDate()}</span>${lista.map(chip).join('')}</div>`; }).join('')}
+    </div>
+    ${semData.length ? `<div class="cal-sem"><div class="fs-sub">Sem data de corte</div><div class="cal-sem-l">${semData.map(chip).join('')}</div></div>` : ''}
+  </div>`;
+  const root = $('.cal');
+  root.addEventListener('click', e => {
+    const m = e.target.closest('[data-mes]');
+    if (m) {
+      const v = +m.dataset.mes;
+      if (!v) f.mes = hoje.slice(0, 7);
+      else { const d = new Date(ano, mes - 1 + v, 1); f.mes = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
+      return rerender();
+    }
+    const ch = e.target.closest('[data-corte]'); if (ch) return formCorte(byId('cortes', ch.dataset.corte));
+    const dc = e.target.closest('[data-dia-corte]'); if (dc) return formCorte(null, dc.dataset.diaCorte);
+  });
+  $('#corte-novo').onclick = () => formCorte(null, hoje);
+}
+
+function formCorte(c, diaPre = '') {
+  const d0 = (c && c.dados) || {};
+  let pc = c ? pecaCorte(c) : null;
+  let tecidos = clone(d0.tecidos || []);
+  const etapas = { ...(d0.etapas || {}) };
+  const inp = (n, l, v, extra = '', cls = '') => `<label class="fld ${cls}"><span>${l}</span><input name="${n}" value="${esc(v ?? '')}" ${extra}></label>`;
+  modal({
+    titulo: c ? `Corte · OP ${c.op || '—'}` : 'Programar corte', tamanho: 'lg',
+    corpo: `<form class="form" id="fct" autocomplete="off" novalidate>
+      <div class="grid3">
+        ${inp('ref', 'Referência', pc ? pc.ref : d0.ref, 'list="dl-refs-ct" style="text-transform:uppercase;font-weight:600"')}
+        ${inp('op', 'OP', c ? c.op : '', 'inputmode="numeric"')}
+        <label class="fld"><span>Sala</span>${selSala((pc && pc.sala) || d0.sala || '')}</label>
+        ${inp('descricao', 'Descrição', (pc && pc.descricao) || d0.descricao, '', 'span3')}
+      </div>
+      <div id="ct-peca"></div>
+      <div class="form-sec">Informações</div>
+      <div class="grid3">
+        ${inp('previsto_corte', 'Previsto corte', d0.previsto_corte, 'type="date"')}
+        ${inp('previsto_mod', 'Previsto mod', d0.previsto_mod, 'type="date"')}
+        <label class="fld"><span>Status</span><select name="status">${opcoes([['auto', 'Automático'], ['atrasado', 'Atrasado'], ['em_dia', 'Em dia'], ['adiantado', 'Adiantado']], d0.status || 'auto')}</select><span class="hint" id="ct-st"></span></label>
+        ${inp('data_corte', 'Data de corte', c ? c.data_corte : diaPre, 'type="date"')}
+        <label class="fld"><span>Semana</span><input id="ct-sem" readonly tabindex="-1"></label>
+        ${inp('data_op', 'Data OP', d0.data_op, 'type="date"')}
+        ${inp('total_quant_op', 'Total quant. OP', d0.total_quant_op, 'inputmode="numeric"')}
+        ${inp('total_op', 'Total OP', d0.total_op)}
+        ${inp('qtd_corte', 'Quantidade de corte', d0.qtd_corte, 'inputmode="numeric"')}
+        ${inp('prazo', 'Prazo', d0.prazo, 'type="date"')}
+        ${inp('oficina', 'Oficina', d0.oficina, '', 'span2')}
+      </div>
+      <div class="form-sec">Tecidos</div>
+      <div id="ct-tec"></div>
+      <div class="form-sec">Andamento</div>
+      <div class="etapas ct-etapas">${ETAPAS_CORTE.map(([k, l]) => `<button type="button" class="etp${etapas[k] ? ' on' : ''}" data-ct-et="${k}" title="${etapas[k] && etapas[k] !== true ? `Feito ${fQuando(etapas[k])}` : 'Marcar como feito'}"><span class="bx">${ic('check')}</span>${l}${etapas[k] && etapas[k] !== true ? `<small>${fDia(etapas[k])}</small>` : ''}</button>`).join('')}</div>
+      <label class="fld"><span>Observação</span><textarea name="obs" rows="2">${esc(d0.obs || '')}</textarea></label>
+      <div class="form-sec">Histórico</div>
+      <div id="ct-hist"></div>
+      <datalist id="dl-refs-ct">${S.db.pecas.map(x => `<option value="${esc(x.ref)}">${esc(x.descricao || '')}</option>`).join('')}</datalist>
+      <datalist id="dl-tec-ct">${matsDo('tecido').map(m => `<option value="${esc(m.nome)}">`).join('')}</datalist>
+    </form>`,
+    rodape: `${c ? `<button type="button" class="btn danger esq" id="ct-del">${ic('trash')}Excluir</button>` : ''}<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fct" class="btn primary">Salvar</button>`,
+    aoAbrir: m => {
+      const form = m.$('#fct');
+      ligarSala(form);
+      m.el.addEventListener('click', e => { if (e.target.closest('a[href^="#/"]')) m.fechar(); });
+      const desenhaTec = () => {
+        m.$('#ct-tec').innerHTML = `<div class="tbl-wrap"><table class="ft-tab ct-tec"><thead><tr><th>Tecido</th><th>Cor</th><th>Estoque</th><th>Previsto dia</th><th></th></tr></thead><tbody>
+          ${tecidos.map((t, i) => `<tr><td><input data-tc="${i}|tecido" value="${esc(t.tecido || '')}" list="dl-tec-ct"></td><td><input data-tc="${i}|cor" value="${esc(t.cor || '')}"></td>
+            <td><input data-tc="${i}|estoque" value="${esc(t.estoque || '')}"></td><td><input type="date" data-tc="${i}|previsto" value="${esc(t.previsto || '')}"></td>
+            <td class="x"><button type="button" class="icon-btn danger" data-tc-x="${i}" title="Tirar">${ic('x')}</button></td></tr>`).join('')}</tbody></table></div>
+          <button type="button" class="btn sm" id="ct-tec-add">${ic('plus')}Tecido</button>`;
+      };
+      m.$('#ct-tec').addEventListener('input', e => { const t = e.target.dataset.tc; if (t) { const [i, k] = t.split('|'); tecidos[+i][k] = e.target.value; } });
+      m.$('#ct-tec').addEventListener('click', e => {
+        if (e.target.closest('#ct-tec-add')) { tecidos.push({ tecido: '', cor: '', estoque: '', previsto: '' }); desenhaTec(); }
+        const x = e.target.closest('[data-tc-x]'); if (x) { tecidos.splice(+x.dataset.tcX, 1); desenhaTec(); }
+      });
+      const hist = () => {
+        const box = m.$('#ct-hist');
+        if (!pc) { box.innerHTML = '<div class="muted small">Coloque a referência para ver o desenho, a ficha técnica e o consumo da peça.</div>'; return; }
+        box.innerHTML = ligacoesEtapa(pc, '');
+      };
+      const info = () => {
+        const { ref } = separarSufixo(form.ref.value);
+        const achada = S.db.pecas.find(x => x.ref === ref) || null;
+        if (achada && achada !== pc) {
+          pc = achada;
+          if (!form.descricao.value && pc.descricao) form.descricao.value = pc.descricao;
+          if (pc.sala) { if (![...form.sala.options].some(o => o.value === pc.sala)) form.sala.insertAdjacentHTML('afterbegin', `<option>${esc(pc.sala)}</option>`); form.sala.value = pc.sala; }
+          if (!form.op.value) { const ops = opsDaPeca(pc); if (ops.length) form.op.value = ops[ops.length - 1]; }
+          if (!tecidos.length) {
+            const fc = ((fichaDe(pc.id) || {}).consumo || {}).tecidos || [];
+            tecidos = fc.filter(t => t.tecido).map(t => ({ tecido: t.tecido, cor: t.cor || '', estoque: '', previsto: '' }));
+            desenhaTec();
+          }
+        } else if (!achada) pc = null;
+        m.$('#ct-peca').innerHTML = ref && !pc ? `<div class="peca-info">${ic('info')}<div>Essa referência ainda não está no sistema; a programação fica salva só com a REF.</div></div>` : '';
+        hist();
+      };
+      // por OP também acha a peça
+      form.op.addEventListener('change', () => {
+        if (form.ref.value.trim()) return;
+        const op = form.op.value.trim(); if (!op) return;
+        const p = S.db.pecas.find(x => opsDaPeca(x).includes(op)); if (p) { form.ref.value = p.ref; info(); }
+      });
+      const calc = () => {
+        const tmp = { data_corte: form.data_corte.value || null, dados: { previsto_corte: form.previsto_corte.value || null, status: form.status.value } };
+        const st = statusCorte({ ...tmp, dados: { ...tmp.dados, status: 'auto' } });
+        m.$('#ct-st').textContent = st ? `Pelas datas: ${ST_CORTE[st][0].toLowerCase()}` : 'Coloque o previsto corte';
+        m.$('#ct-sem').value = form.data_corte.value || form.previsto_corte.value ? `Semana ${semanaISO(form.data_corte.value || form.previsto_corte.value)}` : '';
+      };
+      form.addEventListener('input', calc); form.addEventListener('change', calc);
+      form.ref.addEventListener('change', info); form.ref.addEventListener('blur', info);
+      m.$('.ct-etapas').addEventListener('click', e => {
+        const b = e.target.closest('[data-ct-et]'); if (!b) return;
+        const k = b.dataset.ctEt; etapas[k] = etapas[k] ? false : agoraISO();
+        b.classList.toggle('on', !!etapas[k]);
+        b.innerHTML = `<span class="bx">${ic('check')}</span>${(ETAPAS_CORTE.find(([x]) => x === k) || [])[1]}${etapas[k] ? `<small>${fDia(etapas[k])}</small>` : ''}`;
+      });
+      desenhaTec(); info(); calc();
+      form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const fd = new FormData(form), v = n => String(fd.get(n) || '').trim();
+        const { ref } = separarSufixo(fd.get('ref'));
+        if (!ref && !v('op')) { toast('Coloque a referência ou a OP.', 'erro'); return; }
+        const dados = { ref: ref || null, descricao: v('descricao') || null, sala: (v('sala') || '').replace('__outra', '') || null };
+        ['previsto_corte', 'previsto_mod', 'status', 'data_op', 'total_quant_op', 'total_op', 'qtd_corte', 'prazo', 'oficina', 'obs'].forEach(k => { const x = v(k); if (x) dados[k] = x; });
+        dados.tecidos = tecidos.filter(t => (t.tecido || '').trim());
+        dados.etapas = etapas;
+        const btn = m.$('.btn.primary'); ocupado(btn, true);
+        try {
+          await salvarReg('cortes', { peca_id: pc ? pc.id : null, op: v('op') || null, data_corte: v('data_corte') || null, dados }, c && c.id);
+          m.fechar(); toast('Programação salva.'); rerender();
+        } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); }
+      });
+      const del = m.$('#ct-del');
+      if (del) del.onclick = async () => {
+        if (!await confirmar(`Excluir a programação de corte da OP <b>${esc(c.op || '—')}</b>?`)) return;
+        try { await excluirReg('cortes', c.id); m.fechar(); toast('Excluída.'); rerender(); } catch (err) { toast(msgErro(err), 'erro'); }
+      };
+    },
+  });
+}
+
+function demoCortes(pecas) {
+  const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return inData(x.toISOString()); };
+  const c = (i, op, corte, prev, extra = {}) => ({ id: uid(), peca_id: pecas[i].id, op, data_corte: corte, criado_em: agoraISO(), atualizado_em: agoraISO(),
+    dados: { previsto_corte: prev, total_quant_op: '1200', qtd_corte: '600', oficina: 'Oficina Central', tecidos: [{ tecido: 'TRICOLINE WORK CITY', cor: 'OFF WHITE', estoque: '320 m', previsto: prev }], etapas: { pedido: agoraISO(), mod: agoraISO() }, ...extra } });
+  return [c(0, '13972', d(2), d(2)), c(1, '13947', d(5), d(3)), c(3, '14022', d(-1), d(1)), c(4, '14035', d(9), d(9), { etapas: {} })];
 }
 
 /* ================================================================

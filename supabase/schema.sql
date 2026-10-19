@@ -315,3 +315,25 @@ drop policy if exists "logado" on public.materiais;
 create policy "logado" on public.materiais for all to authenticated using (true) with check (true);
 revoke all on public.materiais from anon;
 grant select, insert, update, delete on public.materiais to authenticated;
+
+-- =====================================================================
+-- PROGRAMAÇÃO DE CORTE (adicionado em 2026-10-19): uma linha por OP programada
+-- dados = { ref, descricao, sala, previsto_corte, previsto_mod, status, data_op, total_quant_op,
+--           total_op, qtd_corte, prazo, oficina, obs, tecidos[{tecido,cor,estoque,previsto}], etapas{...} }
+-- =====================================================================
+create table if not exists public.cortes (
+  id            uuid primary key default gen_random_uuid(),
+  peca_id       uuid references public.pecas(id) on delete set null,
+  op            text,
+  data_corte    date,
+  dados         jsonb not null default '{}'::jsonb,
+  criado_em     timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+drop trigger if exists t_cortes_upd on public.cortes;
+create trigger t_cortes_upd before update on public.cortes for each row execute function public.tocar_atualizado();
+alter table public.cortes enable row level security;
+drop policy if exists "logado" on public.cortes;
+create policy "logado" on public.cortes for all to authenticated using (true) with check (true);
+revoke all on public.cortes from anon;
+grant select, insert, update, delete on public.cortes to authenticated;
