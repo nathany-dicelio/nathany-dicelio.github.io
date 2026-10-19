@@ -1436,3 +1436,18 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 }
 
 .ct-and input { min-width: 100px; }
+
+/* corte: andamento em fileiras */
+.and-bloco { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 12px; margin-bottom: 8px; }
+.and-h { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--mute); margin-bottom: 6px; }
+.and-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 12px; }
+/* armazenamento */
+.uso { margin-bottom: 14px; }
+.uso:last-child { margin-bottom: 0; }
+.uso-l { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; margin-bottom: 6px; }
+.uso-l span { color: var(--mute); }
+.uso-bar { height: 10px; border-radius: 6px; background: var(--line-2); overflow: hidden; }
+.uso-bar i { display: block; height: 100%; background: var(--green); border-radius: 6px; }
+.uso-bar.alto i { background: var(--red); }
+.aviso-uso { margin-bottom: 16px; }
+.aviso-uso a { color: inherit; font-weight: 700; }

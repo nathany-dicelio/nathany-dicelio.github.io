@@ -18,6 +18,17 @@ const POS_ETAPAS = { desenho: [['tabela', 'Tabela']], consumo: [] };
 const AVISOS_CONSUMO = [['sem_tecido', 'Sem tecido'], ['tecido_sisplan', 'Tecido não cadastrado no Sisplan'], ['entretela_sisplan', 'Entretela não cadastrada no Sisplan'], ['esperando_largura', 'Esperando largura do tecido']];
 const avisosDe = p => ((p.etapas || {})._avisos || []).map(k => (AVISOS_CONSUMO.find(([x]) => x === k) || [])[1]).filter(Boolean);
 const colecaoDe = pc => (pc && ((fichaDe(pc.id) || {}).tecnica || {}).colecao) || '';
+// plano grátis do Supabase: 500 MB de banco e 1 GB de arquivos
+const LIMITE_USO = { banco: 500e6, arquivos: 1e9 };
+const fMB = b => (b >= 1e9 ? `${(b / 1e9).toFixed(2).replace('.', ',')} GB` : `${Math.round(b / 1e6)} MB`);
+function barrasUso() {
+  if (!S.uso) return '<div class="muted small">Calculando…</div>';
+  return [['arquivos', 'Fotos e arquivos'], ['banco', 'Banco de dados']].map(([k, l]) => {
+    const pct = Math.min(100, (S.uso[k] || 0) / LIMITE_USO[k] * 100);
+    return `<div class="uso"><div class="uso-l"><b>${l}</b><span>${fMB(S.uso[k] || 0)} de ${fMB(LIMITE_USO[k])} · ${pct.toFixed(0)}%</span></div><div class="uso-bar${pct >= 80 ? ' alto' : ''}"><i style="width:${pct.toFixed(1)}%"></i></div></div>`;
+  }).join('');
+}
+const usoAlto = () => S.uso && ['banco', 'arquivos'].filter(k => (S.uso[k] || 0) / LIMITE_USO[k] >= 0.8);
 const TIPO = {
   desenho: { nome: 'Desenho', plural: 'Desenhos', rota: 'desenhos', novo: 'Novo desenho', icone: 'pen' },
   consumo: { nome: 'Consumo', plural: 'Consumos', rota: 'consumos', novo: 'Novo consumo', icone: 'scissors' },
@@ -259,6 +270,7 @@ function SupaAPI() {
     },
     async urlArquivo(path, nome) { return ok(await B().createSignedUrl(path, 600, nome ? { download: nome } : undefined)).signedUrl; },
     async removerArquivos(paths) { if (paths.length) ok(await B().remove(paths)); },
+    async uso() { return ok(await sb.rpc('uso_armazenamento')); },
   };
 }
 
@@ -312,6 +324,7 @@ function DemoAPI() {
     async urls(paths) { const m = {}; paths.forEach(p => { if (arqs[p]) m[p] = arqs[p]; }); return m; },
     async urlArquivo(path) { const r = await fetch(arqs[path]); return URL.createObjectURL(await r.blob()); },
     async removerArquivos(paths) { paths.forEach(p => delete arqs[p]); gravarArqs(); },
+    async uso() { return { banco: 17.2e6, arquivos: 216e6 }; },
   };
 }
 
@@ -1059,6 +1072,7 @@ function viewInicio() {
       <div class="muted small" style="flex:1">Resumo ${nomePer}</div>
       <div class="chips" id="per">${[['mes', 'Este mês'], ['ano', 'Este ano'], ['tudo', 'Tudo']].map(([v, t]) => `<button class="chip${per === v ? ' on' : ''}" data-per="${v}">${t}</button>`).join('')}</div>
     </div>
+    ${usoAlto() && usoAlto().length ? `<div class="aviso erro aviso-uso">${ic('alert')}<span><b>O armazenamento está passando de 80%.</b> ${usoAlto().map(k => `${k === 'arquivos' ? 'Fotos e arquivos' : 'Banco de dados'}: ${fMB(S.uso[k])} de ${fMB(LIMITE_USO[k])}`).join(' · ')}. Avise o Henrique para liberar espaço ou mudar de plano. <a href="#/ajustes">Ver detalhes</a></span></div>` : ''}
     <div class="kpis">
       <a class="card kpi" href="#/desenhos"><div class="ic">${ic('pen')}</div><div><div class="lb">Desenhos feitos</div><div class="vl num">${rd.feitos}</div><div class="ds">${plural(rd.andamento, 'em andamento', 'em andamento')} · ${plural(rd.pedidos, 'pedido')}</div></div></a>
       <a class="card kpi" href="#/consumos"><div class="ic gold">${ic('scissors')}</div><div><div class="lb">Consumos feitos</div><div class="vl num">${rc.feitos}</div><div class="ds">${plural(rc.andamento, 'em andamento', 'em andamento')} · ${plural(rc.pedidos, 'pedido')}</div></div></a>
@@ -2230,6 +2244,7 @@ function viewAjustes() {
       </div>`).join('')}
         <form class="aj-row" id="add-cli" style="border-top:1px dashed var(--line)"><input type="color" name="cor" value="${CORES[(cls.length + 3) % CORES.length]}"><div class="dupla"><input class="inp" name="nome" placeholder="Novo cliente" maxlength="40"><input class="inp" name="sigla" placeholder="Sigla" maxlength="8"></div><button class="btn sm primary" type="submit">${ic('plus')}</button></form>
       </div></div>
+    ${S.api.demo ? '' : `<div class="card"><div class="card-h"><div><h3>Armazenamento</h3><div class="sub">Plano grátis do Supabase · avisa no Início quando passar de 80%</div></div></div><div class="card-b">${barrasUso()}</div></div>`}
     <div class="card"><div class="card-h"><h3>Conta</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:12px">
       <div class="muted small">Conectada como <b style="color:var(--ink)">${esc(S.user.email || '')}</b>${S.api.demo ? ' (demonstração — os dados ficam só neste navegador)' : ''}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -3651,10 +3666,10 @@ function formCorte(c, diaPre = '') {
       form.ref.addEventListener('change', info); form.ref.addEventListener('blur', info);
       // andamento: tabela para escrever (como a de tecidos)
       const desenhaAnd = () => {
-        m.$('#ct-and').innerHTML = `<div class="tbl-wrap"><table class="ft-tab ct-tec ct-and"><thead><tr>${ETAPAS_CORTE.map(([, l]) => `<th>${l}</th>`).join('')}<th></th></tr></thead><tbody>
-          ${andamento.map((r, i) => `<tr>${ETAPAS_CORTE.map(([k]) => `<td><input data-an="${i}|${k}" value="${esc(r[k] || '')}"></td>`).join('')}
-            <td class="x"><button type="button" class="icon-btn danger" data-an-x="${i}" title="Tirar linha">${ic('x')}</button></td></tr>`).join('')}</tbody></table></div>
-          <button type="button" class="btn sm" id="ct-and-add">${ic('plus')}Linha</button>`;
+        m.$('#ct-and').innerHTML = andamento.map((r, i) => `<div class="and-bloco">
+            ${andamento.length > 1 ? `<div class="and-h"><span>Linha ${i + 1}</span><button type="button" class="icon-btn danger" data-an-x="${i}" title="Tirar linha">${ic('x')}</button></div>` : ''}
+            <div class="and-grid">${ETAPAS_CORTE.map(([k, l]) => `<label class="fld"><span>${l}</span><input data-an="${i}|${k}" value="${esc(r[k] || '')}"></label>`).join('')}</div></div>`).join('')
+          + `<button type="button" class="btn sm" id="ct-and-add">${ic('plus')}Linha</button>`;
       };
       m.$('#ct-and').addEventListener('input', e => { const t = e.target.dataset.an; if (t) { const [i, k] = t.split('|'); andamento[+i][k] = e.target.value; } });
       m.$('#ct-and').addEventListener('click', e => {
@@ -4251,6 +4266,7 @@ async function iniciar(sess) {
     return;
   }
   S.iniciando = false;
+  S.api.uso().then(u => { S.uso = u; if (S.rota.nome === 'inicio' || S.rota.nome === 'ajustes') rerender(); }).catch(() => {});
   renderShell();
   window.onhashchange = () => route(true);
   route(true);

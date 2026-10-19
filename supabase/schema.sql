@@ -337,3 +337,14 @@ drop policy if exists "logado" on public.cortes;
 create policy "logado" on public.cortes for all to authenticated using (true) with check (true);
 revoke all on public.cortes from anon;
 grant select, insert, update, delete on public.cortes to authenticated;
+
+-- Uso do armazenamento (adicionado em 2026-10-19): só devolve os tamanhos, para o aviso de 80%
+create or replace function public.uso_armazenamento() returns json
+language sql stable security definer set search_path = '' as $$
+  select json_build_object(
+    'banco', pg_database_size(current_database()),
+    'arquivos', (select coalesce(sum((metadata->>'size')::bigint), 0) from storage.objects where bucket_id = 'arquivos')
+  );
+$$;
+revoke all on function public.uso_armazenamento() from public, anon;
+grant execute on function public.uso_armazenamento() to authenticated;
