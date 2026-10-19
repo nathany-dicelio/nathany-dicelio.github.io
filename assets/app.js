@@ -3559,7 +3559,8 @@ function formCorte(c, diaPre = '') {
   const d0 = (c && c.dados) || {};
   let pc = c ? pecaCorte(c) : null;
   let tecidos = clone(d0.tecidos || []);
-  const etapas = { ...(d0.etapas || {}) };
+  let andamento = clone(d0.andamento || []);
+  if (!andamento.length) andamento.push(Object.fromEntries(ETAPAS_CORTE.map(([k]) => [k, ''])));
   const inp = (n, l, v, extra = '', cls = '') => `<label class="fld ${cls}"><span>${l}</span><input name="${n}" value="${esc(v ?? '')}" ${extra}></label>`;
   modal({
     titulo: c ? `Corte · OP ${c.op || '—'}` : 'Programar corte', tamanho: 'lg',
@@ -3588,7 +3589,7 @@ function formCorte(c, diaPre = '') {
       <div class="form-sec">Tecidos</div>
       <div id="ct-tec"></div>
       <div class="form-sec">Andamento</div>
-      <div class="etapas ct-etapas">${ETAPAS_CORTE.map(([k, l]) => `<button type="button" class="etp${etapas[k] ? ' on' : ''}" data-ct-et="${k}" title="${etapas[k] && etapas[k] !== true ? `Feito ${fQuando(etapas[k])}` : 'Marcar como feito'}"><span class="bx">${ic('check')}</span>${l}${etapas[k] && etapas[k] !== true ? `<small>${fDia(etapas[k])}</small>` : ''}</button>`).join('')}</div>
+      <div id="ct-and"></div>
       <label class="fld"><span>Observação</span><textarea name="obs" rows="2">${esc(d0.obs || '')}</textarea></label>
       <div class="form-sec">Histórico</div>
       <div id="ct-hist"></div>
@@ -3648,13 +3649,19 @@ function formCorte(c, diaPre = '') {
       };
       form.addEventListener('input', calc); form.addEventListener('change', calc);
       form.ref.addEventListener('change', info); form.ref.addEventListener('blur', info);
-      m.$('.ct-etapas').addEventListener('click', e => {
-        const b = e.target.closest('[data-ct-et]'); if (!b) return;
-        const k = b.dataset.ctEt; etapas[k] = etapas[k] ? false : agoraISO();
-        b.classList.toggle('on', !!etapas[k]);
-        b.innerHTML = `<span class="bx">${ic('check')}</span>${(ETAPAS_CORTE.find(([x]) => x === k) || [])[1]}${etapas[k] ? `<small>${fDia(etapas[k])}</small>` : ''}`;
+      // andamento: tabela para escrever (como a de tecidos)
+      const desenhaAnd = () => {
+        m.$('#ct-and').innerHTML = `<div class="tbl-wrap"><table class="ft-tab ct-tec ct-and"><thead><tr>${ETAPAS_CORTE.map(([, l]) => `<th>${l}</th>`).join('')}<th></th></tr></thead><tbody>
+          ${andamento.map((r, i) => `<tr>${ETAPAS_CORTE.map(([k]) => `<td><input data-an="${i}|${k}" value="${esc(r[k] || '')}"></td>`).join('')}
+            <td class="x"><button type="button" class="icon-btn danger" data-an-x="${i}" title="Tirar linha">${ic('x')}</button></td></tr>`).join('')}</tbody></table></div>
+          <button type="button" class="btn sm" id="ct-and-add">${ic('plus')}Linha</button>`;
+      };
+      m.$('#ct-and').addEventListener('input', e => { const t = e.target.dataset.an; if (t) { const [i, k] = t.split('|'); andamento[+i][k] = e.target.value; } });
+      m.$('#ct-and').addEventListener('click', e => {
+        if (e.target.closest('#ct-and-add')) { andamento.push(Object.fromEntries(ETAPAS_CORTE.map(([k]) => [k, '']))); desenhaAnd(); }
+        const x = e.target.closest('[data-an-x]'); if (x) { andamento.splice(+x.dataset.anX, 1); desenhaAnd(); }
       });
-      desenhaTec(); info(); calc();
+      desenhaTec(); desenhaAnd(); info(); calc();
       form.addEventListener('submit', async e => {
         e.preventDefault();
         const fd = new FormData(form), v = n => String(fd.get(n) || '').trim();
@@ -3663,7 +3670,8 @@ function formCorte(c, diaPre = '') {
         const dados = { ref: ref || null, descricao: v('descricao') || null, sala: (v('sala') || '').replace('__outra', '') || null };
         ['previsto_corte', 'previsto_mod', 'status', 'data_op', 'total_quant_op', 'total_op', 'qtd_corte', 'prazo', 'oficina', 'obs'].forEach(k => { const x = v(k); if (x) dados[k] = x; });
         dados.tecidos = tecidos.filter(t => (t.tecido || '').trim());
-        dados.etapas = etapas;
+        dados.andamento = andamento.filter(r => ETAPAS_CORTE.some(([k]) => (r[k] || '').trim()));
+        if (d0.etapas) dados.etapas = d0.etapas;
         const btn = m.$('.btn.primary'); ocupado(btn, true);
         try {
           await salvarReg('cortes', { peca_id: pc ? pc.id : null, op: v('op') || null, data_corte: v('data_corte') || null, dados }, c && c.id);
@@ -3682,8 +3690,8 @@ function formCorte(c, diaPre = '') {
 function demoCortes(pecas) {
   const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return inData(x.toISOString()); };
   const c = (i, op, corte, prev, extra = {}) => ({ id: uid(), peca_id: pecas[i].id, op, data_corte: corte, criado_em: agoraISO(), atualizado_em: agoraISO(),
-    dados: { previsto_corte: prev, total_quant_op: '1200', qtd_corte: '600', oficina: 'Oficina Central', tecidos: [{ tecido: 'TRICOLINE WORK CITY', cor: 'OFF WHITE', estoque: '320 m', previsto: prev }], etapas: { pedido: agoraISO(), mod: agoraISO() }, ...extra } });
-  return [c(0, '13972', d(2), d(2)), c(1, '13947', d(5), d(3)), c(3, '14022', d(-1), d(1)), c(4, '14035', d(9), d(9), { etapas: {} })];
+    dados: { previsto_corte: prev, total_quant_op: '1200', qtd_corte: '600', oficina: 'Oficina Central', tecidos: [{ tecido: 'TRICOLINE WORK CITY', cor: 'OFF WHITE', estoque: '320 m', previsto: prev }], andamento: [{ pedido: 'OK', mod: 'OK 10/10', pil_eng: 'aguardando', eng_rev: '', req_tecido: '', aviamento: '', encaixe: '' }], ...extra } });
+  return [c(0, '13972', d(2), d(2)), c(1, '13947', d(5), d(3)), c(3, '14022', d(-1), d(1)), c(4, '14035', d(9), d(9), { andamento: [] })];
 }
 
 /* ================================================================
