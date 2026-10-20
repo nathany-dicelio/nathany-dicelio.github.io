@@ -3255,7 +3255,7 @@ const TIPOS_MAT = {
   aviamento: { nome: 'Aviamento', plural: 'Aviamentos', rota: 'aviamentos', icone: 'tag',
     campos: [['codigo', 'Código'], ['nome', 'Material / insumo'], ['un', 'UN'], ['aplicacao', 'Aplicação'], ['fornecedor', 'Fornecedor']] },
   etiqueta: { nome: 'Etiqueta', plural: 'Etiquetas', rota: 'etiquetas', icone: 'tag',
-    campos: [['cliente_id', 'Cliente / marca'], ['codigo', 'Código'], ['nome', 'Etiqueta'], ['tipo', 'Tipo'], ['un', 'UN'], ['aplicacao', 'Aplicação'], ['fornecedor', 'Fornecedor']] },
+    campos: [['cliente_id', 'Cliente / marca'], ['codigo', 'Código'], ['tamanho', 'Tamanho'], ['nome', 'Etiqueta'], ['tipo', 'Tipo'], ['un', 'UN'], ['aplicacao', 'Aplicação'], ['fornecedor', 'Fornecedor']] },
 };
 // na ficha de consumo: qual campo da linha corresponde a cada campo do material
 const MAT_FICHA = {
