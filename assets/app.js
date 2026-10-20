@@ -3271,6 +3271,22 @@ function acharMaterial(tipo, codigo, nome) {
   return (c && l.find(m => norm(m.codigo) === c)) || (n && l.find(m => norm(m.nome) === n)) || null;
 }
 const fotosMat = m => (valMat(m, 'fotos') || []).filter(p => !ehPdf(p));
+function coresSalvas() {
+  const cfg = S.db.config.find(x => x.chave === 'cores'), fora = new Set(((cfg && cfg.valor.removidas) || []).map(norm));
+  const lista = [...CORES_SUGERIDAS.map(([nome, hex]) => ({ nome, hex })), ...((cfg && cfg.valor.lista) || []), ...S.db.materiais.flatMap(m => m.cores || [])];
+  const vistas = new Set();
+  return lista.filter(c => { const k = norm(c.nome); if (!k || vistas.has(k) || fora.has(k)) return false; vistas.add(k); return true; });
+}
+async function guardarCores(novas, removida) {
+  const cfg = S.db.config.find(x => x.chave === 'cores'), v = clone((cfg && cfg.valor) || {});
+  v.lista = v.lista || []; v.removidas = v.removidas || [];
+  novas.forEach(c => {
+    if (!v.lista.some(x => norm(x.nome) === norm(c.nome)) && !CORES_SUGERIDAS.some(([n]) => norm(n) === norm(c.nome))) v.lista.push({ nome: c.nome, hex: c.hex });
+    v.removidas = v.removidas.filter(x => norm(x) !== norm(c.nome));
+  });
+  if (removida) { v.lista = v.lista.filter(x => norm(x.nome) !== norm(removida)); if (!v.removidas.some(x => norm(x) === norm(removida))) v.removidas.push(removida); }
+  await salvarReg('config', cfg ? { valor: v } : { chave: 'cores', valor: v }, cfg && cfg.id);
+}
 const corSw = c => `<span class="cor-sw" style="--c:${esc(c.hex || '#ccc')}" title="${esc(c.nome || '')}"></span>`;
 
 function viewMateriais(arg) {
@@ -3330,7 +3346,7 @@ function formMaterial(tipo, m = null) {
       <label class="fld"><span>Observação</span><input name="obs" value="${esc(m ? valMat(m, 'obs') : '')}"></label>
       <div class="fld"><span class="lbl">Fotos <span class="hint">· ${tipo === 'tecido' ? 'da estampa / do tecido, ajuda a achar na hora de procurar' : `da ${T.nome.toLowerCase()}`}</span></span><div class="fotos-edit" id="mat-fotos"></div></div>
       <div class="fld"><span class="lbl">Cores disponíveis <span class="hint">· aparecem como opção de cor na ficha</span></span><div class="cores-ed" id="cores"></div>
-        <div class="cores-sug">${CORES_SUGERIDAS.map(([n, h]) => `<button type="button" class="chip" data-sug="${esc(n)}|${h}">${corSw({ hex: h })}${n}</button>`).join('')}</div></div>
+        <div class="cores-sug" id="cores-sug"></div></div>
       <datalist id="dl-un-mat"><option value="MT"><option value="UN"><option value="KG"><option value="CM"><option value="PC"></datalist>
     </form>`,
     rodape: `${m ? `<button type="button" class="btn danger esq" id="mat-del">${ic('trash')}Excluir</button>` : ''}<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fmat" class="btn primary">Salvar</button>`,
@@ -3350,7 +3366,14 @@ function formMaterial(tipo, m = null) {
         if (e.target.closest('#cor-add')) { cores.push({ nome: '', hex: '#cccccc' }); desenhaCores(); box.querySelector(`[data-cn="${cores.length - 1}"]`).focus(); }
         const x = e.target.closest('[data-cx]'); if (x) { cores.splice(+x.dataset.cx, 1); desenhaCores(); }
       });
-      md.$('.cores-sug').addEventListener('click', e => {
+      const desenhaSug = () => {
+        md.$('#cores-sug').innerHTML = coresSalvas().map(c => `<span class="chip cor-sug"><button type="button" data-sug="${esc(c.nome)}|${esc(c.hex)}">${corSw(c)}${esc(c.nome)}</button><button type="button" class="cor-sug-x" data-sug-x="${esc(c.nome)}" title="Tirar esta cor da lista">${ic('x')}</button></span>`).join('')
+          || '<span class="muted small">Nenhuma cor salva.</span>';
+      };
+      desenhaSug();
+      md.$('.cores-sug').addEventListener('click', async e => {
+        const x = e.target.closest('[data-sug-x]');
+        if (x) { try { await guardarCores([], x.dataset.sugX); desenhaSug(); } catch (err) { toast(msgErro(err), 'erro'); } return; }
         const b = e.target.closest('[data-sug]'); if (!b) return;
         const [nome, hex] = b.dataset.sug.split('|');
         if (!cores.some(c => norm(c.nome) === norm(nome))) { cores.push({ nome, hex }); desenhaCores(); }
@@ -3376,6 +3399,9 @@ function formMaterial(tipo, m = null) {
             salvo = await salvarReg('materiais', { dados: { ...dados, fotos: dados.fotos.concat(paths) } }, salvo.id);
           }
           if (rem.length) S.api.removerArquivos(rem).catch(() => {});
+          const salvas = (((S.db.config.find(x => x.chave === 'cores') || {}).valor || {}).lista || []).map(c => norm(c.nome));
+          const novasCores = row.cores.filter(c => !salvas.includes(norm(c.nome)) && !CORES_SUGERIDAS.some(([n]) => norm(n) === norm(c.nome)));
+          if (novasCores.length) await guardarCores(novasCores).catch(() => {});
           md.fechar(); toast(`${T.nome} salvo.`); rerender();
         } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); }
       });

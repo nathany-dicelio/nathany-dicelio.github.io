@@ -1459,3 +1459,9 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .cons-grp-h b { font-size: 13.5px; color: var(--brand); }
 .cons-grp-h span { color: var(--mute); }
 .cons-grp .docs { margin-top: 6px; }
+
+.cor-sug { padding: 0 4px 0 0; gap: 0; }
+.cor-sug > button { border: 0; background: none; font: inherit; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; height: 100%; }
+.cor-sug .cor-sug-x { padding: 0 4px; opacity: 0; color: var(--mute); }
+.cor-sug:hover .cor-sug-x { opacity: 1; }
+.cor-sug .cor-sug-x svg { width: 12px; height: 12px; }
