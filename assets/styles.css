@@ -1451,3 +1451,11 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .uso-bar.alto i { background: var(--red); }
 .aviso-uso { margin-bottom: 16px; }
 .aviso-uso a { color: inherit; font-weight: 700; }
+
+/* arquivos do consumo separados por pedido */
+.cons-grp { padding: 8px 0 10px; border-bottom: 1px dashed var(--line); }
+.cons-grp:last-child { border-bottom: 0; }
+.cons-grp-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 6px; }
+.cons-grp-h b { font-size: 13.5px; color: var(--brand); }
+.cons-grp-h span { color: var(--mute); }
+.cons-grp .docs { margin-top: 6px; }

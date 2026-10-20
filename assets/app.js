@@ -271,6 +271,10 @@ function SupaAPI() {
     async urlArquivo(path, nome) { return ok(await B().createSignedUrl(path, 600, nome ? { download: nome } : undefined)).signedUrl; },
     async removerArquivos(paths) { if (paths.length) ok(await B().remove(paths)); },
     async uso() { return ok(await sb.rpc('uso_armazenamento')); },
+    async datasArquivos(pasta) {
+      const d = ok(await B().list(pasta, { limit: 1000 }));
+      const m = {}; d.forEach(x => { if (x.created_at) m[`${pasta}/${x.name}`] = x.created_at; }); return m;
+    },
   };
 }
 
@@ -325,6 +329,7 @@ function DemoAPI() {
     async urlArquivo(path) { const r = await fetch(arqs[path]); return URL.createObjectURL(await r.blob()); },
     async removerArquivos(paths) { paths.forEach(p => delete arqs[p]); gravarArqs(); },
     async uso() { return { banco: 17.2e6, arquivos: 216e6 }; },
+    async datasArquivos() { return {}; },
   };
 }
 
@@ -584,6 +589,30 @@ const imgsCons = pc => arqCons(pc).filter(p => !ehPdf(p));
 const pdfsCons = pc => arqCons(pc).filter(ehPdf);
 // catálogo: só peças que têm desenho (consumo não entra)
 const noCatalogo = pc => S.db.pedidos.some(p => p.peca_id === pc.id && p.tipo === 'desenho');
+// cada pedido de consumo guarda os seus arquivos em etapas._arquivos; os antigos vão para o pedido da data em que foram enviados
+S.arqDatas = {};
+async function carregarDatasCons(pc) {
+  if (!pc || S.arqDatas[pc.id] || !arqCons(pc).length) return false;
+  try { S.arqDatas[pc.id] = await S.api.datasArquivos(`pecas/${pc.id}`); } catch (e) { S.arqDatas[pc.id] = {}; }
+  return true;
+}
+function gruposCons(pc) {
+  const peds = S.db.pedidos.filter(p => p.peca_id === pc.id && p.tipo === 'consumo').sort((a, b) => String(b.pedido_em).localeCompare(String(a.pedido_em)));
+  const datas = S.arqDatas[pc.id] || {}, dono = {};
+  peds.forEach(p => ((p.etapas || {})._arquivos || []).forEach(a => { if (!dono[a]) dono[a] = p.id; }));
+  arqCons(pc).forEach(a => {
+    if (dono[a] || !peds.length) return;
+    const d = datas[a];
+    const alvo = d ? (peds.find(p => new Date(p.pedido_em) <= new Date(d)) || peds[peds.length - 1]) : peds[0];
+    dono[a] = alvo.id;
+  });
+  const todos = arqCons(pc).slice().reverse();
+  const g = peds.map(p => ({ p, arqs: todos.filter(a => dono[a] === p.id) })).filter(x => x.arqs.length);
+  const soltos = todos.filter(a => !dono[a]);
+  if (soltos.length) g.push({ p: null, arqs: soltos });
+  return g;
+}
+const arqsDoPedido = p => { const pc = peca(p.peca_id); return pc ? ((gruposCons(pc).find(x => x.p && x.p.id === p.id) || {}).arqs || []) : []; };
 const campoArq = tipo => (tipo === 'consumo' ? 'arquivos_consumo' : 'fotos');
 // etapa marcada guarda a data/hora (texto ISO); registros antigos guardam só "true"
 const ehNC = v => typeof v === 'string' && v.startsWith('nc:');
@@ -974,7 +1003,12 @@ async function acoesGlobais(e) {
     case 'editar-tarefa': return formTarefa(byId('tarefas', id));
     case 'excluir-tarefa': return excluirTarefa(id);
     case 'entregar': return entregarTarefa(byId('tarefas', id));
-    case 'fotos': { const pc = peca(id); return pc && lightbox(a.dataset.cons ? imgsCons(pc) : imagens(pc), +(a.dataset.i || 0)); }
+    case 'fotos': {
+      const pc = peca(id); if (!pc) return;
+      const ped = a.dataset.ped && byId('pedidos', a.dataset.ped);
+      const lista = ped ? arqsDoPedido(ped).filter(x => !ehPdf(x)) : a.dataset.cons ? imgsCons(pc) : imagens(pc);
+      return lightbox(lista, +(a.dataset.i || 0));
+    }
     default:
   }
 }
@@ -1227,8 +1261,9 @@ function linhaPedido(p) {
   return `<tr>
     <td data-l="Pedido"><div class="when"><b>${fDia(p.pedido_em)}</b><small>${fHora(p.pedido_em)}</small></div></td>
     <td class="c-ref"><div class="ref">${(() => {
-      const cons = p.tipo === 'consumo', cp = cons ? imgsCons(pc)[0] : capa(pc);
-      return cp ? `<button type="button" class="th zoom" data-acao="fotos" data-id="${pc.id}"${cons ? ' data-cons="1"' : ''} data-foto="${esc(cp)}" title="Ver arquivos">${ic('dress')}</button>` : thumb(null);
+      const cons = p.tipo === 'consumo', cp = cons ? (arqsDoPedido(p).filter(x => !ehPdf(x))[0] || imgsCons(pc)[0]) : capa(pc);
+      const ped = cons && arqsDoPedido(p).some(x => !ehPdf(x)) ? ` data-ped="${p.id}"` : '';
+      return cp ? `<button type="button" class="th zoom" data-acao="fotos" data-id="${pc.id}"${cons ? ' data-cons="1"' : ''}${ped} data-foto="${esc(cp)}" title="Ver arquivos">${ic('dress')}</button>` : thumb(null);
     })()}
       <div style="min-width:0"><a href="#/peca/${pc.id}">${esc(pc.ref || '—')}</a><div class="meta">${cbadge(pc.cliente_id)}${op ? `<span>OP ${esc(op)}</span>` : ''}${p.tipo === 'consumo' && pc.sala ? `<span class="sala">${esc(pc.sala)}</span>` : ''}${(p.tipo === 'consumo' ? pdfsCons(pc) : pdfs(pc)).length ? `<span class="tag brand sem" style="height:18px;font-size:10.5px">PDF</span>` : ''}</div>
       ${pc.descricao ? `<div class="small" style="color:var(--ink);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(pc.descricao)}">${esc(pc.descricao)}</div>` : ''}
@@ -1306,7 +1341,13 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
     rodape: `<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fp" class="btn primary">${pedido ? 'Salvar' : 'Cadastrar'}</button>`,
     aoAbrir: m => {
       const form = m.$('#fp');
-      fotos = editorFotos(m.$('#fotos'), pcAtual ? (pcAtual[campoArq(tipo)] || []) : []);
+      const iniciais = () => (tipo === 'consumo' ? (pedido ? arqsDoPedido(pedido) : []) : (pcAtual ? (pcAtual.fotos || []) : []));
+      let doPedido = iniciais();
+      fotos = editorFotos(m.$('#fotos'), doPedido);
+      if (tipo === 'consumo' && pedido && pcAtual) carregarDatasCons(pcAtual).then(mudou => {
+        if (!mudou || fotos.novas().length || fotos.removidas().length) return;
+        doPedido = iniciais(); fotos.trocar(doPedido);
+      });
       ligarNovaPessoa(form);
       ligarSala(form);
       const fimInp = form.fim;
@@ -1344,7 +1385,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
             if (!form.op.value && achada.op) form.op.value = achada.op;
             if (!form.descricao.value && achada.descricao) form.descricao.value = achada.descricao;
             if (form.colecao && !form.colecao.value) form.colecao.value = colecaoDe(achada);
-            fotos.trocar(achada[campoArq(tipo)] || []);
+            if (tipo !== 'consumo') fotos.trocar(achada.fotos || []);
           }
         } else {
           box.innerHTML = ref ? `<div class="peca-info">${ic('info')}<div>Referência nova — a peça <b>${esc(ref)}</b> será criada no catálogo.</div></div>` : '';
@@ -1375,6 +1416,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
           const novas = await enviarFotos(pc.id, fotos.novas());
           const campo = campoArq(tipo);
           const rem = fotos.removidas().filter(x => (pc[campo] || []).includes(x));
+          const arqsPedido = tipo === 'consumo' ? doPedido.filter(x => !rem.includes(x)).concat(novas) : null;
           if (novas.length || rem.length) {
             pc = await salvarReg('pecas', { [campo]: (pc[campo] || []).filter(x => !rem.includes(x)).concat(novas) }, pc.id);
             if (rem.length) S.api.removerArquivos(rem).catch(() => {});
@@ -1384,6 +1426,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
             ...Object.fromEntries(ETAPAS[tipo].map(([k]) => [k, valorEt(k)])),
             ...Object.fromEntries(POS_ETAPAS[tipo].map(([k]) => [k, marca(k, !!fd.get(`pos_${k}`))])) };
           if (tipo === 'consumo') {
+            etapas._arquivos = arqsPedido;
             const av = AVISOS_CONSUMO.map(([k]) => k).filter(k => fd.get(`av_${k}`));
             if (av.length) etapas._avisos = av; else delete etapas._avisos;
           }
@@ -1667,9 +1710,7 @@ function viewPeca(id) {
       <div class="mini" id="mini">${fotos.map((f, i) => `<button type="button" class="th${i === 0 ? ' on' : ''}" data-i="${i}" data-foto="${esc(f)}" aria-label="Foto ${i + 1}">${ic('dress')}</button>`).join('')}
         <label class="add" title="Adicionar fotos ou PDFs" style="aspect-ratio:1;border-radius:9px;cursor:pointer">${ic('camera')}<input type="file" accept="image/*,application/pdf,.pdf" multiple hidden id="add-foto"></label></div>
       ${docs.length ? `<div class="docs">${docs.map(d => `<button type="button" class="doc" data-pdf="${esc(d)}"><span class="pdf-ic">PDF</span><span class="pdf-nm">${esc(nomePdf(d))}</span>${ic('external')}</button>`).join('')}</div>` : ''}
-      ${arqCons(pc).length ? `<div class="cons-arqs"><div class="form-sec">Arquivos do consumo</div>
-        <div class="mini">${imgsCons(pc).map((f, i) => `<button type="button" class="th" data-acao="fotos" data-cons="1" data-id="${pc.id}" data-i="${i}" data-foto="${esc(f)}" aria-label="Arquivo do consumo ${i + 1}">${ic('dress')}</button>`).join('')}</div>
-        ${pdfsCons(pc).length ? `<div class="docs">${pdfsCons(pc).map(d => `<button type="button" class="doc" data-pdf="${esc(d)}"><span class="pdf-ic">PDF</span><span class="pdf-nm">${esc(nomePdf(d))}</span>${ic('external')}</button>`).join('')}</div>` : ''}</div>` : ''}
+      ${arqCons(pc).length ? `<div class="cons-arqs" id="cons-arqs">${consArqsHtml(pc)}</div>` : ''}
     </div>
     <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
       <div class="card">
@@ -1713,8 +1754,21 @@ function viewPeca(id) {
     catch (err) { toast(msgErro(err), 'erro'); }
   });
   $$('[data-pdf]', view()).forEach(b => { b.onclick = () => abrirArquivo(b.dataset.pdf); });
+  carregarDatasCons(pc).then(mudou => {
+    const box = $('#cons-arqs'); if (!mudou || !box) return;
+    box.innerHTML = consArqsHtml(pc); hidratarFotos(box);
+    $$('[data-pdf]', box).forEach(b => { b.onclick = () => abrirArquivo(b.dataset.pdf); });
+  });
   $('#ed-peca').onclick = () => formPeca(pc);
   $('#ed-det').onclick = () => formPeca(pc);
+}
+function consArqsHtml(pc) {
+  return `<div class="form-sec">Arquivos do consumo</div>${gruposCons(pc).map(({ p, arqs }) => {
+    const imgs = arqs.filter(x => !ehPdf(x)), docs = arqs.filter(ehPdf);
+    return `<div class="cons-grp"><div class="cons-grp-h">${p ? `<b>${fData(p.pedido_em)}</b><span>${fHora(p.pedido_em)}${p.de_id ? ' · ' + esc((pessoa(p.de_id) || {}).nome || '') : ''}${p.finalizado_em ? ' · finalizado ' + fDia(p.finalizado_em) : ' · em andamento'}</span>` : '<b>Sem pedido</b>'}</div>
+      ${imgs.length ? `<div class="mini">${imgs.map((f, i) => `<button type="button" class="th" data-acao="fotos" data-cons="1" data-id="${pc.id}"${p ? ` data-ped="${p.id}"` : ''} data-i="${i}" data-foto="${esc(f)}" aria-label="Arquivo do consumo ${i + 1}">${ic('dress')}</button>`).join('')}</div>` : ''}
+      ${docs.length ? `<div class="docs">${docs.map(d => `<button type="button" class="doc" data-pdf="${esc(d)}"><span class="pdf-ic">PDF</span><span class="pdf-nm">${esc(nomePdf(d))}</span>${ic('external')}</button>`).join('')}</div>` : ''}</div>`;
+  }).join('')}`;
 }
 function itemHistPedido(p) {
   const tot = ETAPAS[p.tipo].length, n = ETAPAS[p.tipo].filter(([k]) => (p.etapas || {})[k]).length;
