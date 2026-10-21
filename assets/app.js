@@ -3253,7 +3253,7 @@ const TIPOS_MAT = {
   tecido: { nome: 'Tecido', plural: 'Tecidos', rota: 'tecidos', icone: 'scissors',
     campos: [['codigo', 'Código'], ['nome', 'Tecido'], ['gramatura', 'Gramatura'], ['largura', 'Largura'], ['composicao', 'Composição'], ['fornecedor', 'Fornecedor'], ['marca', 'Marca']] },
   aviamento: { nome: 'Aviamento', plural: 'Aviamentos', rota: 'aviamentos', icone: 'tag',
-    campos: [['codigo', 'Código'], ['nome', 'Material / insumo'], ['un', 'UN'], ['aplicacao', 'Aplicação'], ['fornecedor', 'Fornecedor']] },
+    campos: [['codigo', 'Código'], ['nome', 'Material / insumo'], ['tamanho', 'Tamanho'], ['un', 'UN'], ['aplicacao', 'Aplicação'], ['fornecedor', 'Fornecedor']] },
   etiqueta: { nome: 'Etiqueta', plural: 'Etiquetas', rota: 'etiquetas', icone: 'tag',
     campos: [['cliente_id', 'Cliente / marca'], ['codigo', 'Código'], ['tamanho', 'Tamanho'], ['nome', 'Etiqueta'], ['tipo', 'Tipo'], ['un', 'UN'], ['aplicacao', 'Aplicação'], ['fornecedor', 'Fornecedor']] },
 };
@@ -3342,7 +3342,7 @@ function formMaterial(tipo, m = null) {
     corpo: `<form class="form" id="fmat" autocomplete="off" novalidate>
       <div class="grid3">${T.campos.map(([k, l]) => (k === 'cliente_id'
         ? `<label class="fld"><span>${l}</span><select name="cliente_id">${opClientes(m ? valMat(m, 'cliente_id') : (S.f.mat && S.f.mat.cli && S.f.mat.cli !== '-' ? S.f.mat.cli : ''), '—')}</select></label>`
-        : `<label class="fld${k === 'nome' ? ' span2' : ''}"><span>${l}${k === 'nome' ? ' *' : ''}</span><input name="${k}" value="${esc(m ? valMat(m, k) : '')}"${k === 'nome' ? ' autofocus' : ''}${k === 'un' ? ' list="dl-un-mat"' : ''}></label>`)).join('')}</div>
+        : `<label class="fld${k === 'nome' && tipo !== 'aviamento' ? ' span2' : ''}"><span>${l}${k === 'nome' ? ' *' : ''}</span><input name="${k}" value="${esc(m ? valMat(m, k) : '')}"${k === 'nome' ? ' autofocus' : ''}${k === 'un' ? ' list="dl-un-mat"' : ''}></label>`)).join('')}</div>
       <label class="fld"><span>Observação</span><input name="obs" value="${esc(m ? valMat(m, 'obs') : '')}"></label>
       <div class="fld"><span class="lbl">Fotos <span class="hint">· ${tipo === 'tecido' ? 'da estampa / do tecido, ajuda a achar na hora de procurar' : `da ${T.nome.toLowerCase()}`}</span></span><div class="fotos-edit" id="mat-fotos"></div></div>
       <div class="fld"><span class="lbl">Cores disponíveis <span class="hint">· aparecem como opção de cor na ficha</span></span><div class="cores-ed" id="cores"></div>
