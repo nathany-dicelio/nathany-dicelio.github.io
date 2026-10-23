@@ -872,6 +872,7 @@ function renderShell() {
         <a href="#/consumos" data-r="consumos">${ic('scissors')}Mini consumo<span class="cnt hidden" data-cnt="consumo"></span></a>
         <a href="#/fazer" data-r="fazer">${ic('list')}Fazer<span class="cnt hidden" data-cnt="fazer"></span></a>
         <a href="#/etapas" data-r="etapas">${ic('flow')}Etapas<span class="cnt hidden" data-cnt="etapas"></span></a>
+        <a href="#/etapas-baila" data-r="etapas-baila">${ic('flow')}Etapa Baila<span class="cnt hidden" data-cnt="etapas-baila"></span></a>
         <a href="#/corte" data-r="corte">${ic('calendar')}Programação de corte</a>
         <div class="grp">Fichas</div>
         <a href="#/produto" data-r="produto">${ic('dress')}Produto</a>
@@ -928,7 +929,8 @@ function atualizarContadores() {
   set('desenho', S.db.pedidos.filter(p => p.tipo === 'desenho' && !p.finalizado_em).length);
   set('consumo', S.db.pedidos.filter(p => p.tipo === 'consumo' && !p.finalizado_em).length);
   set('fazer', S.db.tarefas.filter(t => !t.entregue_em).length);
-  set('etapas', S.db.fluxos.reduce((n, fl) => { const pc = peca(fl.peca_id); return n + (pc ? situacaoFluxo(pc).pend : 0); }, 0));
+  const pendEt = baila => S.db.fluxos.reduce((n, fl) => { const pc = peca(fl.peca_id); return n + (pc && daAbaEtapas(pc, baila) ? situacaoFluxo(pc).pend : 0); }, 0);
+  set('etapas', pendEt(false)); set('etapas-baila', pendEt(true));
 }
 
 /* busca global (topo) */
@@ -1025,7 +1027,8 @@ const ROTAS = {
   medidas: viewMedidas,
   ajustes: viewAjustes,
   ponto: viewPonto,
-  etapas: viewEtapas,
+  etapas: a => viewEtapas(a),
+  'etapas-baila': viewEtapasBaila,
   produto: viewProduto,
   corte: viewCorte,
   materiais: viewMateriais,
@@ -1718,7 +1721,7 @@ function viewPeca(id) {
           <div class="row">${c ? `<span class="cbadge" style="--c:${esc(c.cor)}">${esc(c.nome)}</span>` : '<span class="tag gray sem">Sem cliente</span>'}${pc.sala ? `<span class="tag gray sem">Sala ${esc(pc.sala)}</span>` : ''}${tagStatus('desenho', st.desenho)}${tagStatus('consumo', st.consumo)}</div>
           <div class="ref">${esc(pc.ref)}</div>
           ${pc.descricao ? `<div style="color:var(--ink-2);font-size:15px">${esc(pc.descricao)}</div>` : ''}
-          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button><a class="btn sm" href="#/produto/${pc.id}">${ic('dress')}Produto</a>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button><a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}Ficha técnica e consumo</a><a class="btn sm" href="#/etapas/${pc.id}">${ic('flow')}Etapas · ${esc(situacaoFluxo(pc).atual ? nomeFluxo(situacaoFluxo(pc).atual) : 'concluído')}</a></div>
+          <div class="row"><button class="btn sm" id="ed-peca">${ic('edit')}Editar peça</button><a class="btn sm" href="#/produto/${pc.id}">${ic('dress')}Produto</a>${c && S.db.guia_manuais.some(m => m.cliente_id === c.id) ? `<a class="btn sm" href="#/medidas/${c.id}">${ic('ruler')}Guia de medidas</a>` : ''}<button class="btn sm" data-novo="tarefa" data-peca="${pc.id}">${ic('list')}Nova tarefa</button><a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}Ficha técnica e consumo</a><a class="btn sm" href="#/${ehBaila(pc) ? 'etapas-baila' : 'etapas'}/${pc.id}">${ic('flow')}Etapas · ${esc(situacaoFluxo(pc).atual ? nomeFluxo(situacaoFluxo(pc).atual) : 'concluído')}</a></div>
         </div>
         <div class="info">
           <div><small>OP</small><b>${ops.length ? esc(ops.join(', ')) : '—'}</b></div>
@@ -2906,15 +2909,20 @@ function ligarSala(form) {
 }
 
 /* ---------- tela ---------- */
-function viewEtapas(arg) {
-  const f = S.f.etapas || (S.f.etapas = { q: '', cli: '', sala: '', st: 'andamento' });
+// "Etapa Baila" mostra só os modelos da Baila; "Etapas" mostra os outros
+const ehBaila = pc => norm((cliente(pc.cliente_id) || {}).nome) === 'baila';
+const daAbaEtapas = (pc, baila) => (baila ? ehBaila(pc) : !ehBaila(pc));
+function viewEtapasBaila(arg) { return viewEtapas(arg, true); }
+function viewEtapas(arg, baila = false) {
+  const chave = baila ? 'etapasBaila' : 'etapas', rotaEt = baila ? 'etapas-baila' : 'etapas';
+  const f = S.f[chave] || (S.f[chave] = { q: '', cli: '', sala: '', st: 'andamento' });
   const modo = pref.get('etapasModo', 'linha');
-  setPage('Etapas', 'O caminho de cada modelo, da criação ao corte de produção', `<button class="btn primary" id="et-add">${ic('plus')}<span class="tx">Novo modelo</span></button>`);
+  setPage(baila ? 'Etapa Baila' : 'Etapas', baila ? 'O caminho de cada modelo da Baila, da criação ao corte de produção' : 'O caminho de cada modelo, da criação ao corte de produção', `<button class="btn primary" id="et-add">${ic('plus')}<span class="tx">Novo modelo</span></button>`);
   view().innerHTML = `<div class="card">
     <div class="toolbar">
       <div class="busca">${ic('search')}<input class="inp" data-f="q" placeholder="Filtrar por REF, OP, descrição ou responsável" value="${esc(f.q)}"></div>
-      <select class="inp" data-f="cli">${opClientes(f.cli, 'Todos os clientes')}</select>
-      <select class="inp" data-f="sala">${opcoes(salasLista().filter(s => S.db.pecas.some(p => p.sala === s)).map(s => [s, s]), f.sala, 'Todas as salas')}</select>
+      ${baila ? '' : `<select class="inp" data-f="cli">${opcoes(clientesOrd().filter(c => norm(c.nome) !== 'baila').map(c => [c.id, c.nome]), f.cli, 'Todos os clientes')}</select>`}
+      <select class="inp" data-f="sala">${opcoes(salasLista().filter(s => S.db.pecas.some(p => p.sala === s && daAbaEtapas(p, baila))).map(s => [s, s]), f.sala, 'Todas as salas')}</select>
       <div class="chips" id="et-modo"><button class="chip${modo === 'linha' ? ' on' : ''}" data-modo="linha">${ic('flow')}Linha do tempo</button><button class="chip${modo === 'quadro' ? ' on' : ''}" data-modo="quadro">${ic('grid')}Quadro</button></div>
     </div>
     <div class="chips chips-row" id="et-st"></div>
@@ -2923,6 +2931,7 @@ function viewEtapas(arg) {
   const desenhar = () => {
     const qn = norm(f.q);
     const base = S.db.pecas.filter(pc => {
+      if (!daAbaEtapas(pc, baila)) return false;
       if (f.cli && pc.cliente_id !== f.cli) return false;
       if (f.sala && pc.sala !== f.sala) return false;
       if (qn) {
@@ -2963,7 +2972,7 @@ function viewEtapas(arg) {
   // #/etapas/<id da peça>: abre a etapa atual da peça (ou coloca a peça nas etapas)
   if (arg && peca(arg)) {
     const pc = peca(arg);
-    history.replaceState(null, '', '#/etapas');
+    history.replaceState(null, '', `#/${rotaEt}`);
     formEtapa(pc, situacaoFluxo(pc).atual || FLUXO[FLUXO.length - 1][0]);
   }
 }
@@ -3051,7 +3060,7 @@ function formAddFluxo(pcPre = null) {
           }
           if (!fluxoDe(pc.id)) await salvarReg('fluxos', { peca_id: pc.id, etapas: {} });
           m.fechar(); toast(`${ref} nas etapas.`);
-          if (S.rota.nome === 'etapas') rerender(); else location.hash = '#/etapas';
+          if (String(S.rota.nome).startsWith('etapas')) rerender(); else location.hash = ehBaila(pc) ? '#/etapas-baila' : '#/etapas';
         } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); }
       });
     },
@@ -3492,7 +3501,7 @@ function paginaProduto(pc) {
       <span class="salvo ok" id="salvo">${ic('check')}Tudo salvo</span>
       <div class="r">
         <a class="btn sm" href="#/peca/${pc.id}">${ic('dress')}<span class="tx">Peça</span></a>
-        <a class="btn sm" href="#/etapas/${pc.id}">${ic('flow')}<span class="tx">Etapas</span></a>
+        <a class="btn sm" href="#/${ehBaila(pc) ? 'etapas-baila' : 'etapas'}/${pc.id}">${ic('flow')}<span class="tx">Etapas</span></a>
         <a class="btn sm primary" href="#/ficha-tecnica/${pc.id}">${ic('file')}<span class="tx">Ficha técnica</span></a>
       </div>
     </div>
