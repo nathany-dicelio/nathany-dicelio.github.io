@@ -13,10 +13,10 @@ Site estático (HTML + CSS + JavaScript puro) com banco **Supabase**, no mesmo e
 | Mini consumo | Pedidos de consumo com checklist (Consumo, Sisplan, Foto, ISA) e a sala da peça (Farm, Blue Steel, Plus size…) |
 | Produto | Página de cada referência: fotos e PDFs, REF grande, status, responsável, modelista, piloteira, OP, informações (marca, sala, preço, peça piloto, datas, quantidade, grade…) e os tecidos, aviamentos e etiquetas |
 | Materiais | Cadastro de tecidos, aviamentos e etiquetas (código, gramatura, largura, composição, fornecedor, cores disponíveis); na ficha de consumo, escolher o material preenche a linha |
-| Ficha técnica | Pesquisa a peça e abre a ficha técnica + ficha de consumo (no final), tudo editável. Impressão em 3 folhas A4: 1) dados, desenho, obs. e etiquetas; 2) desenho das cotas, foto da tabela de medidas, acabamento e aviamentos; 3) ficha de consumo |
+| Ficha técnica | Pesquisa a peça e abre a ficha técnica + ficha de consumo (no final), tudo editável; o relatório de encaixe do Audaces (PDF) preenche a largura e o consumo do tecido. Impressão em 3 folhas A4: 1) dados, desenho, obs. e etiquetas; 2) desenho das cotas, foto da tabela de medidas, acabamento e aviamentos; 3) ficha de consumo |
 | Programação de corte | Calendário do mês com as OPs de cada dia de corte; cada OP tem previsto corte/mod, status (atrasado, em dia, adiantado), semana, data de corte e da OP, quantidades, prazo, oficina, tecidos (cor, estoque, previsto), andamento (pedido, mod, pil. engenharia, engenharia revisão, req. tecido, aviamento, encaixe) e o histórico da peça |
 | Fazer | Tarefas: quem pediu, prazo e entrega (data/hora e para quem) |
-| Etapas | Caminho de cada modelo (Criação → Corte produção PCP) em linha do tempo ou quadro; cada etapa tem status (a fazer, feito, pular, revisão), arquivos, pendências, responsável e prazo, com atalhos para a peça, desenho, mini consumo e fichas |
+| Etapas | Caminho de cada modelo (Criação → Corte produção PCP) em linha do tempo ou quadro; cada etapa tem status (a fazer, feito, pular, revisão), arquivos, pendências, responsável e prazo; o botão Responsáveis define quem cuida de cada etapa em todos os modelos e dá para filtrar por pessoa, com atalhos para a peça, desenho, mini consumo e fichas |
 | Catálogo | Cartões com foto, REF, OP e situação; abre a ficha da peça |
 | Medidas | Guia de consulta dos manuais (Renner, C&A, Havan): busca por código ou nome, desenho, como medir, página do PDF; e arquivos avulsos |
 | Pessoas e clientes | Cores das pessoas, siglas dos clientes (RNN, CeA, IND…) |
