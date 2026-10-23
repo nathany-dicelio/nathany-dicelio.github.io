@@ -414,7 +414,7 @@ function demoSeed() {
     return { id: uid(), manual: 'renner', codigo, nome, como_medir, grupo, pagina, imagem, extra: {}, ordem: i + 1, favorito: i === 0, criado_em: em(10) };
   });
   const guia_manuais = [{ id: uid(), manual: 'renner', cliente_id: C('RNN'), titulo: 'Manual de POMs (exemplo)', arquivo: null, paginas: 70, criado_em: em(10) }];
-  return { db: { pessoas, clientes, pecas, pedidos, tarefas, medidas: [], guia_manuais, guia_pontos, fichas: [demoFicha(pecas[0])], fluxos: demoFluxos(pecas, pessoas), materiais: demoMateriais(), cortes: demoCortes(pecas), ...demoPonto() }, arquivos };
+  return { db: { pessoas, clientes, pecas, pedidos, tarefas, medidas: [], guia_manuais, guia_pontos, fichas: [demoFicha(pecas[0])], fluxos: demoFluxos(pecas, pessoas), materiais: demoMateriais(), cortes: demoCortes(pecas), ...demoPonto(), config: [demoResp(pessoas)] }, arquivos };
 }
 
 /* ================================================================
@@ -2894,6 +2894,46 @@ function textoDias(desde) {
   return d <= 0 ? 'hoje' : plural(d, 'dia');
 }
 
+/* ---------- responsável padrão de cada etapa (vale quando o modelo não tem alguém escolhido na etapa) ---------- */
+const cfgResp = () => S.db.config.find(x => x.chave === 'resp_etapas');
+const respPadrao = k => (((cfgResp() || {}).valor || {})[k] || []).filter(id => pessoa(id));
+const respDaEtapa = (e, k) => (e && e.resp ? [e.resp] : respPadrao(k));
+const nomesResp = ids => ids.map(id => (pessoa(id) || {}).nome).filter(Boolean);
+const chipsResp = (ids, max = 2) => ids.slice(0, max).map(pchip).join('') + (ids.length > max ? `<span class="muted small">+${ids.length - max}</span>` : '');
+const curtoResp = ids => { const n = nomesResp(ids).map(x => x.split(' ')[0]); return n.slice(0, 2).join(', ') + (n.length > 2 ? ` +${n.length - 2}` : ''); };
+function demoResp(pessoas) {
+  const P = (...n) => n.map(x => pessoas.find(p => p.nome === x).id);
+  const prod = P('Karen', 'Kath'), mod = P('Marino', 'Anderson');
+  return { id: uid(), chave: 'resp_etapas', criado_em: agoraISO(), valor: {
+    criacao: prod, ficha_desenv: prod, envio_cliente: prod, negociacao: prod, envio_cliente2: prod, liberacao_produto: prod,
+    modelagem: mod, ajuste_modelagem: mod, liberacao_modelagem: mod, corte_piloto: P('Shot'), consumo: P('Lu'), ficha_tecnica: P('Lu'),
+  } };
+}
+function formRespEtapas() {
+  const atual = clone(((cfgResp() || {}).valor) || {});
+  const linhas = () => FLUXO.map(([k, l]) => `<div class="rp-l"><b>${esc(l)}</b><div class="pick">${pessoasOrd().filter(p => p.ativo !== false || (atual[k] || []).includes(p.id))
+    .map(p => `<label><input type="checkbox" data-rp="${k}" value="${p.id}"${(atual[k] || []).includes(p.id) ? ' checked' : ''}><span class="pk" style="--c:${esc(p.cor)}">${esc(p.nome)}</span></label>`).join('') || '<span class="muted small">Cadastre as pessoas em “Nova pessoa”.</span>'}</div></div>`).join('');
+  modal({
+    titulo: 'Responsáveis de cada etapa', tamanho: 'lg',
+    corpo: `<p class="muted small" style="margin:0 0 6px">Quem normalmente cuida de cada etapa. Aparece em todos os modelos e dá para filtrar por pessoa. Se em algum modelo for outra pessoa, é só escolher na própria etapa.</p>
+      <form class="form" id="frp" autocomplete="off"><div id="rp">${linhas()}</div></form>`,
+    rodape: `<button type="button" class="btn esq" id="rp-nova">${ic('plus')}<span class="tx">Nova pessoa</span></button><button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="frp" class="btn primary">Salvar</button>`,
+    aoAbrir: m => {
+      const ler = () => FLUXO.forEach(([k]) => { atual[k] = Array.from(m.$$(`[data-rp="${k}"]:checked`)).map(i => i.value); });
+      m.$('#rp-nova').onclick = () => { ler(); novaPessoaRapida(() => { m.$('#rp').innerHTML = linhas(); }); };
+      m.$('#frp').addEventListener('submit', async e => {
+        e.preventDefault(); ler();
+        const btn = m.$('.btn.primary'); ocupado(btn, true);
+        try {
+          const valor = Object.fromEntries(Object.entries(atual).filter(([, ids]) => ids.length)), cfg = cfgResp();
+          await salvarReg('config', cfg ? { valor } : { chave: 'resp_etapas', valor }, cfg && cfg.id);
+          m.fechar(); toast('Responsáveis salvos.'); rerender();
+        } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); }
+      });
+    },
+  });
+}
+
 /* ---------- sala (linha / marca do cliente) ---------- */
 const SALAS = ['Arrumada', 'Brasileira', 'Mindset', 'Trendy', 'Atitudes', 'Farm', 'Patrícia Foster', 'Boby Blues', 'Blue Steel', 'Plus size', 'Casual', 'Urbano'];
 const salasLista = (sel = '') => [...new Set([...SALAS, ...S.db.pecas.map(p => p.sala).filter(Boolean), ...(sel ? [sel] : [])])];
@@ -2915,14 +2955,15 @@ const daAbaEtapas = (pc, baila) => (baila ? ehBaila(pc) : !ehBaila(pc));
 function viewEtapasBaila(arg) { return viewEtapas(arg, true); }
 function viewEtapas(arg, baila = false) {
   const chave = baila ? 'etapasBaila' : 'etapas', rotaEt = baila ? 'etapas-baila' : 'etapas';
-  const f = S.f[chave] || (S.f[chave] = { q: '', cli: '', sala: '', st: 'andamento' });
+  const f = S.f[chave] || (S.f[chave] = { q: '', cli: '', sala: '', resp: '', st: 'andamento' });
   const modo = pref.get('etapasModo', 'linha');
-  setPage(baila ? 'Etapa Baila' : 'Etapas', baila ? 'O caminho de cada modelo da Baila, da criação ao corte de produção' : 'O caminho de cada modelo, da criação ao corte de produção', `<button class="btn primary" id="et-add">${ic('plus')}<span class="tx">Novo modelo</span></button>`);
+  setPage(baila ? 'Etapa Baila' : 'Etapas', baila ? 'O caminho de cada modelo da Baila, da criação ao corte de produção' : 'O caminho de cada modelo, da criação ao corte de produção', `<button class="btn" id="et-resp">${ic('users')}<span class="tx">Responsáveis</span></button><button class="btn primary" id="et-add">${ic('plus')}<span class="tx">Novo modelo</span></button>`);
   view().innerHTML = `<div class="card">
     <div class="toolbar">
       <div class="busca">${ic('search')}<input class="inp" data-f="q" placeholder="Filtrar por REF, OP, descrição ou responsável" value="${esc(f.q)}"></div>
       ${baila ? '' : `<select class="inp" data-f="cli">${opcoes(clientesOrd().filter(c => norm(c.nome) !== 'baila').map(c => [c.id, c.nome]), f.cli, 'Todos os clientes')}</select>`}
       <select class="inp" data-f="sala">${opcoes(salasLista().filter(s => S.db.pecas.some(p => p.sala === s && daAbaEtapas(p, baila))).map(s => [s, s]), f.sala, 'Todas as salas')}</select>
+      <select class="inp" data-f="resp" title="Modelos que estão agora numa etapa desta pessoa">${opcoes(pessoasOrd().filter(p => p.ativo !== false).map(p => [p.id, p.nome]), f.resp, 'Todos os responsáveis')}</select>
       <div class="chips" id="et-modo"><button class="chip${modo === 'linha' ? ' on' : ''}" data-modo="linha">${ic('flow')}Linha do tempo</button><button class="chip${modo === 'quadro' ? ' on' : ''}" data-modo="quadro">${ic('grid')}Quadro</button></div>
     </div>
     <div class="chips chips-row" id="et-st"></div>
@@ -2939,7 +2980,8 @@ function viewEtapas(arg, baila = false) {
         if (!norm([pc.ref, pc.descricao, pc.sala, ...opsDaPeca(pc), (cliente(pc.cliente_id) || {}).nome, ...resp].join(' ')).includes(qn)) return false;
       }
       return true;
-    }).map(pc => ({ pc, s: situacaoFluxo(pc) }));
+    }).map(pc => ({ pc, s: situacaoFluxo(pc) }))
+      .filter(x => !f.resp || (x.s.atual && respDaEtapa(x.s.est[x.s.atual], x.s.atual).includes(f.resp)));
     base.forEach(x => { x.oc = ocultoFluxo(x.pc); });
     const filtros = { andamento: x => !x.oc && !!x.s.atual, pend: x => !x.oc && x.s.pend > 0, ok: x => !x.oc && !x.s.atual, todos: x => !x.oc, ocultos: x => x.oc };
     const n = Object.fromEntries(Object.keys(filtros).map(k => [k, base.filter(filtros[k]).length]));
@@ -2961,6 +3003,7 @@ function viewEtapas(arg, baila = false) {
   $('#et-st').addEventListener('click', e => { const b = e.target.closest('[data-st]'); if (b) { f.st = b.dataset.st; desenhar(); } });
   $('#et-modo').addEventListener('click', e => { const b = e.target.closest('[data-modo]'); if (b) { pref.set('etapasModo', b.dataset.modo); rerender(); } });
   $('#et-add').onclick = () => formAddFluxo();
+  $('#et-resp').onclick = () => formRespEtapas();
   $('#et-lista').addEventListener('click', e => {
     if (e.target.closest('[data-et-add]')) return formAddFluxo();
     const b = e.target.closest('[data-et]'); if (!b) return;
@@ -2978,13 +3021,13 @@ function viewEtapas(arg, baila = false) {
 }
 
 function linhaFluxo(lista) {
-  return `<div class="fx-wrap"><table class="fx"><thead><tr><th class="fx-pc">Modelo</th>${FLUXO.map(([, l]) => `<th><span>${esc(l)}</span></th>`).join('')}<th class="fx-d">Na etapa</th></tr></thead>
+  return `<div class="fx-wrap"><table class="fx"><thead><tr><th class="fx-pc">Modelo</th>${FLUXO.map(([k, l]) => { const rp = respPadrao(k); return `<th><span>${esc(l)}</span>${rp.length ? `<small class="fx-rp" title="${esc(nomesResp(rp).join(', '))}">${esc(curtoResp(rp))}</small>` : ''}</th>`; }).join('')}<th class="fx-d">Na etapa</th></tr></thead>
     <tbody>${lista.map(({ pc, s }) => {
-      const resp = s.atual && s.est[s.atual].resp;
-      return `<tr><td class="fx-pc"><button type="button" class="fx-m" data-et="${pc.id}|">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${pc.sala ? `<span>${esc(pc.sala)}</span>` : ''}</small>${resp ? `<small>${pchip(resp)}</small>` : ''}</div></button></td>
+      const resp = s.atual ? respDaEtapa(s.est[s.atual], s.atual) : [];
+      return `<tr><td class="fx-pc"><button type="button" class="fx-m" data-et="${pc.id}|">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${pc.sala ? `<span>${esc(pc.sala)}</span>` : ''}</small>${resp.length ? `<small>${chipsResp(resp)}</small>` : ''}</div></button></td>
         ${FLUXO.map(([k, l]) => {
           const e = s.est[k], np = pendAbertas(e), cur = k === s.atual;
-          const tit = `${l}: ${nomeSt(e.st)}${e.em && e.st !== 'fazer' ? ' ' + fQuando(e.em) : ''}${e.auto ? ` (${e.auto})` : ''}${e.andamento ? ` (${e.andamento})` : ''}${np ? ` · ${plural(np, 'pendência')}` : ''}${e.resp ? ` · ${(pessoa(e.resp) || {}).nome || ''}` : ''}`;
+          const tit = `${l}: ${nomeSt(e.st)}${e.em && e.st !== 'fazer' ? ' ' + fQuando(e.em) : ''}${e.auto ? ` (${e.auto})` : ''}${e.andamento ? ` (${e.andamento})` : ''}${np ? ` · ${plural(np, 'pendência')}` : ''}${respDaEtapa(e, k).length ? ` · ${nomesResp(respDaEtapa(e, k)).join(', ')}` : ''}`;
           return `<td class="${cur ? 'cur' : ''}"><button type="button" class="fx-b ${e.st}${cur ? ' atual' : ''}${e.andamento ? ' and' : ''}" data-et="${pc.id}|${k}" title="${esc(tit)}" aria-label="${esc(tit)}">${ic(IC_FLUXO[e.st])}${np ? `<i class="np">${np}</i>` : ''}${(e.arquivos || []).length ? '<i class="ax"></i>' : ''}</button></td>`;
         }).join('')}
         <td class="fx-d">${s.atual ? `<b>${textoDias(s.desde)}</b><small>${esc(nomeFluxo(s.atual))}</small>` : `<span class="tag green">Concluído</span>`}</td></tr>`;
@@ -2997,14 +3040,16 @@ function quadroFluxo(lista, st) {
   return `<div class="kb">${cols.map(([k, l]) => {
     const cs = lista.filter(x => (x.s.atual || '_fim') === k);
     const np = cs.filter(x => pendAbertas(x.s.est[k] || {}) > 0).length;
+    const rp = respPadrao(k);
     return `<div class="kb-col"><div class="kb-h"><b>${esc(l)}</b><span class="n">${cs.length}</span></div>
+      ${rp.length ? `<div class="kb-rp" title="${esc(nomesResp(rp).join(', '))}">${ic('users')}${esc(nomesResp(rp).join(', '))}</div>` : ''}
       ${np ? `<div class="kb-p">${ic('alert')}${plural(np, 'com pendências', 'com pendências')}</div>` : ''}
       <div class="kb-b">${cs.map(({ pc, s }) => {
         const e = s.atual ? s.est[s.atual] : {}, n = pendAbertas(e);
         return `<button type="button" class="kb-c" data-et="${pc.id}|${s.atual || FLUXO[FLUXO.length - 1][0]}">${thumb(capa(pc) || imgsCons(pc)[0])}
           <div class="tx"><b>${esc(pc.ref)}</b>${pc.descricao ? `<small>${esc(pc.descricao)}</small>` : ''}
             <div class="mt">${cbadge(pc.cliente_id)}${pc.sala ? `<span class="tag gray sem">${esc(pc.sala)}</span>` : ''}</div>
-            <div class="mt">${e.resp ? pchip(e.resp) : ''}${n ? `<span class="tag red">${plural(n, 'pendência')}</span>` : ''}${e.st === 'revisao' ? '<span class="tag amber">Revisão</span>' : ''}${s.atual ? `<span class="dias">${ic('clock')}${textoDias(s.desde)}</span>` : ''}</div>
+            <div class="mt">${s.atual ? chipsResp(respDaEtapa(e, s.atual), 1) : ''}${n ? `<span class="tag red">${plural(n, 'pendência')}</span>` : ''}${e.st === 'revisao' ? '<span class="tag amber">Revisão</span>' : ''}${s.atual ? `<span class="dias">${ic('clock')}${textoDias(s.desde)}</span>` : ''}</div>
             <div class="kb-pr"><i style="width:${s.feitas / FLUXO.length * 100}%"></i></div></div></button>`;
       }).join('') || '<div class="kb-v">—</div>'}</div></div>`;
   }).join('')}</div>`;
@@ -3126,7 +3171,8 @@ function formEtapa(pc, k) {
           <div class="et-add"><input class="inp" id="pend-txt" placeholder="Nova pendência (ex.: faltou o aviamento do bolso)"><button type="button" class="btn" id="pend-add">${ic('plus')}Adicionar</button></div>
         </div>
         <div data-p="resp" hidden>
-          <div class="fld"><span class="lbl">Quem é responsável por esta etapa</span>${pickPessoas('resp', e0.resp || null)}</div>
+          <div class="fld"><span class="lbl">Quem é responsável por esta etapa</span>${pickPessoas('resp', e0.resp || null)}
+            ${respPadrao(k).length ? `<span class="hint">Normalmente: ${esc(nomesResp(respPadrao(k)).join(', '))}. Escolha alguém só se neste modelo for outra pessoa.</span>` : `<span class="hint">Dá para definir quem cuida desta etapa em todos os modelos no botão “Responsáveis”, na tela de etapas.</span>`}</div>
           <label class="fld" style="max-width:240px"><span>Prazo</span><input type="date" name="prazo" value="${esc(e0.prazo || '')}"></label>
         </div>
       </form>`,
@@ -4018,7 +4064,9 @@ function folhaConsumoHtml(E) {
       <td><input data-k="consumo.tecidos.${i}.composicao" value="${esc(r.composicao || '')}"></td>
       <td><input data-k="consumo.tecidos.${i}.cor" value="${esc(r.cor || '')}" list="dlc-tecidos-${i}"></td>
       <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.tecidos.${i}" title="Tirar tecido">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - tec.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
-    <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.tecidos">${ic('plus')}Adicionar tecido</button></div>
+    <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.tecidos">${ic('plus')}Adicionar tecido</button>
+      <label class="btn sm">${ic('file')}Ler PDF do Audaces<input type="file" accept="application/pdf,.pdf" multiple hidden data-audaces></label>
+      <span class="small muted">O relatório do encaixe preenche a largura e o consumo sozinho.</span></div>
   </section>
   <section class="fs">
     <div class="fs-h"><h3>Aviamentos</h3><div class="r small muted">${plural(avi.length, 'aviamento')}</div></div>
@@ -4087,6 +4135,80 @@ function agendarPeca(E, campo, valor) {
 }
 window.addEventListener('beforeunload', e => { if (S.fichaAberta && S.fichaAberta.pendente) { e.preventDefault(); e.returnValue = ''; } });
 
+/* ---------- relatório de encaixe do Audaces → largura e consumo do tecido ---------- */
+async function textoPdf(file) {
+  if (!window.pdfjsLib) {
+    await carregarScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  }
+  const doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  let txt = '';
+  for (let i = 1; i <= doc.numPages; i++) {
+    const pg = await (await doc.getPage(i)).getTextContent();
+    txt += pg.items.map(it => it.str + (it.hasEOL ? '\n' : ' ')).join('') + '\n';
+  }
+  return txt.replace(/[ \t]+/g, ' ');
+}
+const numAud = v => (v == null ? null : parseFloat(String(v).replace(',', '.')));
+const fmtNum = (n, casas) => n.toFixed(casas).replace('.', ',');
+// os números do relatório vêm em cm; a ficha usa metros (largura 1,41 · consumo 1,435 por peça)
+function lerEncaixe(txt) {
+  const m = re => (txt.match(re) || [])[1];
+  const rend = txt.match(/Rendimento \(consumo\):\s*([\d.,]+)\s*cm\/pacote(?:\s*\(([\d.,]+)\s*% de perda\))?/i);
+  const r = {
+    descricao: (m(/Descri[çc][ãa]o:+\s*([\s\S]+?)\s*Tecido:/i) || '').replace(/\s+/g, ' ').trim(),
+    tecido: (m(/Tecido:\s*(.+?)\s+Tipo:/i) || '').trim(),
+    largura: numAud(m(/Largura:\s*([\d.,]+)\s*cm/i)),
+    comprimento: numAud(m(/Comprimento:\s*([\d.,]+)\s*cm/i)),
+    aproveitamento: numAud(m(/Aproveitamento:\s*([\d.,]+)\s*%/i)),
+    encaixados: m(/Encaixados:\s*(\d+\s*\/\s*\d+)/i),
+    consumo: rend ? numAud(rend[1]) : null, perda: rend && rend[2] ? numAud(rend[2]) : null,
+    modelo: (m(/Modelo:\s*([^\n]+)/i) || '').trim(),
+  };
+  return r.largura || r.consumo ? r : null;
+}
+async function lerAudaces(E, files) {
+  statusSalvo('Lendo o PDF…');
+  const lidos = [];
+  for (const f of files) {
+    try { lidos.push({ nome: f.name, r: lerEncaixe(await textoPdf(f)) }); }
+    catch (err) { lidos.push({ nome: f.name, r: null }); }
+  }
+  fimSalvar(E);
+  const tec = E.F.consumo.tecidos || [];
+  const opTec = i => `<option value="novo">Novo tecido</option>${tec.map((t, j) => `<option value="${j}"${j === i ? ' selected' : ''}>Linha ${j + 1}${t.tecido ? ' · ' + esc(t.tecido) : ''}${t.cor ? ' · ' + esc(t.cor) : ''}</option>`).join('')}`;
+  modal({
+    titulo: 'PDF do Audaces', tamanho: 'lg',
+    corpo: `<div class="aud">${lidos.map((x, i) => x.r ? `<div class="aud-c" data-aud="${i}">
+        <div class="aud-h">${ic('file')}<b title="${esc(x.nome)}">${esc(x.nome)}</b></div>
+        ${x.r.descricao ? `<div class="small muted">${esc(x.r.descricao)}</div>` : ''}
+        <div class="aud-v">
+          ${x.r.largura ? `<div><small>Largura</small><b>${fmtNum(x.r.largura / 100, 2)} m</b></div>` : ''}
+          ${x.r.consumo ? `<div><small>Consumo por peça</small><b>${fmtNum(x.r.consumo / 100, 3)} m</b>${x.r.perda != null ? `<small>com ${fmtNum(x.r.perda, 0)}% de perda</small>` : ''}</div>` : ''}
+          ${x.r.aproveitamento ? `<div><small>Aproveitamento</small><b>${fmtNum(x.r.aproveitamento, 2)}%</b></div>` : ''}
+          ${x.r.comprimento ? `<div><small>Comprimento do risco</small><b>${fmtNum(x.r.comprimento / 100, 2)} m</b></div>` : ''}
+          ${x.r.modelo ? `<div><small>Modelo e grade</small><b>${esc(x.r.modelo)}</b></div>` : ''}
+        </div>
+        <label class="fld aud-alvo"><span>Colocar em</span><select data-alvo>${opTec(tec.length > i ? i : (tec.length ? 0 : -1))}</select></label>
+      </div>` : `<div class="aud-c erro">${ic('alert')}<div><b>${esc(x.nome)}</b><div class="small muted">Não achei os dados do encaixe neste PDF. Ele precisa ser o relatório do encaixe do Audaces.</div></div></div>`).join('')}</div>`,
+    rodape: `<button type="button" class="btn" data-cancelar>Cancelar</button>${lidos.some(x => x.r) ? '<button type="button" class="btn primary" id="aud-ok">Preencher na ficha</button>' : ''}`,
+    aoAbrir: m => {
+      const ok = m.$('#aud-ok'); if (!ok) return;
+      ok.onclick = () => {
+        const lista = E.F.consumo.tecidos || (E.F.consumo.tecidos = []);
+        Array.from(m.$$('[data-aud]')).forEach(c => {
+          const { r } = lidos[+c.dataset.aud], alvo = c.querySelector('[data-alvo]').value;
+          let row = alvo === 'novo' ? null : lista[+alvo];
+          if (!row) { row = MODELOS_LINHA['consumo.tecidos'](); lista.push(row); }
+          if (r.largura) row.largura = fmtNum(r.largura / 100, 2);
+          if (r.consumo) row.consumo = fmtNum(r.consumo / 100, 3);
+        });
+        agendarSalvar(E, 0); desenharFolha(E); m.fechar(); toast('Largura e consumo preenchidos pelo Audaces.');
+      };
+    },
+  });
+}
+
 /* ---------- eventos da folha ---------- */
 function ligarFolha(E) {
   const el = $('#folha');
@@ -4117,6 +4239,7 @@ function ligarFolha(E) {
       E.F.tecnica.grade = t.value.split(/[,/;\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
       agendarSalvar(E, 0); desenharFolha(E);
     }
+    if (t.dataset.audaces !== undefined) { const fs = [...t.files]; t.value = ''; if (fs.length) lerAudaces(E, fs); return; }
     if (t.dataset.slotUp) {
       const file = t.files[0]; if (!file) return;
       statusSalvo('Enviando imagem…');

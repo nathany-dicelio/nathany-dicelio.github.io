@@ -1465,3 +1465,26 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .cor-sug .cor-sug-x { padding: 0 4px; opacity: 0; color: var(--mute); }
 .cor-sug:hover .cor-sug-x { opacity: 1; }
 .cor-sug .cor-sug-x svg { width: 12px; height: 12px; }
+
+/* responsável padrão de cada etapa */
+.fx th .fx-rp { display: block; max-width: 124px; margin: 5px auto 0; font-size: 10.5px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--brand); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kb-rp { display: flex; align-items: center; gap: 5px; padding: 0 4px 6px; font-size: 11.5px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kb-rp svg { width: 13px; height: 13px; flex: none; }
+.rp-l { display: grid; grid-template-columns: 210px 1fr; gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--line-2); }
+.rp-l > b { font-size: 13.5px; padding-top: 8px; }
+.rp-l:last-child { border-bottom: 0; }
+@media (max-width: 640px) { .rp-l { grid-template-columns: 1fr; gap: 6px; } .rp-l > b { padding-top: 0; } }
+
+/* leitura do PDF do Audaces */
+.aud { display: grid; gap: 12px; }
+.aud-c { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; }
+.aud-c.erro { grid-template-columns: auto 1fr; align-items: start; color: var(--ink); }
+.aud-c.erro > svg { color: var(--red, #C8102E); width: 20px; height: 20px; }
+.aud-h { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.aud-h b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aud-h svg { width: 18px; height: 18px; color: var(--brand); flex: none; }
+.aud-v { display: flex; flex-wrap: wrap; gap: 10px 26px; }
+.aud-v > div { display: grid; gap: 1px; }
+.aud-v small { color: var(--mute); font-size: 11.5px; }
+.aud-v b { font-size: 17px; }
+.aud-alvo { max-width: 340px; margin: 0; }
