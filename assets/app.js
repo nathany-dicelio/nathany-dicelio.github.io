@@ -1110,6 +1110,9 @@ function viewInicio() {
       <div class="chips" id="per">${[['mes', 'Este mês'], ['ano', 'Este ano'], ['tudo', 'Tudo']].map(([v, t]) => `<button class="chip${per === v ? ' on' : ''}" data-per="${v}">${t}</button>`).join('')}</div>
     </div>
     ${usoAlto() && usoAlto().length ? `<div class="aviso erro aviso-uso">${ic('alert')}<span><b>O armazenamento está passando de 80%.</b> ${usoAlto().map(k => `${k === 'arquivos' ? 'Fotos e arquivos' : 'Banco de dados'}: ${fMB(S.uso[k])} de ${fMB(LIMITE_USO[k])}`).join(' · ')}. Avise o Henrique para liberar espaço ou mudar de plano. <a href="#/ajustes">Ver detalhes</a></span></div>` : ''}
+    ${(venc => (venc.length ? `<div class="aviso erro aviso-venc">${ic('clock')}<span><b>${plural(venc.length, 'etapa com prazo vencido', 'etapas com prazo vencido')}</b>
+      <ul>${venc.slice(0, 5).map(x => `<li><a href="#/${ehBaila(x.pc) ? 'etapas-baila' : 'etapas'}/${x.pc.id}/${x.k}"><b>${esc(x.pc.ref)}</b> · ${esc(nomeFluxo(x.k))} · venceu ${fData(dataDe(x.e.prazo))}${respDaEtapa(x.e, x.k).length ? ` · ${esc(nomesResp(respDaEtapa(x.e, x.k)).join(', '))}` : ''}</a></li>`).join('')}</ul>
+      ${venc.length > 5 ? `<a href="#/etapas">Ver as outras ${venc.length - 5} nas etapas</a>` : ''}</span></div>` : ''))(etapasVencidas())}
     <div class="kpis">
       <a class="card kpi" href="#/desenhos"><div class="ic">${ic('pen')}</div><div><div class="lb">Desenhos feitos</div><div class="vl num">${rd.feitos}</div><div class="ds">${plural(rd.andamento, 'em andamento', 'em andamento')} · ${plural(rd.pedidos, 'pedido')}</div></div></a>
       <a class="card kpi" href="#/consumos"><div class="ic gold">${ic('scissors')}</div><div><div class="lb">Consumos feitos</div><div class="vl num">${rc.feitos}</div><div class="ds">${plural(rc.andamento, 'em andamento', 'em andamento')} · ${plural(rc.pedidos, 'pedido')}</div></div></a>
@@ -2306,6 +2309,7 @@ function viewAjustes() {
       <div class="muted small">Conectada como <b style="color:var(--ink)">${esc(S.user.email || '')}</b>${S.api.demo ? ' (demonstração — os dados ficam só neste navegador)' : ''}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         ${S.api.demo ? '' : `<button class="btn sm" id="senha">${ic('key')}Trocar senha</button>`}
+        <button class="btn sm primary" id="excel">${ic('download')}Baixar tudo em Excel</button>
         <button class="btn sm" id="backup">${ic('download')}Baixar cópia dos dados</button>
         <button class="btn sm" id="imp-planilha">${ic('file')}Importar planilha antiga</button>
       </div></div></div>
@@ -2350,12 +2354,66 @@ function viewAjustes() {
   });
   const bs = $('#senha'); if (bs) bs.onclick = pedirNovaSenha;
   $('#imp-planilha').onclick = () => formImportarPlanilha();
+  $('#excel').onclick = async () => {
+    const b = $('#excel'); ocupado(b, true);
+    try { await exportarExcel(); } catch (err) { toast(msgErro(err), 'erro'); }
+    ocupado(b, false);
+  };
   $('#backup').onclick = () => {
     const blob = new Blob([JSON.stringify({ exportado_em: agoraISO(), ...S.db }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = `atelie-nathany-${inData(agoraISO())}.json`;
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
+}
+
+/* ---------- tudo em uma planilha do Excel, uma aba para cada parte do sistema ---------- */
+async function exportarExcel() {
+  await carregarScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+  const cli = id => (cliente(id) || {}).nome || '', pes = id => (pessoa(id) || {}).nome || '';
+  const ref = id => (peca(id) || {}).ref || '', refCli = id => cli((peca(id) || {}).cliente_id);
+  const dia = v => (v ? fData(String(v).length === 10 ? dataDe(v) : v) : ''), quando = v => (v ? `${fData(v)} ${fHora(v)}` : '');
+  const abas = [];
+  abas.push(['Peças', S.db.pecas.map(p => ({ REF: p.ref, OP: p.op || '', Cliente: cli(p.cliente_id), Sala: p.sala || '', 'Descrição': p.descricao || '', Fotos: (p.fotos || []).length, 'Criada em': dia(p.criado_em) }))]);
+  abas.push(['Desenho e mini consumo', S.db.pedidos.map(p => ({ Tipo: p.tipo === 'consumo' ? 'Mini consumo' : 'Desenho', REF: ref(p.peca_id), Cliente: refCli(p.peca_id), OP: p.op || '', 'Pedido em': quando(p.pedido_em), De: pes(p.de_id), Para: pes(p.para_id), 'Finalizado em': quando(p.finalizado_em), Obs: p.obs || '' }))]);
+  abas.push(['Etapas', S.db.fluxos.flatMap(fl => {
+    const pc = peca(fl.peca_id); if (!pc) return [];
+    return FLUXO.map(([k, l]) => {
+      const e = estadoEtapa(pc, fl, k);
+      return { REF: pc.ref, Cliente: cli(pc.cliente_id), Etapa: l, Status: nomeSt(e.st), Data: etapaFeita(e.st) ? quando(e.em) : '', 'Responsável': nomesResp(respDaEtapa(e, k)).join(', '), Prazo: dia(e.prazo), 'Pendências abertas': pendAbertas(e), Obs: e.obs || '' };
+    });
+  })]);
+  abas.push(['Ficha técnica', S.db.fichas.map(fi => {
+    const t = fi.tecnica || {};
+    return { REF: ref(fi.peca_id), Cliente: refCli(fi.peca_id), 'Coleção': t.colecao || '', Status: t.status || '', Modelista: t.modelista || '', 'Responsável': t.resp || '', Compradora: t.compradora || '', 'Tamanho base': t.piloto || '', Grade: (t.grade || []).join(', '),
+      Etiqueta: t.etiqueta || '', Lacre: t.lacre || '', Pedido: t.pedido || '', 'Código': t.codigo2 || '', Cor: (fi.consumo || {}).cor || '', 'Preço': t.preco || '', Quantidade: t.quantidade || '', 'Data de entrega': dia(t.data_entrega), 'Atualizada em': quando(fi.atualizado_em) };
+  })]);
+  abas.push(['Consumo', S.db.fichas.flatMap(fi => {
+    const k = fi.consumo || {}, base = { REF: ref(fi.peca_id), Cliente: refCli(fi.peca_id) };
+    return [...(k.tecidos || []).map(r => ({ ...base, Tipo: 'Tecido', 'Código': r.codigo || '', Material: r.tecido || '', Cor: r.cor || '', Largura: r.largura || '', Gramatura: r.gramatura || '', Consumo: r.consumo || '', UN: 'MT', 'Aplicação': '' })),
+      ...(k.aviamentos || []).map(r => ({ ...base, Tipo: 'Aviamento', 'Código': r.codigo || '', Material: r.material || '', Cor: r.cor || '', Largura: '', Gramatura: '', Consumo: r.consumo || '', UN: r.un || '', 'Aplicação': r.aplicacao || '' })),
+      ...(k.etiquetas || []).map(r => ({ ...base, Tipo: 'Etiqueta', 'Código': r.codigo || '', Material: r.etiqueta || '', Cor: r.cor || '', Largura: '', Gramatura: '', Consumo: r.consumo || '', UN: r.un || '', 'Aplicação': r.aplicacao || '' }))];
+  })]);
+  abas.push(['Materiais', S.db.materiais.map(m => ({ Tipo: { tecido: 'Tecido', aviamento: 'Aviamento', etiqueta: 'Etiqueta' }[m.tipo] || m.tipo, 'Código': m.codigo || '', Nome: m.nome || '',
+    Cliente: cli(valMat(m, 'cliente_id')), Tamanho: valMat(m, 'tamanho') || '', Gramatura: valMat(m, 'gramatura') || '', Largura: valMat(m, 'largura') || '', 'Composição': valMat(m, 'composicao') || '', UN: valMat(m, 'un') || '',
+    'Aplicação': valMat(m, 'aplicacao') || '', Fornecedor: valMat(m, 'fornecedor') || '', Marca: valMat(m, 'marca') || '', Cores: (m.cores || []).map(c => c.nome).join(', ') }))]);
+  abas.push(['Programação de corte', S.db.cortes.map(c => {
+    const d = c.dados || {};
+    return { REF: ref(c.peca_id), Cliente: refCli(c.peca_id), OP: c.op || '', 'Data do corte': dia(c.data_corte), 'Previsto': dia(d.previsto_corte), 'Total da OP': d.total_quant_op || '', 'Qtd. de corte': d.qtd_corte || '', Oficina: d.oficina || '',
+      Tecidos: (d.tecidos || []).map(t => [t.tecido, t.cor, t.estoque].filter(Boolean).join(' / ')).join(' · ') };
+  })]);
+  abas.push(['Tarefas', S.db.tarefas.map(t => ({ 'Pedido em': quando(t.pedido_em), Por: pes(t.por_id), Tarefa: t.tarefa, Prazo: quando(t.prazo), REF: ref(t.peca_id), 'Entregue em': quando(t.entregue_em), Para: pes(t.entregue_para_id), Obs: t.obs || '' }))]);
+  abas.push(['Clientes', clientesOrd().map(c => ({ Cliente: c.nome, Sigla: c.sigla || '' }))]);
+  abas.push(['Pessoas', pessoasOrd().map(p => ({ Nome: p.nome, Ativa: p.ativo === false ? 'Não' : 'Sim' }))]);
+  const wb = XLSX.utils.book_new();
+  abas.forEach(([nome, linhas]) => {
+    const ws = XLSX.utils.json_to_sheet(linhas.length ? linhas : [{ '': 'Nada cadastrado ainda' }]);
+    const cols = Object.keys(linhas[0] || { '': '' });
+    ws['!cols'] = cols.map(c => ({ wch: Math.min(48, Math.max(c.length, ...linhas.slice(0, 300).map(r => String(r[c] ?? '').length)) + 2) }));
+    XLSX.utils.book_append_sheet(wb, ws, nome);
+  });
+  XLSX.writeFile(wb, `atelie-nathany-${inData(new Date())}.xlsx`);
+  toast('Planilha baixada.');
 }
 
 /* ================================================================
@@ -2894,6 +2952,57 @@ function textoDias(desde) {
   return d <= 0 ? 'hoje' : plural(d, 'dia');
 }
 
+/* ---------- prazos vencidos e tempo que os modelos passam em cada etapa ---------- */
+const etapaFeita = st => st === 'feito' || st === 'pular';
+const vencida = e => !!(e && e.prazo && e.prazo < inData(new Date()) && !etapaFeita(e.st));
+function etapasVencidas() {
+  const out = [];
+  S.db.fluxos.forEach(fl => {
+    const pc = peca(fl.peca_id); if (!pc || ocultoFluxo(pc)) return;
+    FLUXO.forEach(([k]) => { const e = estadoEtapa(pc, fl, k); if (vencida(e)) out.push({ pc, k, e }); });
+  });
+  return out.sort((a, b) => a.e.prazo.localeCompare(b.e.prazo));
+}
+const fDias = d => (d < 1 ? `${Math.max(1, Math.round(d * 24))} h` : `${d.toFixed(1).replace('.', ',').replace(',0', '')} ${d < 2 ? 'dia' : 'dias'}`);
+function temposFluxo(base) {
+  const dur = Object.fromEntries(FLUXO.map(([k]) => [k, []])), totais = [];
+  base.forEach(({ pc, s }) => {
+    const ini = (s.fl && s.fl.criado_em) || pc.criado_em;
+    let ant = ini;
+    FLUXO.forEach(([k]) => {
+      const e = s.est[k]; if (!etapaFeita(e.st) || !e.em) return;
+      const d = (new Date(e.em) - new Date(ant)) / 864e5;
+      // menos de 2 minutos = marcada junto com outras (acerto de várias etapas de uma vez), não entra na média
+      if (e.st === 'feito' && d > 2 / 1440 && d < 365) dur[k].push(d);
+      if (new Date(e.em) > new Date(ant)) ant = e.em;
+    });
+    if (!s.atual && ant !== ini) totais.push((new Date(ant) - new Date(ini)) / 864e5);
+  });
+  const med = l => (l.length ? l.reduce((a, b) => a + b, 0) / l.length : null);
+  const linhas = FLUXO.map(([k, l]) => {
+    const agora = base.filter(x => !x.oc && x.s.atual === k);
+    const velho = agora.length ? Math.max(...agora.map(x => (Date.now() - new Date(x.s.desde)) / 864e5)) : 0;
+    return { k, l, m: med(dur[k]), n: dur[k].length, agora: agora.length, velho };
+  });
+  const comDado = linhas.filter(x => x.m != null), max = Math.max(1, ...comDado.map(x => x.m));
+  const top = [...comDado].sort((a, b) => b.m - a.m).slice(0, 3);
+  if (!comDado.length) return vazio('clock', 'Ainda não dá para calcular os tempos', 'Os tempos aparecem conforme as etapas vão sendo marcadas como feitas.');
+  const tot = med(totais);
+  return `<div class="tp">
+    <div class="tp-top">
+      <div><small>Onde os modelos passam mais tempo</small><b>${top.map(x => `${esc(x.l)} <span>${fDias(x.m)}</span>`).join(' · ')}</b></div>
+      ${tot != null ? `<div><small>Da criação ao corte, em média</small><b>${fDias(tot)} <span>${plural(totais.length, 'modelo concluído', 'modelos concluídos')}</span></b></div>` : ''}
+    </div>
+    <div class="tp-lista">${linhas.map(x => `<div class="tp-l${top.includes(x) ? ' alto' : ''}">
+      <div class="tp-n">${esc(x.l)}</div>
+      <div class="tp-bar"><i style="width:${x.m != null ? Math.max(2, x.m / max * 100) : 0}%"></i></div>
+      <div class="tp-v">${x.m != null ? `<b>${fDias(x.m)}</b><small>média de ${plural(x.n, 'modelo')}</small>` : '<small class="muted">sem dados ainda</small>'}</div>
+      <div class="tp-a">${x.agora ? `<b>${plural(x.agora, 'modelo')} agora</b><small>o mais antigo há ${fDias(x.velho)}</small>` : '<small class="muted">nenhum agora</small>'}</div>
+    </div>`).join('')}</div>
+    <div class="small muted tp-pe">Tempo de cada etapa: do fim da etapa anterior até ela ser marcada como feita. Etapas marcadas várias de uma vez não entram na média.</div>
+  </div>`;
+}
+
 /* ---------- responsável padrão de cada etapa (vale quando o modelo não tem alguém escolhido na etapa) ---------- */
 const cfgResp = () => S.db.config.find(x => x.chave === 'resp_etapas');
 const respPadrao = k => (((cfgResp() || {}).valor || {})[k] || []).filter(id => pessoa(id));
@@ -2964,7 +3073,7 @@ function viewEtapas(arg, baila = false) {
       ${baila ? '' : `<select class="inp" data-f="cli">${opcoes(clientesOrd().filter(c => norm(c.nome) !== 'baila').map(c => [c.id, c.nome]), f.cli, 'Todos os clientes')}</select>`}
       <select class="inp" data-f="sala">${opcoes(salasLista().filter(s => S.db.pecas.some(p => p.sala === s && daAbaEtapas(p, baila))).map(s => [s, s]), f.sala, 'Todas as salas')}</select>
       <select class="inp" data-f="resp" title="Modelos que estão agora numa etapa desta pessoa">${opcoes(pessoasOrd().filter(p => p.ativo !== false).map(p => [p.id, p.nome]), f.resp, 'Todos os responsáveis')}</select>
-      <div class="chips" id="et-modo"><button class="chip${modo === 'linha' ? ' on' : ''}" data-modo="linha">${ic('flow')}Linha do tempo</button><button class="chip${modo === 'quadro' ? ' on' : ''}" data-modo="quadro">${ic('grid')}Quadro</button></div>
+      <div class="chips" id="et-modo"><button class="chip${modo === 'linha' ? ' on' : ''}" data-modo="linha">${ic('flow')}Linha do tempo</button><button class="chip${modo === 'quadro' ? ' on' : ''}" data-modo="quadro">${ic('grid')}Quadro</button><button class="chip${modo === 'tempo' ? ' on' : ''}" data-modo="tempo">${ic('clock')}Tempos</button></div>
     </div>
     <div class="chips chips-row" id="et-st"></div>
     <div id="et-lista"></div>
@@ -2985,6 +3094,8 @@ function viewEtapas(arg, baila = false) {
     base.forEach(x => { x.oc = ocultoFluxo(x.pc); });
     const filtros = { andamento: x => !x.oc && !!x.s.atual, pend: x => !x.oc && x.s.pend > 0, ok: x => !x.oc && !x.s.atual, todos: x => !x.oc, ocultos: x => x.oc };
     const n = Object.fromEntries(Object.keys(filtros).map(k => [k, base.filter(filtros[k]).length]));
+    $('#et-st').hidden = modo === 'tempo';
+    if (modo === 'tempo') { $('#et-lista').innerHTML = temposFluxo(base); return; }
     $('#et-st').innerHTML = [['andamento', 'Em andamento'], ['pend', 'Com pendências'], ['ok', 'Concluídos'], ['todos', 'Todos'], ...(n.ocultos ? [['ocultos', 'Escondidos']] : [])]
       .map(([v, t]) => `<button class="chip${f.st === v ? ' on' : ''}" data-st="${v}">${t}<span class="n">${n[v]}</span></button>`).join('');
     const lista = base.filter(filtros[f.st] || filtros.todos)
@@ -3012,11 +3123,12 @@ function viewEtapas(arg, baila = false) {
     const pc = peca(id); if (pc) formEtapa(pc, k || situacaoFluxo(pc).atual || FLUXO[FLUXO.length - 1][0]);
   });
   desenhar();
-  // #/etapas/<id da peça>: abre a etapa atual da peça (ou coloca a peça nas etapas)
-  if (arg && peca(arg)) {
-    const pc = peca(arg);
+  // #/etapas/<id da peça>[/<etapa>]: abre a etapa pedida ou a atual da peça
+  const [aId, aK] = String(arg || '').split('/');
+  if (aId && peca(aId)) {
+    const pc = peca(aId);
     history.replaceState(null, '', `#/${rotaEt}`);
-    formEtapa(pc, situacaoFluxo(pc).atual || FLUXO[FLUXO.length - 1][0]);
+    formEtapa(pc, FLUXO.some(([x]) => x === aK) ? aK : situacaoFluxo(pc).atual || FLUXO[FLUXO.length - 1][0]);
   }
 }
 
@@ -3027,8 +3139,8 @@ function linhaFluxo(lista) {
       return `<tr><td class="fx-pc"><button type="button" class="fx-m" data-et="${pc.id}|">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${pc.sala ? `<span>${esc(pc.sala)}</span>` : ''}</small>${resp.length ? `<small>${chipsResp(resp)}</small>` : ''}</div></button></td>
         ${FLUXO.map(([k, l]) => {
           const e = s.est[k], np = pendAbertas(e), cur = k === s.atual;
-          const tit = `${l}: ${nomeSt(e.st)}${e.em && e.st !== 'fazer' ? ' ' + fQuando(e.em) : ''}${e.auto ? ` (${e.auto})` : ''}${e.andamento ? ` (${e.andamento})` : ''}${np ? ` · ${plural(np, 'pendência')}` : ''}${respDaEtapa(e, k).length ? ` · ${nomesResp(respDaEtapa(e, k)).join(', ')}` : ''}`;
-          return `<td class="${cur ? 'cur' : ''}"><button type="button" class="fx-b ${e.st}${cur ? ' atual' : ''}${e.andamento ? ' and' : ''}" data-et="${pc.id}|${k}" title="${esc(tit)}" aria-label="${esc(tit)}">${ic(IC_FLUXO[e.st])}${np ? `<i class="np">${np}</i>` : ''}${(e.arquivos || []).length ? '<i class="ax"></i>' : ''}</button></td>`;
+          const tit = `${l}: ${nomeSt(e.st)}${e.em && e.st !== 'fazer' ? ' ' + fQuando(e.em) : ''}${e.auto ? ` (${e.auto})` : ''}${e.andamento ? ` (${e.andamento})` : ''}${e.prazo && !etapaFeita(e.st) ? ` · prazo ${fData(dataDe(e.prazo))}${vencida(e) ? ' (vencido)' : ''}` : ''}${np ? ` · ${plural(np, 'pendência')}` : ''}${respDaEtapa(e, k).length ? ` · ${nomesResp(respDaEtapa(e, k)).join(', ')}` : ''}`;
+          return `<td class="${cur ? 'cur' : ''}"><button type="button" class="fx-b ${e.st}${cur ? ' atual' : ''}${e.andamento ? ' and' : ''}${vencida(e) ? ' venc' : ''}" data-et="${pc.id}|${k}" title="${esc(tit)}" aria-label="${esc(tit)}">${ic(IC_FLUXO[e.st])}${np ? `<i class="np">${np}</i>` : ''}${(e.arquivos || []).length ? '<i class="ax"></i>' : ''}</button></td>`;
         }).join('')}
         <td class="fx-d">${s.atual ? `<b>${textoDias(s.desde)}</b><small>${esc(nomeFluxo(s.atual))}</small>` : `<span class="tag green">Concluído</span>`}</td></tr>`;
     }).join('')}</tbody></table></div>
