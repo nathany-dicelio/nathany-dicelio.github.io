@@ -3137,6 +3137,47 @@ function ligacoesEtapa(pc, k) {
 
 /* ---------- uma etapa: status, arquivos, pendências e responsável ---------- */
 const ehImgArq = n => /\.(jpe?g|png|webp|gif|bmp|heic)$/i.test(n || '');
+
+/* ---------- modelagem liberada para produção (o que antes ia para a ISA) ---------- */
+const ENG_LIB = [['aguardando', 'Aguardando engenharia', '#8E8287'], ['sem', 'Liberado sem restrições', '#17925A'], ['com', 'Liberado com restrições', '#C98A06']];
+function libDe(pc) {
+  const e = (((fluxoDe(pc.id) || {}).etapas) || {}).liberacao_modelagem || {};
+  return { lib: e.lib || null, imgs: (e.arquivos || []).filter(a => ehImgArq(a.n)).map(a => a.p) };
+}
+// sugestões para a primeira vez: o que já está na ficha e nas etapas
+function libSugerida(pc) {
+  const fi = fichaDe(pc.id) || {}, t = fi.tecnica || {}, tec = ((fi.consumo || {}).tecidos || []).filter(r => r.tecido);
+  const txtTec = r => (r ? [r.codigo, r.tecido].filter(Boolean).join(' ') + (r.cor ? ` (${r.cor})` : '') : '');
+  const mod = respPadrao('liberacao_modelagem').concat(respPadrao('modelagem'));
+  return { tam: t.piloto || '', ops: opsDaPeca(pc).join(' - '), lacre: t.lacre || '', tecido: txtTec(tec.find(r => !/forro/i.test(r.tecido))), forro: txtTec(tec.find(r => /forro/i.test(r.tecido))),
+    por: t.modelista || (pessoa(mod[0]) || {}).nome || '', data: inData(new Date()), eng: 'aguardando' };
+}
+function libCampos(lib) {
+  const c = (rot, nome, extra = '', cls = '') => `<label class="fld ${cls}"><span>${rot}</span><input name="lib_${nome}" value="${esc(lib[nome] || '')}" ${extra}></label>`;
+  return `<div class="lib">
+    <div class="lib-h">${ic('scissors')}<div><b>Modelagem liberada para produção</b><small>No lugar da ISA. O print do molde vai em “Print do molde e arquivos” logo abaixo (dá para colar com Ctrl+V).</small></div></div>
+    <div class="lib-g">${c('Tamanho', 'tam', 'style="text-transform:uppercase"')}${c('OPs', 'ops', 'placeholder="14487 - 14468"', 'span2')}${c('Lacre', 'lacre')}
+      ${c('Tecido', 'tecido', '', 'span2')}${c('Forro', 'forro', '', 'span2')}${c('Modelista', 'por')}${c('Data', 'data', 'type="date"')}</div>
+    <div class="fld"><span class="lbl">Depois da engenharia</span><div class="pick">${ENG_LIB.map(([v, l, cor]) => `<label><input type="radio" name="lib_eng" value="${v}"${(lib.eng || 'aguardando') === v ? ' checked' : ''}><span class="pk" style="--c:${cor}">${l}</span></label>`).join('')}</div></div>
+    <div class="lib-g">${c('Data da engenharia', 'eng_data', 'type="date"')}${c('Restrições', 'restr', 'placeholder="Ex.: ajustar o comprimento da manga"', 'span3')}</div>
+  </div>`;
+}
+function libCard(pc) {
+  const { lib, imgs } = libDe(pc), rota = `#/${ehBaila(pc) ? 'etapas-baila' : 'etapas'}/${pc.id}`;
+  if (!lib && !imgs.length) return '';
+  const l = lib || {}, eng = ENG_LIB.find(([x]) => x === (l.eng || 'aguardando'));
+  const item = (rot, v) => (v ? `<div><dt>${rot}</dt><dd>${esc(v)}</dd></div>` : '');
+  return `<div class="card prod-card">
+    <div class="card-h"><h3>Modelagem liberada</h3><div class="r"><span class="tag lib-tag" style="--c:${eng[2]}">${eng[1]}</span></div></div>
+    <div class="lib-v">
+      ${imgs.length ? `<div class="lib-imgs">${imgs.map((p, i) => `<button type="button" class="th" data-lib-img="${i}" data-foto="${esc(p)}" data-fit="contain" aria-label="Ampliar o molde">${ic('image')}</button>`).join('')}</div>` : ''}
+      <dl class="lib-dl">${item('Tamanho', l.tam)}${item('OPs', l.ops)}${item('Lacre', l.lacre)}${item('Tecido', l.tecido)}${item('Forro', l.forro)}
+        ${item('Liberado por', [l.por, l.data ? fData(dataDe(l.data)) : ''].filter(Boolean).join(' · '))}${item('Engenharia', [l.eng_data ? fData(dataDe(l.eng_data)) : '', l.restr].filter(Boolean).join(' · '))}</dl>
+    </div>
+    <div class="lib-pe"><a class="link-btn" href="${rota}">Abrir na etapa</a></div>
+  </div>`;
+}
+
 function formEtapa(pc, k) {
   const fl0 = fluxoDe(pc.id);
   const e0 = ((fl0 && fl0.etapas) || {})[k] || {};
@@ -3146,6 +3187,7 @@ function formEtapa(pc, k) {
   let arqs = (e0.arquivos || []).slice();
   const novos = [], removidos = [];
   const pend = clone(e0.pend || []);
+  const LIB = k === 'liberacao_modelagem', lib0 = LIB ? (e0.lib || libSugerida(pc)) : null;
   modal({
     titulo: pc.ref, tamanho: 'lg',
     corpo: `<div class="et-top">
@@ -3157,7 +3199,8 @@ function formEtapa(pc, k) {
       <form class="form" id="fet" autocomplete="off" novalidate>
         <div data-p="status">
           <div class="fld"><span class="lbl">Ligado a esta peça</span>${ligacoesEtapa(pc, k)}</div>
-          <div class="fld"><span class="lbl">Arquivos desta etapa</span>
+          ${LIB ? libCampos(lib0) : ''}
+          <div class="fld"><span class="lbl">${LIB ? 'Print do molde e arquivos' : 'Arquivos desta etapa'}</span>
             <label class="drop" id="drop">${ic('download')}<b>Selecione um arquivo ou arraste e solte aqui</b><small>até 15 MB cada · foto, PDF, planilha, molde…</small><span class="btn sm">Selecionar arquivo</span><input type="file" multiple hidden id="et-file"></label>
             <div class="et-arqs" id="arqs"></div></div>
           <div class="fld"><span class="lbl">Selecione um status para a etapa</span>
@@ -3202,6 +3245,13 @@ function formEtapa(pc, k) {
         novos.push(...fs.filter(f => f.size <= 15 * 1048576)); desenhaArqs();
       };
       m.$('#et-file').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+      m.el.addEventListener('paste', e => {
+        const fs = [...((e.clipboardData || {}).items || [])].filter(i => i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean);
+        if (!fs.length) return;
+        e.preventDefault();
+        addFiles(fs.map((f, i) => new File([f], `${LIB ? 'molde' : 'imagem'}-${Date.now()}${i ? '-' + i : ''}.png`, { type: f.type })));
+        toast('Imagem colada. Ela é enviada quando salvar.');
+      });
       const drop = m.$('#drop');
       ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('on'); }));
       ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, () => drop.classList.remove('on')));
@@ -3251,6 +3301,10 @@ function formEtapa(pc, k) {
           const fl = fluxoDe(pc.id);
           const atual = ((fl && fl.etapas) || {})[k] || {};
           const novo = { ...atual, arquivos: arqs.concat(enviados), pend, obs: String(fd.get('obs') || '').trim() || null, resp: fd.get('resp') || null, prazo: fd.get('prazo') || null };
+          if (LIB) {
+            novo.lib = Object.fromEntries(['tam', 'ops', 'lacre', 'tecido', 'forro', 'por', 'data', 'eng', 'eng_data', 'restr'].map(c => [c, String(fd.get('lib_' + c) || '').trim() || null]));
+            if (novo.lib.tam) novo.lib.tam = novo.lib.tam.toUpperCase();
+          }
           const automatico = !atual.st && st === est.st;
           if (!automatico && st !== atual.st) {
             novo.st = st; novo.em = agoraISO();
@@ -3592,6 +3646,7 @@ function paginaProduto(pc) {
         ${campo('Obs.', `<textarea data-k="tecnica.obs_produto" rows="2">${esc(t.obs_produto || '')}</textarea>`, 'span4')}
       </div>
     </div>
+    ${libCard(pc)}
     <div class="card prod-card">
       <div class="card-h"><h3>Materiais</h3><div class="r"><a class="link-btn" href="#/ficha-tecnica/${pc.id}">Editar na ficha de consumo</a></div></div>
       <div class="card-b">
@@ -3610,6 +3665,7 @@ function paginaProduto(pc) {
     $$('[data-pi]', root).forEach(x => x.classList.toggle('on', x === b)); hidratarFotos(main.parentNode);
   });
   main.addEventListener('click', () => { if (fotos.length) lightbox(fotos, sel); });
+  root.addEventListener('click', e => { const b = e.target.closest('[data-lib-img]'); if (b) lightbox(libDe(pc).imgs, +b.dataset.libImg); });
   $$('[data-pdf]', root).forEach(b => { b.onclick = () => abrirArquivo(b.dataset.pdf); });
   $('#pg-add').addEventListener('change', async e => {
     const files = [...e.target.files].filter(x => x.type.startsWith('image/') || ehPdfArq(x)); if (!files.length) return;
