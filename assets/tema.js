@@ -1,3 +1,8 @@
+// Não deixa o sistema ser aberto dentro de outro site (o GitHub Pages não permite configurar isso no servidor).
+if (window.top !== window.self) {
+  document.documentElement.style.display = 'none';
+  try { window.top.location = window.self.location.href; } catch (e) { /* bloqueado: a página fica escondida */ }
+}
 // Aplica o tema (claro/noturno) antes de a página aparecer, para não piscar.
 (function () {
   var t = null;

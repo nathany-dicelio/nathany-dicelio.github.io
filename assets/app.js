@@ -4147,8 +4147,16 @@ function setPath(o, path, val) {
   x[ks[ks.length - 1]] = val;
 }
 const _scripts = {};
+// hash de cada biblioteca externa: se o arquivo do CDN mudar, o navegador não carrega
+const SRI = {
+  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js': 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw',
+  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js': 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e',
+  'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js': 'sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H',
+  'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js': 'sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk',
+};
 const carregarScript = url => _scripts[url] || (_scripts[url] = new Promise((res, rej) => {
-  const s = document.createElement('script'); s.src = url; s.onload = res; s.onerror = () => { delete _scripts[url]; rej(new Error('Não foi possível carregar a ferramenta de exportação.')); };
+  const s = document.createElement('script'); s.src = url; s.onload = res;
+  if (SRI[url]) { s.integrity = SRI[url]; s.crossOrigin = 'anonymous'; } s.onerror = () => { delete _scripts[url]; rej(new Error('Não foi possível carregar a ferramenta de exportação.')); };
   document.head.append(s);
 }));
 
@@ -4411,7 +4419,7 @@ async function textoPdf(file) {
     await carregarScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
   }
-  const doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  const doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
   let txt = '';
   for (let i = 1; i <= doc.numPages; i++) {
     const pg = await (await doc.getPage(i)).getTextContent();
