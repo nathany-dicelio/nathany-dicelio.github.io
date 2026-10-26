@@ -1565,13 +1565,43 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .md-ref small { display: block; color: var(--mute); font-size: 13px; margin-top: 2px; }
 .md-tam { margin: 0; min-width: 160px; }
 .md-tab td.md-dif { font-weight: 700; white-space: nowrap; }
-.md-tab td:nth-child(2) input { min-width: 280px; }
+
 .md-tab td:nth-child(1) input { min-width: 70px; }
 .md-pe { padding: 0 2px; }
+.md-cab { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 14px; }
+.md-cab .fld { margin: 0; }
+@media (max-width: 640px) { .md-cab { grid-template-columns: 1fr 1fr; } }
+.md-tab td.md-dif { color: var(--amber, #C98A06); }
+.md-tab input.md-aj { min-width: 90px; color: var(--red); font-weight: 600; }
+.md-obs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.md-obs textarea { width: 100%; margin-top: 8px; }
+@media (max-width: 760px) { .md-obs { grid-template-columns: 1fr; } }
+.md-folha { display: none; }
 @media print {
-  body:has(.md-card) .side, body:has(.md-card) .topbar, body:has(.md-card) .toasts, body:has(.md-card) .folha-barra, .md-card .no-print, .md-card .aviso { display: none !important; }
-  body:has(.md-card) .shell, body:has(.md-card) .main { display: block !important; }
-  body:has(.md-card) .content { padding: 0 !important; }
-  .md-card { box-shadow: none !important; border: 0 !important; }
-  .md-card input, .md-card select { border: 0 !important; background: none !important; color: #000 !important; -webkit-appearance: none; appearance: none; padding: 0 !important; }
+  body:has(.md-folha) { background: #fff !important; }
+  body:has(.md-folha) .side, body:has(.md-folha) .topbar, body:has(.md-folha) .toasts, body:has(.md-folha) .folha-barra, body:has(.md-folha) .md-card { display: none !important; }
+  body:has(.md-folha) .shell, body:has(.md-folha) .main { display: block !important; }
+  body:has(.md-folha) .content { padding: 0 !important; }
+  .md-folha { display: block; color: #000; font-family: Calibri, Arial, sans-serif; font-size: 9.5pt; }
+  .fe { border: 1.2px solid #000; }
+  .fe-t { text-align: center; font-weight: 700; font-size: 12pt; padding: 3px; border-bottom: 1px solid #000; }
+  .fe-t2 { text-align: center; font-weight: 700; font-size: 11pt; padding: 3px; border-top: 1px solid #000; border-bottom: 1px solid #000; }
+  .fe table { width: 100%; border-collapse: collapse; }
+  .fe-cab td { border-right: 1px solid #000; padding: 2px 5px; font-size: 9pt; }
+  .fe-cab td:last-child { border-right: 0; }
+  .fe-tab th, .fe-tab td { border: 1px solid #000; padding: 1px 4px; height: 18px; text-align: center; font-size: 8.5pt; }
+  .fe-tab th { font-size: 8pt; line-height: 1.1; }
+  .fe-tab tr > :first-child { border-left: 0; } .fe-tab tr > :last-child { border-right: 0; }
+  .fe-tab td.d { text-align: left; text-transform: uppercase; }
+  .fe-tab td.aj { color: #C00000; }
+  .fe-obs { min-height: 100px; padding: 4px 8px; text-align: center; white-space: pre-wrap; font-size: 9pt; }
+  .fe-st { color: #C00000; margin-bottom: 4px; }
+  .fe-ass { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; padding: 30px 40px 8px; border-top: 1px solid #000; }
+  .fe-ass div { display: grid; text-align: center; }
+  .fe-ass span { border-bottom: 1px solid #000; min-height: 16px; text-transform: uppercase; font-size: 8.5pt; }
+  .fe-ass b { font-size: 8.5pt; padding-top: 2px; }
 }
+.md-tab th.n, .md-tab td.n { width: 1%; white-space: nowrap; }
+.md-tab td.n input { width: 74px; min-width: 0; }
+.md-tab td:nth-child(2) input { min-width: 240px; }
+.md-tab td.md-dif { min-width: 34px; text-align: center; }

@@ -2967,7 +2967,7 @@ function viewMedicao(arg) {
       const md = medDe(pc), ops = opsDaPeca(pc);
       const sub = [pc.descricao, ops.length ? `OP ${ops.join(', ')}` : ''].filter(Boolean).map(esc).join(' · ') || 'Sem descrição';
       return `<a class="fl-it" href="#/medicao/${pc.id}">${thumb(capa(pc) || imgsCons(pc)[0])}<div class="t"><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${sub}</small></div>
-        ${md ? `<span class="tag green">Medida ${fDia(md.em)} · ${esc(md.tam || '')}</span>` : '<span class="tag gray">Sem medição</span>'}${ic('chevR')}</a>`;
+        ${md ? `<span class="tag ${md.status === 'reprovado' ? 'red' : md.status === 'com' ? 'amber' : 'green'}">${md.status ? esc(nomeStEng(md.status)) : 'Medida'} · ${fDia(md.em)}</span>` : '<span class="tag gray">Sem medição</span>'}${ic('chevR')}</a>`;
     }).join('')}</div>` : vazio('search', 'Nenhuma peça com esses filtros');
     hidratarFotos($('#ml'));
   };
@@ -2979,36 +2979,80 @@ function viewMedicao(arg) {
   if (!matchMedia('(max-width: 640px)').matches) setTimeout(() => inp.focus(), 50);
 }
 
+const ST_ENG = [['', '—'], ['sem', 'Aprovado sem restrição'], ['com', 'Aprovado com restrição'], ['reprovado', 'Reprovado']];
+const nomeStEng = v => (ST_ENG.find(([k]) => k === v) || [])[1] || '';
+// diferença como na ficha de engenharia: medido − tabela, vazio quando é igual
+const difMed = (medido, tab) => {
+  const n = v => { const x = parseFloat(String(v ?? '').replace(',', '.')); return isNaN(x) ? null : x; };
+  if (n(medido) == null || n(tab) == null) return '';
+  const d = Math.round((n(medido) - n(tab)) * 100) / 100;
+  return d ? String(d).replace('.', ',') : '';
+};
+function folhaEngenhariaHtml(pc, M) {
+  const linhas = M.linhas.filter(r => r.pom || r.desc || r.tab || r.antes || r.depois || r.ajuste);
+  const vazias = Math.max(0, 30 - linhas.length);
+  const td = (v, cls = '') => `<td class="${cls}">${esc(v ?? '')}</td>`;
+  return `<div class="fe">
+    <div class="fe-t">FICHA DE ENGENHARIA</div>
+    <table class="fe-cab"><tr><td><b>DATA:</b> ${M.data ? fData(dataDe(M.data)) : ''}</td><td><b>OP:</b> ${esc(M.op || '')}</td><td><b>REF:</b> ${esc(pc.ref)}</td><td><b>LACRE:</b> ${esc(M.lacre || '')}</td></tr></table>
+    <div class="fe-t2">TABELA DE MEDIDAS - AMOSTRA ENGENHARIA</div>
+    <table class="fe-tab"><thead><tr><th>POM</th><th>DESCRIÇÃO</th><th>TAM:<br>${esc(M.tam)}</th><th>ANTES<br>PASSAR</th><th>≠</th><th>DEPOIS<br>PASSAR</th><th>≠</th><th>AJUSTE</th></tr></thead>
+      <tbody>${linhas.map(r => `<tr>${td(r.pom, 'c')}${td(r.desc, 'd')}${td(r.tab)}${td(r.antes)}${td(difMed(r.antes, r.tab))}${td(r.depois)}${td(difMed(r.depois, r.tab))}${td(r.ajuste, 'aj')}</tr>`).join('')}
+      ${'<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(vazias)}</tbody></table>
+    <div class="fe-t2">OBSERVAÇÕES ENGENHARIA</div>
+    <div class="fe-obs">${M.status ? `<div class="fe-st">${esc(nomeStEng(M.status).toUpperCase())}</div>` : ''}${esc(M.obs_eng || '')}</div>
+    <div class="fe-t2">OBSERVAÇÕES MODELAGEM</div>
+    <div class="fe-obs">${esc(M.obs_mod || '')}</div>
+    <div class="fe-ass"><div><span>${esc(M.eng || '')}</span><b>ENGENHARIA</b></div><div><span>${esc(M.mod || '')}</span><b>MODELAGEM</b></div></div>
+  </div>`;
+}
+
 function paginaMedicao(pc) {
   const fi = fichaDe(pc.id), t = (fi && fi.tecnica) || {}, grade = (t.grade || []).length ? t.grade : GRADE_PADRAO;
   const salvo = medDe(pc);
-  const M = salvo ? clone(salvo) : (() => { const tam = grade.includes(t.piloto) ? t.piloto : (grade.includes('P') ? 'P' : grade[0]); const ini = linhasIniciais(pc, tam); return { tam, linhas: ini.linhas, origem: ini.origem }; })();
+  const nomes = ks => ks.flatMap(k => nomesResp(respPadrao(k)))[0] || '';
+  const M = salvo ? clone(salvo) : (() => {
+    const tam = grade.includes(t.piloto) ? t.piloto : (grade.includes('P') ? 'P' : grade[0]);
+    const ini = linhasIniciais(pc, tam);
+    return { tam, linhas: ini.linhas, origem: ini.origem, data: inData(new Date()), op: opsDaPeca(pc).join(' - ') || pc.op || '', lacre: t.lacre || '',
+      status: '', obs_eng: '', obs_mod: '', eng: nomes(['medicao', 'engenharia']), mod: t.modelista || nomes(['liberacao_modelagem', 'modelagem']) };
+  })();
+  M.linhas.forEach(r => { if (r.ajuste == null) r.ajuste = ''; });
   const pts = pontosGuia(pc.cliente_id);
   setPage(`Medição · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
-  const num = v => { const n = parseFloat(String(v || '').replace(',', '.')); return isNaN(n) ? null : n; };
-  const dif = (a, b) => (num(a) == null || num(b) == null ? '' : (num(a) - num(b)).toFixed(1).replace('.', ',').replace(/^(?!-)/, '+').replace('+0,0', '0'));
+  const campo = (rot, k, extra = '', cls = '') => `<label class="fld ${cls}"><span>${rot}</span><input data-mc="${k}" value="${esc(M[k] || '')}" ${extra}></label>`;
   view().innerHTML = `<div class="folha-barra no-print">
       <a class="link-btn" href="#/medicao">${ic('chevL')}Outra peça</a>
       <span class="salvo ok" id="salvo">${ic('check')}${salvo ? 'Tudo salvo' : 'Ainda não salva'}</span>
       <div class="r">
         <a class="btn sm" href="#/produto/${pc.id}">${ic('dress')}<span class="tx">Produto</span></a>
         <a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}<span class="tx">Ficha técnica</span></a>
-        <button type="button" class="btn sm" id="md-print">${ic('download')}<span class="tx">Imprimir</span></button>
+        <button type="button" class="btn sm primary" id="md-print">${ic('download')}<span class="tx">Imprimir ficha</span></button>
       </div>
     </div>
-    <div class="card md-card">
+    <div class="card md-card no-print">
       <div class="md-top">
-        <div class="md-ref">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${esc(nomeModelo(pc))}${opsDaPeca(pc).length ? ` · OP ${esc(opsDaPeca(pc).join(', '))}` : ''}</small></div></div>
-        <label class="fld md-tam"><span>Tamanho medido</span><select id="md-tam">${opcoes(grade.map(g => [g, g]), M.tam)}</select></label>
+        <div class="md-ref">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>Ficha de engenharia · ${esc(nomeModelo(pc))}</small></div></div>
       </div>
+      <div class="md-cab">${campo('Data', 'data', 'type="date"')}${campo('OP', 'op', 'inputmode="numeric"')}${campo('Lacre', 'lacre')}
+        <label class="fld"><span>Tamanho</span><select id="md-tam">${opcoes(grade.map(g => [g, g]), M.tam)}</select></label></div>
       ${!salvo && M.origem ? `<div class="aviso">${ic('info')}<span>Tabela pronta a partir do ${esc(M.origem)}. É só preencher as medidas.</span></div>` : ''}
-      <div class="tbl-wrap"><table class="ft-tab md-tab"><thead><tr><th>POM</th><th>Descrição</th><th class="n">Tamanho <span id="md-th-tam">${esc(M.tam)}</span></th><th class="n">Antes de passar</th><th class="n">Depois de passar</th><th class="n">Diferença</th><th class="no-print"></th></tr></thead>
+      <div class="tbl-wrap"><table class="ft-tab md-tab"><thead><tr><th>POM</th><th>Descrição</th><th class="n">Tam: <span id="md-th-tam">${esc(M.tam)}</span></th><th class="n">Antes passar</th><th class="n">≠</th><th class="n">Depois passar</th><th class="n">≠</th><th>Ajuste</th><th></th></tr></thead>
         <tbody id="md-body"></tbody></table></div>
-      <div class="fs-pe no-print"><button type="button" class="btn sm" id="md-add">${ic('plus')}Adicionar POM</button>
+      <div class="fs-pe"><button type="button" class="btn sm" id="md-add">${ic('plus')}Adicionar POM</button>
         <button type="button" class="btn sm" id="md-modelo">${ic('star')}Usar como modelo para ${esc(nomeModelo(pc))}</button>
         <span class="small muted">${pts.length ? `Digite o código do POM e a descrição vem do guia da ${esc((cliente(pc.cliente_id) || {}).nome || '')}.` : ''}</span></div>
-      ${salvo ? `<div class="small muted md-pe">Medida em ${fQuando(salvo.em)}${salvo.por ? ` por ${esc(salvo.por)}` : ''}</div>` : ''}
+      <div class="md-obs">
+        <div class="fld"><span class="lbl">Observações engenharia</span>
+          <div class="pick">${ST_ENG.filter(([k]) => k).map(([k, l]) => `<label><input type="radio" name="md-st" value="${k}"${M.status === k ? ' checked' : ''}><span class="pk" style="--c:${k === 'sem' ? '#17925A' : k === 'com' ? '#C98A06' : '#C93545'}">${l}</span></label>`).join('')}</div>
+          <textarea data-mc="obs_eng" rows="2" placeholder="Anotações da engenharia">${esc(M.obs_eng || '')}</textarea></div>
+        <label class="fld"><span>Observações modelagem</span><textarea data-mc="obs_mod" rows="2" placeholder="Anotações da modelagem">${esc(M.obs_mod || '')}</textarea></label>
+      </div>
+      <div class="md-cab">${campo('Engenharia', 'eng', 'list="dl-pes-md"')}${campo('Modelagem', 'mod', 'list="dl-pes-md"')}</div>
+      ${salvo ? `<div class="small muted md-pe">Salva em ${fQuando(salvo.em)}${salvo.por ? ` por ${esc(salvo.por)}` : ''}</div>` : ''}
     </div>
+    <div class="md-folha" id="md-folha"></div>
+    <datalist id="dl-pes-md">${pessoasOrd().filter(p => p.ativo !== false).map(p => `<option value="${esc(p.nome)}">`).join('')}</datalist>
     ${pts.length ? `<datalist id="dl-pom-md">${pts.map(p => `<option value="${esc(String(p.codigo || '').split(/[/,\s]+/)[0])}">${esc(p.nome)}</option>`).join('')}</datalist>` : ''}`;
   hidratarFotos(view());
   const body = $('#md-body');
@@ -3017,9 +3061,11 @@ function paginaMedicao(pc) {
     <td><input data-md="${i}|desc" value="${esc(r.desc || '')}"></td>
     <td class="n"><input class="num" data-md="${i}|tab" value="${esc(r.tab || '')}" inputmode="decimal"></td>
     <td class="n pil"><input class="num" data-md="${i}|antes" value="${esc(r.antes || '')}" inputmode="decimal"></td>
-    <td class="n"><input class="num" data-md="${i}|depois" value="${esc(r.depois || '')}" inputmode="decimal"></td>
-    <td class="n md-dif" data-dif="${i}">${dif(r.depois || r.antes, r.tab)}</td>
-    <td class="x no-print"><button type="button" class="icon-btn danger" data-md-rm="${i}" title="Tirar linha">${ic('x')}</button></td></tr>`;
+    <td class="n md-dif" data-dif="${i}|antes">${difMed(r.antes, r.tab)}</td>
+    <td class="n pil"><input class="num" data-md="${i}|depois" value="${esc(r.depois || '')}" inputmode="decimal"></td>
+    <td class="n md-dif" data-dif="${i}|depois">${difMed(r.depois, r.tab)}</td>
+    <td><input class="md-aj" data-md="${i}|ajuste" value="${esc(r.ajuste || '')}" placeholder="—"></td>
+    <td class="x"><button type="button" class="icon-btn danger" data-md-rm="${i}" title="Tirar linha">${ic('x')}</button></td></tr>`;
   const desenhaLinhas = () => { body.innerHTML = M.linhas.map(linha).join(''); };
   desenhaLinhas();
   let timer = null, fila = Promise.resolve();
@@ -3027,31 +3073,37 @@ function paginaMedicao(pc) {
     $('#salvo').className = 'salvo'; $('#salvo').innerHTML = `${ic('clock')}Salvando…`;
     clearTimeout(timer);
     timer = setTimeout(() => {
-      const med = { tam: M.tam, linhas: M.linhas.filter(r => r.pom || r.desc || r.tab || r.antes || r.depois), em: agoraISO(), por: nomeUsuario().split(' ')[0] };
+      const { origem, ...resto } = M;
+      const med = { ...resto, linhas: M.linhas.filter(r => r.pom || r.desc || r.tab || r.antes || r.depois || r.ajuste), em: agoraISO(), por: nomeUsuario().split(' ')[0] };
       fila = fila.then(async () => {
         try {
           const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
           et.medicao = { ...(et.medicao || {}), med };
           await salvarFluxo(pc, et);
-          $('#salvo') && ($('#salvo').className = 'salvo ok', $('#salvo').innerHTML = `${ic('check')}Tudo salvo`);
-        } catch (err) { $('#salvo') && ($('#salvo').className = 'salvo erro', $('#salvo').innerHTML = `${ic('alert')}Não salvou, tente de novo`); toast(msgErro(err), 'erro'); }
+          if ($('#salvo')) { $('#salvo').className = 'salvo ok'; $('#salvo').innerHTML = `${ic('check')}Tudo salvo`; }
+        } catch (err) { if ($('#salvo')) { $('#salvo').className = 'salvo erro'; $('#salvo').innerHTML = `${ic('alert')}Não salvou, tente de novo`; } toast(msgErro(err), 'erro'); }
       });
     }, ms);
   };
-  body.addEventListener('input', e => {
+  const card = $('.md-card');
+  card.addEventListener('input', e => {
+    const c = e.target.closest('[data-mc]');
+    if (c) { M[c.dataset.mc] = c.value; salvar(); return; }
     const x = e.target.closest('[data-md]'); if (!x) return;
-    const [i, c] = x.dataset.md.split('|'); M.linhas[+i][c] = x.value;
-    const r = M.linhas[+i], d = $(`[data-dif="${i}"]`); if (d) d.textContent = dif(r.depois || r.antes, r.tab);
+    const [i, k] = x.dataset.md.split('|'); M.linhas[+i][k] = x.value;
+    const r = M.linhas[+i];
+    ['antes', 'depois'].forEach(q => { const d = body.querySelector(`[data-dif="${i}|${q}"]`); if (d) d.textContent = difMed(r[q], r.tab); });
     salvar();
   });
-  body.addEventListener('change', e => {
+  card.addEventListener('change', e => {
+    if (e.target.name === 'md-st') { M.status = e.target.value; salvar(0); return; }
     const x = e.target.closest('[data-md$="|pom"]'); if (!x) return;
     const i = +x.dataset.md.split('|')[0], r = M.linhas[i], cod = x.value.trim().toUpperCase();
     const p = pts.find(pp => String(pp.codigo || '').toUpperCase().split(/[/,\s]+/).includes(cod));
     if (p && !r.desc) { r.desc = p.nome; const d = body.querySelector(`[data-md="${i}|desc"]`); if (d) d.value = p.nome; salvar(); }
   });
   body.addEventListener('click', e => { const b = e.target.closest('[data-md-rm]'); if (!b) return; M.linhas.splice(+b.dataset.mdRm, 1); desenhaLinhas(); salvar(0); });
-  $('#md-add').onclick = () => { M.linhas.push({ pom: '', desc: '', tab: '', antes: '', depois: '' }); desenhaLinhas(); const u = body.querySelector(`[data-md="${M.linhas.length - 1}|pom"]`); if (u) u.focus(); };
+  $('#md-add').onclick = () => { M.linhas.push({ pom: '', desc: '', tab: '', antes: '', depois: '', ajuste: '' }); desenhaLinhas(); const u = body.querySelector(`[data-md="${M.linhas.length - 1}|pom"]`); if (u) u.focus(); };
   $('#md-tam').onchange = e => {
     M.tam = e.target.value; $('#md-th-tam').textContent = M.tam;
     // troca o tamanho: puxa os valores desse tamanho da ficha, se existirem
@@ -3069,7 +3121,7 @@ function paginaMedicao(pc) {
       toast(`Modelo de ${nomeModelo(pc)} salvo.`);
     } catch (err) { toast(msgErro(err), 'erro'); }
   };
-  $('#md-print').onclick = () => window.print();
+  $('#md-print').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M); window.print(); };
 }
 
 /* ================================================================
