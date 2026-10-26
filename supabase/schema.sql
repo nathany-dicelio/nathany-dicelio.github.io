@@ -348,3 +348,7 @@ language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function public.uso_armazenamento() from public, anon;
 grant execute on function public.uso_armazenamento() to authenticated;
+
+-- Revisão de segurança (2026-10-26): as tabelas backup_* antigas ficam sem acesso pelo site
+revoke all on public.backup_pecas_20261005, public.backup_pecas_20261006, public.backup_pecas_sem_cliente_20261010,
+  public.backup_pedidos_20261005, public.backup_tarefas_20261005 from anon, authenticated;
