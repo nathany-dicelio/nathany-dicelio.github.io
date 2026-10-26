@@ -1555,3 +1555,23 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .et-outras .et-ok svg { width: 18px; height: 18px; color: var(--amber, #C98A06); }
 .et-outras .et-pi.ok .et-ok svg { color: var(--green); }
 .et-outras .et-pi > svg { width: 16px; height: 16px; color: var(--mute); flex: none; }
+
+/* medição (engenharia) */
+.md-card { padding: 18px 20px; display: grid; gap: 14px; }
+.md-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.md-ref { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.md-ref .th { width: 52px; height: 52px; border-radius: 10px; flex: none; }
+.md-ref b { display: flex; align-items: center; gap: 8px; font-size: 18px; }
+.md-ref small { display: block; color: var(--mute); font-size: 13px; margin-top: 2px; }
+.md-tam { margin: 0; min-width: 160px; }
+.md-tab td.md-dif { font-weight: 700; white-space: nowrap; }
+.md-tab td:nth-child(2) input { min-width: 280px; }
+.md-tab td:nth-child(1) input { min-width: 70px; }
+.md-pe { padding: 0 2px; }
+@media print {
+  body:has(.md-card) .side, body:has(.md-card) .topbar, body:has(.md-card) .toasts, body:has(.md-card) .folha-barra, .md-card .no-print, .md-card .aviso { display: none !important; }
+  body:has(.md-card) .shell, body:has(.md-card) .main { display: block !important; }
+  body:has(.md-card) .content { padding: 0 !important; }
+  .md-card { box-shadow: none !important; border: 0 !important; }
+  .md-card input, .md-card select { border: 0 !important; background: none !important; color: #000 !important; -webkit-appearance: none; appearance: none; padding: 0 !important; }
+}
