@@ -868,6 +868,7 @@ function renderShell() {
         <a href="#/inicio" data-r="inicio">${ic('home')}Início</a>
         <a href="#/ponto" data-r="ponto">${ic('clock')}Meu ponto</a>
         <div class="grp">Trabalho</div>
+        <a href="#/produto" data-r="produto">${ic('dress')}Produto</a>
         <a href="#/desenhos" data-r="desenhos">${ic('pen')}Desenho<span class="cnt hidden" data-cnt="desenho"></span></a>
         <a href="#/consumos" data-r="consumos">${ic('scissors')}Mini consumo<span class="cnt hidden" data-cnt="consumo"></span></a>
         <a href="#/fazer" data-r="fazer">${ic('list')}Fazer<span class="cnt hidden" data-cnt="fazer"></span></a>
@@ -875,7 +876,6 @@ function renderShell() {
         <a href="#/etapas-baila" data-r="etapas-baila">${ic('flow')}Etapa Baila<span class="cnt hidden" data-cnt="etapas-baila"></span></a>
         <a href="#/corte" data-r="corte">${ic('calendar')}Programação de corte</a>
         <div class="grp">Fichas</div>
-        <a href="#/produto" data-r="produto">${ic('dress')}Produto</a>
         <a href="#/ficha-tecnica" data-r="ficha-tecnica">${ic('file')}Ficha técnica</a>
         <a href="#/materiais" data-r="materiais">${ic('tag')}Materiais</a>
         <div class="grp">Consulta</div>
@@ -990,6 +990,7 @@ async function acoesGlobais(e) {
   const novo = e.target.closest('[data-novo]');
   if (novo) {
     const t = novo.dataset.novo, pc = novo.dataset.peca ? peca(novo.dataset.peca) : null;
+    if (t === 'produto') return formNovoProduto();
     if (t === 'tarefa') return formTarefa(null, pc);
     if (t === 'medida') return formMedida(null, novo.dataset.cliente || null);
     return formPedido(t, null, pc);
@@ -3669,7 +3670,7 @@ const STATUS_PROD = ['Desenvolvimento', 'Aguardando aprovação', 'Aprovado', 'E
 function viewProduto(arg) {
   if (arg && peca(arg)) return paginaProduto(peca(arg));
   const f = S.f.prod || (S.f.prod = { q: '' });
-  setPage('Produto', 'Tudo de cada referência: fotos, informações, tecidos, aviamentos e etiquetas');
+  setPage('Produto', 'Tudo de cada referência: fotos, informações, tecidos, aviamentos e etiquetas', `<button class="btn primary" data-novo="produto">${ic('plus')}<span class="tx">Novo produto</span></button>`);
   view().innerHTML = `<div class="card">
     <div class="guia-top"><div class="busca guia-busca">${ic('search')}<input class="inp" id="pq" placeholder="REF, OP ou descrição do produto" value="${esc(f.q)}" autocomplete="off" spellcheck="false"></div></div>
     <div class="guia-info small muted" id="pi"></div><div id="pl"></div></div>`;
@@ -3682,7 +3683,7 @@ function viewProduto(arg) {
       const sub = [pc.descricao, ops.length ? `OP ${ops.join(', ')}` : '', pc.sala].filter(Boolean).map(esc).join(' · ') || 'Sem descrição';
       return `<a class="fl-it" href="#/produto/${pc.id}">${thumb(capa(pc) || imgsCons(pc)[0])}<div class="t"><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${sub}</small></div>
         ${t.status ? `<span class="tag brand sem">${esc(t.status)}</span>` : ''}${ic('chevR')}</a>`;
-    }).join('')}</div>` : vazio('search', `Nada encontrado para “${q}”`);
+    }).join('')}</div>` : vazio(q ? 'search' : 'dress', q ? `Nada encontrado para “${q}”` : 'Nenhum produto cadastrado', '', `<button class="btn primary" data-novo="produto">${ic('plus')}Criar produto</button>`);
     hidratarFotos($('#pl'));
   };
   const inp = $('#pq');
@@ -3690,6 +3691,74 @@ function viewProduto(arg) {
   inp.addEventListener('keydown', e => { if (e.key === 'Enter' && f.q.trim()) { const l = pecasQue(f.q); if (l.length) location.hash = `#/produto/${l[0].id}`; } });
   desenhar();
   if (!matchMedia('(max-width: 640px)').matches) setTimeout(() => inp.focus(), 50);
+}
+
+function formNovoProduto() {
+  let arquivos;
+  modal({
+    titulo: 'Novo produto', tamanho: 'lg',
+    corpo: `<form class="form" id="fnp" autocomplete="off" novalidate>
+      <div class="grid3">
+        <label class="fld"><span>Referência *</span><input name="ref" placeholder="Ex.: BL116600" autofocus style="text-transform:uppercase;font-weight:600"></label>
+        <label class="fld"><span>OP</span><input name="op" inputmode="numeric" placeholder="Ex.: 14582"></label>
+        <label class="fld"><span>Cliente</span><select name="cliente">${opClientes('', '—')}</select></label>
+      </div>
+      <div class="grid3">
+        <label class="fld span2"><span>Descrição</span><input name="descricao" placeholder="Ex.: blusa manga curta com pregas"></label>
+        <label class="fld"><span>Sala</span>${selSala('')}</label>
+      </div>
+      <div class="grid3">
+        <label class="fld"><span>Status</span><select name="status">${opcoes(STATUS_PROD.map(s => [s, s]), 'Desenvolvimento')}</select></label>
+        <label class="fld"><span>Coleção</span><input name="colecao" placeholder="Ex.: Inverno 27"></label>
+        <label class="fld"><span>Responsável</span><input name="resp" placeholder="Nome da pessoa"></label>
+        <label class="fld"><span>Modelista</span><input name="modelista" placeholder="Nome da modelista"></label>
+        <label class="fld"><span>Piloteira</span><input name="piloteira" placeholder="Nome da piloteira"></label>
+      </div>
+      <div class="fld"><span class="lbl">Fotos e PDFs <span class="hint">· você também poderá adicionar mais depois</span></span><div class="fotos-edit" id="fnp-arqs"></div></div>
+      <div class="aviso">${ic('info')}<span>Depois de criar, a página completa do produto será aberta para preencher grade, datas, materiais e as outras informações.</span></div>
+    </form>`,
+    rodape: `<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fnp" class="btn primary">${ic('plus')}Criar produto</button>`,
+    aoAbrir: m => {
+      const form = m.$('#fnp');
+      arquivos = editorFotos(m.$('#fnp-arqs'), []);
+      ligarSala(form);
+      form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const fd = new FormData(form);
+        const sep = separarSufixo(fd.get('ref'));
+        const ref = sep.ref;
+        if (!ref) { toast('Informe a referência do produto.', 'erro'); form.ref.focus(); return; }
+        const existente = S.db.pecas.find(x => x.ref === ref);
+        if (existente) {
+          toast(`A referência ${ref} já está cadastrada. Abrindo o produto.`);
+          m.fechar(); location.hash = `#/produto/${existente.id}`; return;
+        }
+        const btn = m.$('.btn.primary'); ocupado(btn, true);
+        let pc;
+        try {
+          pc = await salvarReg('pecas', {
+            ref,
+            op: String(fd.get('op') || '').trim() || null,
+            cliente_id: fd.get('cliente') || (sep.cliente && sep.cliente.id) || null,
+            descricao: String(fd.get('descricao') || '').trim() || null,
+            sala: String(fd.get('sala') || '').replace('__outra', '') || null,
+            fotos: [], detalhes: [],
+          });
+          const novas = await enviarFotos(pc.id, arquivos.novas());
+          if (novas.length) pc = await salvarReg('pecas', { fotos: novas }, pc.id);
+          const tecnica = Object.fromEntries([
+            ['status', fd.get('status')], ['colecao', fd.get('colecao')], ['resp', fd.get('resp')],
+            ['modelista', fd.get('modelista')], ['piloteira', fd.get('piloteira')],
+          ].map(([k, v]) => [k, String(v || '').trim()]).filter(([, v]) => v));
+          await salvarReg('fichas', { peca_id: pc.id, tecnica, consumo: {} });
+          m.fechar(); toast('Produto criado.'); location.hash = `#/produto/${pc.id}`;
+        } catch (err) {
+          ocupado(btn, false);
+          toast(msgErro(err), 'erro');
+        }
+      });
+    },
+  });
 }
 
 function paginaProduto(pc) {
