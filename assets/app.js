@@ -1342,7 +1342,8 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
       </div>
       <label class="fld"><span>Observação <span class="hint">· deste pedido</span></span><textarea name="obs" rows="2" placeholder="Ex.: pedido de bordado">${esc(p.obs || '')}</textarea></label>
       ${tipo === 'consumo' ? `<div class="avisos">${AVISOS_CONSUMO.map(([k, l]) => `<label class="aviso-chk"><input type="checkbox" name="av_${k}"${((p.etapas || {})._avisos || []).includes(k) ? ' checked' : ''}><span class="bx">${ic('check')}</span>${l}</label>`).join('')}</div>` : ''}
-      <div class="fld"><span class="lbl">${tipo === 'consumo' ? 'Arquivos do consumo <span class="hint">· fotos ou PDFs, não aparecem no catálogo</span>' : 'Fotos e PDFs da peça <span class="hint">· aparecem no catálogo</span>'}</span><div class="fotos-edit" id="fotos"></div></div>
+      <div class="fld"><span class="lbl">${tipo === 'consumo' ? 'Arquivos do consumo <span class="hint">· fotos ou PDFs, não aparecem no catálogo · o PDF do encaixe do Audaces preenche a ficha de consumo</span>' : 'Fotos e PDFs da peça <span class="hint">· aparecem no catálogo</span>'}</span><div class="fotos-edit" id="fotos"></div></div>
+      ${tipo === 'consumo' ? '<div id="aud-ped"></div>' : ''}
       <datalist id="dl-refs">${S.db.pecas.map(x => `<option value="${esc(x.ref)}">`).join('')}</datalist>
     </form>`,
     rodape: `<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fp" class="btn primary">${pedido ? 'Salvar' : 'Cadastrar'}</button>`,
@@ -1402,6 +1403,28 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
       form.ref.addEventListener('change', infoPeca);
       form.ref.addEventListener('blur', infoPeca);
       if (pcAtual) infoPeca();
+      // PDF do encaixe do Audaces anexado aqui: lê na hora e, ao salvar, preenche a largura e o consumo da ficha
+      const lidosAud = new Map();
+      const desenhaAud = () => {
+        const box = m.$('#aud-ped'); if (!box) return;
+        const ok = fotos.novas().filter(f => (lidosAud.get(f) || {}).r);
+        const tec = ((((pcAtual && fichaDe(pcAtual.id)) || {}).consumo || {}).tecidos) || [];
+        const ant = Object.fromEntries(Array.from(box.querySelectorAll('[data-aud-f]')).map(x => [x.dataset.audF, { on: x.querySelector('[data-aud-on]').checked, alvo: x.querySelector('[data-aud-alvo]').value }]));
+        box.innerHTML = ok.map((f, i) => {
+          const r = lidosAud.get(f).r, a = ant[f.name];
+          return `<div class="aud-ped" data-aud-f="${esc(f.name)}">${ic('file')}<div class="tx"><b>${esc(f.name)}</b><small>Lido do Audaces: ${resumoEncaixe(r)}</small>
+            <div class="aud-ped-op"><label class="aviso-chk"><input type="checkbox" data-aud-on${!a || a.on ? ' checked' : ''}><span class="bx">${ic('check')}</span>Preencher na ficha de consumo</label>
+            <select class="inp" data-aud-alvo>${opTecAud(tec, a ? (a.alvo === 'novo' ? -1 : +a.alvo) : (tec.length > i ? i : -1))}</select></div></div></div>`;
+        }).join('');
+      };
+      new MutationObserver(() => {
+        fotos.novas().filter(f => ehPdfArq(f) && !lidosAud.has(f)).forEach(f => {
+          lidosAud.set(f, {});
+          textoPdf(f).then(t => { lidosAud.set(f, { r: lerEncaixe(t) }); desenhaAud(); }).catch(() => {});
+        });
+        desenhaAud();
+      }).observe(m.$('#fotos'), { childList: true });
+      form.ref.addEventListener('change', () => setTimeout(desenhaAud));
       form.addEventListener('submit', async e => {
         e.preventDefault();
         const btn = m.$('.btn.primary');
@@ -1455,9 +1478,18 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
               if (S.fichaAberta && S.fichaAberta.pc.id === pc.id && !S.fichaAberta.pendente) S.fichaAberta = null;
             }
           }
+          const usar = Array.from(m.$$('[data-aud-f]')).filter(x => x.querySelector('[data-aud-on]').checked)
+            .map(x => ({ r: (lidosAud.get(fotos.novas().find(f => f.name === x.dataset.audF)) || {}).r, alvo: x.querySelector('[data-aud-alvo]').value })).filter(x => x.r);
+          if (usar.length) {
+            const fi = fichaDe(pc.id), consumo = clone((fi && fi.consumo) || {});
+            consumo.tecidos = consumo.tecidos || [];
+            usar.forEach(x => aplicarEncaixe(consumo.tecidos, x.r, x.alvo));
+            await salvarReg('fichas', fi ? { consumo } : { peca_id: pc.id, tecnica: {}, consumo }, fi && fi.id);
+            if (S.fichaAberta && S.fichaAberta.pc.id === pc.id && !S.fichaAberta.pendente) S.fichaAberta = null;
+          }
           if (antigaPeca) limparPecaOrfa(antigaPeca);
           m.fechar();
-          toast(pedido ? 'Alterações salvas.' : `${T.nome} cadastrado.`);
+          toast(usar.length ? `${T.nome} ${pedido ? 'salvo' : 'cadastrado'} · consumo do Audaces na ficha.` : pedido ? 'Alterações salvas.' : `${T.nome} cadastrado.`);
           rerender();
         } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); }
       });
@@ -3751,7 +3783,8 @@ function formNovoProduto() {
             ['modelista', fd.get('modelista')], ['piloteira', fd.get('piloteira')],
           ].map(([k, v]) => [k, String(v || '').trim()]).filter(([, v]) => v));
           await salvarReg('fichas', { peca_id: pc.id, tecnica, consumo: {} });
-          m.fechar(); toast('Produto criado.'); location.hash = `#/produto/${pc.id}`;
+          await salvarReg('fluxos', { peca_id: pc.id, etapas: {} });
+          m.fechar(); toast('Produto criado e colocado nas etapas.'); location.hash = `#/produto/${pc.id}`;
         } catch (err) {
           ocupado(btn, false);
           toast(msgErro(err), 'erro');
@@ -4404,6 +4437,15 @@ function lerEncaixe(txt) {
   };
   return r.largura || r.consumo ? r : null;
 }
+const opTecAud = (tec, i) => `<option value="novo">Novo tecido</option>${tec.map((t, j) => `<option value="${j}"${j === i ? ' selected' : ''}>Linha ${j + 1}${t.tecido ? ' · ' + esc(t.tecido) : ''}${t.cor ? ' · ' + esc(t.cor) : ''}</option>`).join('')}`;
+function aplicarEncaixe(lista, r, alvo) {
+  let row = alvo === 'novo' ? null : lista[+alvo];
+  if (!row) { row = MODELOS_LINHA['consumo.tecidos'](); lista.push(row); }
+  if (r.largura) row.largura = fmtNum(r.largura / 100, 2);
+  if (r.consumo) row.consumo = fmtNum(r.consumo / 100, 3);
+}
+const resumoEncaixe = r => [r.largura ? `largura <b>${fmtNum(r.largura / 100, 2)} m</b>` : '', r.consumo ? `consumo <b>${fmtNum(r.consumo / 100, 3)} m</b> por peça${r.perda != null ? ` (${fmtNum(r.perda, 0)}% de perda)` : ''}` : '',
+  r.aproveitamento ? `aproveitamento ${fmtNum(r.aproveitamento, 2)}%` : ''].filter(Boolean).join(' · ');
 async function lerAudaces(E, files) {
   statusSalvo('Lendo o PDF…');
   const lidos = [];
@@ -4413,7 +4455,7 @@ async function lerAudaces(E, files) {
   }
   fimSalvar(E);
   const tec = E.F.consumo.tecidos || [];
-  const opTec = i => `<option value="novo">Novo tecido</option>${tec.map((t, j) => `<option value="${j}"${j === i ? ' selected' : ''}>Linha ${j + 1}${t.tecido ? ' · ' + esc(t.tecido) : ''}${t.cor ? ' · ' + esc(t.cor) : ''}</option>`).join('')}`;
+  const opTec = i => opTecAud(tec, i);
   modal({
     titulo: 'PDF do Audaces', tamanho: 'lg',
     corpo: `<div class="aud">${lidos.map((x, i) => x.r ? `<div class="aud-c" data-aud="${i}">
@@ -4433,13 +4475,7 @@ async function lerAudaces(E, files) {
       const ok = m.$('#aud-ok'); if (!ok) return;
       ok.onclick = () => {
         const lista = E.F.consumo.tecidos || (E.F.consumo.tecidos = []);
-        Array.from(m.$$('[data-aud]')).forEach(c => {
-          const { r } = lidos[+c.dataset.aud], alvo = c.querySelector('[data-alvo]').value;
-          let row = alvo === 'novo' ? null : lista[+alvo];
-          if (!row) { row = MODELOS_LINHA['consumo.tecidos'](); lista.push(row); }
-          if (r.largura) row.largura = fmtNum(r.largura / 100, 2);
-          if (r.consumo) row.consumo = fmtNum(r.consumo / 100, 3);
-        });
+        Array.from(m.$$('[data-aud]')).forEach(c => aplicarEncaixe(lista, lidos[+c.dataset.aud].r, c.querySelector('[data-alvo]').value));
         agendarSalvar(E, 0); desenharFolha(E); m.fechar(); toast('Largura e consumo preenchidos pelo Audaces.');
       };
     },
