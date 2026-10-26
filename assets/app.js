@@ -3333,8 +3333,11 @@ function formEtapa(pc, k) {
   const novos = [], removidos = [];
   const pend = clone(e0.pend || []);
   const LIB = k === 'liberacao_modelagem', lib0 = LIB ? (e0.lib || libSugerida(pc)) : null;
+  // pendências das outras etapas do modelo, para ver tudo num lugar só
+  const outrasPend = FLUXO.filter(([x]) => x !== k).flatMap(([x, l]) => ((((fl0 && fl0.etapas) || {})[x] || {}).pend || []).map(p => ({ ...p, k: x, l })));
+  let mudouPend = false;
   modal({
-    titulo: pc.ref, tamanho: 'lg',
+    titulo: pc.ref, tamanho: 'lg', aoFechar: () => { if (mudouPend) rerender(); },
     corpo: `<div class="et-top">
         <div class="et-sub">Atualizar etapa: <b>${esc(nomeFluxo(k))}</b><span class="muted"> · ${idx + 1} de ${FLUXO.length}</span></div>
         <div class="et-nav"><button type="button" class="icon-btn" data-ir="${idx - 1}" ${idx ? '' : 'disabled'} title="Etapa anterior">${ic('chevL')}</button><button type="button" class="icon-btn" data-ir="${idx + 1}" ${idx < FLUXO.length - 1 ? '' : 'disabled'} title="Próxima etapa">${ic('chevR')}</button></div>
@@ -3357,6 +3360,9 @@ function formEtapa(pc, k) {
         <div data-p="pend" hidden>
           <div class="et-pend" id="pend"></div>
           <div class="et-add"><input class="inp" id="pend-txt" placeholder="Nova pendência (ex.: faltou o aviamento do bolso)"><button type="button" class="btn" id="pend-add">${ic('plus')}Adicionar</button></div>
+          <div class="hint" style="margin-top:6px">Cada pendência fica gravada na hora, com data e hora, mesmo sem clicar em “Salvar alterações”.</div>
+          ${outrasPend.length ? `<div class="et-outras"><div class="lbl">Pendências das outras etapas</div>${outrasPend.map(p => `<button type="button" class="et-pi${p.ok ? ' ok' : ''}" data-ir-et="${p.k}"><span class="et-ok">${ic(p.ok ? 'check' : 'alert')}</span>
+            <div class="tx"><span>${esc(p.t)}</span><small>${esc(p.l)} · criada ${fQuando(p.em)}${p.ok && p.ok_em ? ` · resolvida ${fQuando(p.ok_em)}` : ''}</small></div>${ic('chevR')}</button>`).join('')}</div>` : ''}
         </div>
         <div data-p="resp" hidden>
           <div class="fld"><span class="lbl">Quem é responsável por esta etapa</span>${pickPessoas('resp', e0.resp || null)}
@@ -3409,16 +3415,38 @@ function formEtapa(pc, k) {
       });
       desenhaArqs();
       const desenhaPend = () => {
-        m.$('#pend').innerHTML = pend.length ? pend.map((p, i) => `<label class="et-pi${p.ok ? ' ok' : ''}"><input type="checkbox" data-pi="${i}"${p.ok ? ' checked' : ''}><span>${esc(p.t)}</span><small class="muted">${fDia(p.em)}</small><button type="button" class="icon-btn danger" data-prm="${i}" title="Apagar">${ic('x')}</button></label>`).join('')
+        m.$('#pend').innerHTML = pend.length ? pend.map((p, i) => `<label class="et-pi${p.ok ? ' ok' : ''}"><input type="checkbox" data-pi="${i}"${p.ok ? ' checked' : ''}>
+          <div class="tx"><span>${esc(p.t)}</span><small>criada ${fQuando(p.em)}${p.por ? ` por ${esc(p.por)}` : ''}${p.ok && p.ok_em ? ` · resolvida ${fQuando(p.ok_em)}${p.ok_por ? ` por ${esc(p.ok_por)}` : ''}` : ''}</small></div>
+          <button type="button" class="icon-btn danger" data-prm="${i}" title="Apagar">${ic('x')}</button></label>`).join('')
           : '<div class="muted small" style="padding:6px 2px 10px">Nenhuma pendência nesta etapa.</div>';
         const n = pend.filter(p => !p.ok).length;
         m.$('#n-pend').textContent = n ? ` ${n}` : '';
       };
-      const addPend = () => { const i = m.$('#pend-txt'), t = i.value.trim(); if (!t) return; pend.push({ id: uid(), t, ok: false, em: agoraISO() }); i.value = ''; desenhaPend(); i.focus(); };
+      // grava só as pendências desta etapa, na hora (o resto continua esperando "Salvar alterações")
+      let filaPend = Promise.resolve();
+      const gravarPend = () => {
+        mudouPend = true;
+        filaPend = filaPend.then(async () => {
+          try {
+            const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
+            et[k] = { ...(et[k] || {}), pend: clone(pend) };
+            await salvarFluxo(pc, et);
+          } catch (err) { toast(`A pendência não foi gravada: ${msgErro(err)}`, 'erro'); }
+        });
+      };
+      const quem = () => nomeUsuario().split(' ')[0];
+      const addPend = () => { const i = m.$('#pend-txt'), t = i.value.trim(); if (!t) return; pend.push({ id: uid(), t, ok: false, em: agoraISO(), por: quem() }); i.value = ''; desenhaPend(); gravarPend(); i.focus(); };
       m.$('#pend-add').onclick = addPend;
       m.$('#pend-txt').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addPend(); } });
-      m.$('#pend').addEventListener('change', e => { const c = e.target.closest('[data-pi]'); if (c) { const p = pend[+c.dataset.pi]; p.ok = c.checked; p.ok_em = c.checked ? agoraISO() : null; desenhaPend(); } });
-      m.$('#pend').addEventListener('click', e => { const b = e.target.closest('[data-prm]'); if (b) { e.preventDefault(); pend.splice(+b.dataset.prm, 1); desenhaPend(); } });
+      m.$('#pend').addEventListener('change', e => { const c = e.target.closest('[data-pi]'); if (c) { const p = pend[+c.dataset.pi]; p.ok = c.checked; p.ok_em = c.checked ? agoraISO() : null; p.ok_por = c.checked ? quem() : null; desenhaPend(); gravarPend(); } });
+      m.$('#pend').addEventListener('click', async e => {
+        const b = e.target.closest('[data-prm]'); if (!b) return;
+        e.preventDefault();
+        const p = pend[+b.dataset.prm];
+        if (!await confirmar(`Apagar a pendência “${esc(p.t)}”? Ela sai do histórico.`, { ok: 'Apagar' })) return;
+        pend.splice(pend.indexOf(p), 1); desenhaPend(); gravarPend();
+      });
+      m.el.addEventListener('click', e => { const b = e.target.closest('[data-ir-et]'); if (b) { m.fechar(); formEtapa(peca(pc.id), b.dataset.irEt); } });
       desenhaPend();
       m.$('#et-del').onclick = async () => {
         try {
@@ -3441,6 +3469,7 @@ function formEtapa(pc, k) {
             await S.api.enviar(path, b.type ? b : new Blob([b], { type: 'application/octet-stream' }));
             enviados.push({ p: path, n: f.name, em: agoraISO() });
           }
+          await filaPend;
           const fd = new FormData(form);
           const st = fd.get('st') || 'fazer';
           const fl = fluxoDe(pc.id);

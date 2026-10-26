@@ -1543,3 +1543,15 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .aud-ped small { color: var(--ink-2); font-size: 12.5px; }
 .aud-ped-op { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 4px; }
 .aud-ped-op select { max-width: 320px; height: 36px; }
+
+/* pendências com data e hora, e as das outras etapas */
+.et-pi .tx { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.et-pi .tx small { font-size: 12px; color: var(--mute); }
+.et-outras { margin-top: 18px; display: flex; flex-direction: column; gap: 4px; }
+.et-outras .lbl { margin-bottom: 4px; }
+.et-outras .et-pi { background: none; text-align: left; font: inherit; color: inherit; width: 100%; }
+.et-outras .et-pi:hover { border-color: var(--border-hover, var(--brand)); }
+.et-outras .et-ok { flex: none; display: grid; place-items: center; }
+.et-outras .et-ok svg { width: 18px; height: 18px; color: var(--amber, #C98A06); }
+.et-outras .et-pi.ok .et-ok svg { color: var(--green); }
+.et-outras .et-pi > svg { width: 16px; height: 16px; color: var(--mute); flex: none; }
