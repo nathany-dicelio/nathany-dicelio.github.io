@@ -2921,7 +2921,7 @@ setInterval(() => { const t = inHora(agoraISO()); $$('[data-relogio]').forEach(e
 
 /* ================================================================
    MEDIÇÃO (engenharia) — tabela de medidas de cada peça
-   guardada em fluxos.etapas.medicao.med = { tam, linhas[{pom, desc, tab, antes, depois}], em, por }
+   guardada em fluxos.etapas.medicao.med = { tam, pp1_data, pp2_data, linhas[{pom, desc, molde, pp1, pp2, tab, antes, depois, ajuste}], inst_montagem, em, por }
    modelos por cliente e tipo em config "medicao_modelos" = { "<cliente_id>|<tipo>": [{pom, desc}] }
    ================================================================ */
 const medDe = pc => ((((fluxoDe(pc.id) || {}).etapas) || {}).medicao || {}).med || null;
@@ -2988,21 +2988,25 @@ const difMed = (medido, tab) => {
   const d = Math.round((n(medido) - n(tab)) * 100) / 100;
   return d ? String(d).replace('.', ',') : '';
 };
+const linhaMedUsada = r => ['pom', 'desc', 'molde', 'pp1', 'pp2', 'tab', 'antes', 'depois', 'ajuste'].some(c => r[c]);
 function folhaEngenhariaHtml(pc, M) {
-  const linhas = M.linhas.filter(r => r.pom || r.desc || r.tab || r.antes || r.depois || r.ajuste);
-  const vazias = Math.max(0, 30 - linhas.length);
+  const linhas = M.linhas.filter(linhaMedUsada);
+  const vazias = Math.max(0, 24 - linhas.length);
   const td = (v, cls = '') => `<td class="${cls}">${esc(v ?? '')}</td>`;
+  const dPP = d => `<br><small>DATA: ${d ? fDia(dataDe(d)) : ''}</small>`;
   return `<div class="fe">
     <div class="fe-t">FICHA DE ENGENHARIA</div>
     <table class="fe-cab"><tr><td><b>DATA:</b> ${M.data ? fData(dataDe(M.data)) : ''}</td><td><b>OP:</b> ${esc(M.op || '')}</td><td><b>REF:</b> ${esc(pc.ref)}</td><td><b>LACRE:</b> ${esc(M.lacre || '')}</td></tr></table>
     <div class="fe-t2">TABELA DE MEDIDAS - AMOSTRA ENGENHARIA</div>
-    <table class="fe-tab"><thead><tr><th>POM</th><th>DESCRIÇÃO</th><th>TAM:<br>${esc(M.tam)}</th><th>ANTES<br>PASSAR</th><th>≠</th><th>DEPOIS<br>PASSAR</th><th>≠</th><th>AJUSTE</th></tr></thead>
-      <tbody>${linhas.map(r => `<tr>${td(r.pom, 'c')}${td(r.desc, 'd')}${td(r.tab)}${td(r.antes)}${td(difMed(r.antes, r.tab))}${td(r.depois)}${td(difMed(r.depois, r.tab))}${td(r.ajuste, 'aj')}</tr>`).join('')}
-      ${'<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(vazias)}</tbody></table>
+    <table class="fe-tab"><thead><tr><th>POM</th><th>DESCRIÇÃO</th><th>MOLDE</th><th>PEÇA<br>PRONTA${dPP(M.pp1_data)}</th><th>PEÇA<br>PRONTA${dPP(M.pp2_data)}</th><th>TAM:<br>${esc(M.tam)}</th><th>ANTES<br>PASSAR</th><th>≠</th><th>DEPOIS<br>PASSAR</th><th>≠</th><th>AJUSTE</th></tr></thead>
+      <tbody>${linhas.map(r => `<tr>${td(r.pom, 'c')}${td(r.desc, 'd')}${td(r.molde)}${td(r.pp1)}${td(r.pp2)}${td(r.tab)}${td(r.antes)}${td(difMed(r.antes, r.tab))}${td(r.depois)}${td(difMed(r.depois, r.tab))}${td(r.ajuste, 'aj')}</tr>`).join('')}
+      ${`<tr>${'<td></td>'.repeat(11)}</tr>`.repeat(vazias)}</tbody></table>
     <div class="fe-t2">OBSERVAÇÕES ENGENHARIA</div>
     <div class="fe-obs">${M.status ? `<div class="fe-st">${esc(nomeStEng(M.status).toUpperCase())}</div>` : ''}${esc(M.obs_eng || '')}</div>
     <div class="fe-t2">OBSERVAÇÕES MODELAGEM</div>
     <div class="fe-obs">${esc(M.obs_mod || '')}</div>
+    <div class="fe-t2">INSTRUÇÃO DE MONTAGEM</div>
+    <div class="fe-obs">${esc(M.inst_montagem || '')}</div>
     <div class="fe-ass"><div><span>${esc(M.eng || '')}</span><b>ENGENHARIA</b></div><div><span>${esc(M.mod || '')}</span><b>MODELAGEM</b></div></div>
   </div>`;
 }
@@ -3027,17 +3031,21 @@ function paginaMedicao(pc) {
       <div class="r">
         <a class="btn sm" href="#/produto/${pc.id}">${ic('dress')}<span class="tx">Produto</span></a>
         <a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}<span class="tx">Ficha técnica</span></a>
-        <button type="button" class="btn sm primary" id="md-print">${ic('download')}<span class="tx">Imprimir ficha</span></button>
+        <button type="button" class="btn sm" id="md-print">${ic('download')}<span class="tx">Imprimir</span></button>
+        <button type="button" class="btn sm primary" id="md-pdf">${ic('download')}<span class="tx">Baixar PDF</span></button>
       </div>
     </div>
     <div class="card md-card no-print">
       <div class="md-top">
         <div class="md-ref">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>Ficha de engenharia · ${esc(nomeModelo(pc))}</small></div></div>
+        ${campo('Data', 'data', 'type="date"', 'md-data')}
       </div>
-      <div class="md-cab">${campo('Data', 'data', 'type="date"')}${campo('OP', 'op', 'inputmode="numeric"')}${campo('Lacre', 'lacre')}
+      <div class="md-cab md-cab3">${campo('OP', 'op', 'inputmode="numeric"')}${campo('Lacre', 'lacre')}
         <label class="fld"><span>Tamanho</span><select id="md-tam">${opcoes(grade.map(g => [g, g]), M.tam)}</select></label></div>
       ${!salvo && M.origem ? `<div class="aviso">${ic('info')}<span>Tabela pronta a partir do ${esc(M.origem)}. É só preencher as medidas.</span></div>` : ''}
-      <div class="tbl-wrap"><table class="ft-tab md-tab"><thead><tr><th>POM</th><th>Descrição</th><th class="n">Tam: <span id="md-th-tam">${esc(M.tam)}</span></th><th class="n">Antes passar</th><th class="n">≠</th><th class="n">Depois passar</th><th class="n">≠</th><th>Ajuste</th><th></th></tr></thead>
+      <div class="tbl-wrap"><table class="ft-tab md-tab"><thead><tr><th>POM</th><th>Descrição</th><th class="n">Molde</th>
+        ${['pp1', 'pp2'].map(k => `<th class="n md-pp">Peça pronta<input type="date" data-mc="${k}_data" value="${esc(M[`${k}_data`] || '')}" title="Data da peça pronta"></th>`).join('')}
+        <th class="n">Tam: <span id="md-th-tam">${esc(M.tam)}</span></th><th class="n">Antes passar</th><th class="n">≠</th><th class="n">Depois passar</th><th class="n">≠</th><th>Ajuste</th><th></th></tr></thead>
         <tbody id="md-body"></tbody></table></div>
       <div class="fs-pe"><button type="button" class="btn sm" id="md-add">${ic('plus')}Adicionar POM</button>
         <button type="button" class="btn sm" id="md-modelo">${ic('star')}Usar como modelo para ${esc(nomeModelo(pc))}</button>
@@ -3046,7 +3054,10 @@ function paginaMedicao(pc) {
         <div class="fld"><span class="lbl">Observações engenharia</span>
           <div class="pick">${ST_ENG.filter(([k]) => k).map(([k, l]) => `<label><input type="radio" name="md-st" value="${k}"${M.status === k ? ' checked' : ''}><span class="pk" style="--c:${k === 'sem' ? '#17925A' : k === 'com' ? '#C98A06' : '#C93545'}">${l}</span></label>`).join('')}</div>
           <textarea data-mc="obs_eng" rows="2" placeholder="Anotações da engenharia">${esc(M.obs_eng || '')}</textarea></div>
-        <label class="fld"><span>Observações modelagem</span><textarea data-mc="obs_mod" rows="2" placeholder="Anotações da modelagem">${esc(M.obs_mod || '')}</textarea></label>
+        <div class="md-dir">
+          <label class="fld"><span>Observações modelagem</span><textarea data-mc="obs_mod" rows="2" placeholder="Anotações da modelagem">${esc(M.obs_mod || '')}</textarea></label>
+          <label class="fld"><span>Instrução de montagem</span><textarea data-mc="inst_montagem" rows="2" placeholder="Como montar a peça">${esc(M.inst_montagem || '')}</textarea></label>
+        </div>
       </div>
       <div class="md-cab">${campo('Engenharia', 'eng', 'list="dl-pes-md"')}${campo('Modelagem', 'mod', 'list="dl-pes-md"')}</div>
       ${salvo ? `<div class="small muted md-pe">Salva em ${fQuando(salvo.em)}${salvo.por ? ` por ${esc(salvo.por)}` : ''}</div>` : ''}
@@ -3059,6 +3070,7 @@ function paginaMedicao(pc) {
   const linha = (r, i) => `<tr>
     <td><input class="cod" data-md="${i}|pom" value="${esc(r.pom || '')}"${pts.length ? ' list="dl-pom-md"' : ''}></td>
     <td><input data-md="${i}|desc" value="${esc(r.desc || '')}"></td>
+    ${['molde', 'pp1', 'pp2'].map(k => `<td class="n"><input class="num" data-md="${i}|${k}" value="${esc(r[k] || '')}" inputmode="decimal"></td>`).join('')}
     <td class="n"><input class="num" data-md="${i}|tab" value="${esc(r.tab || '')}" inputmode="decimal"></td>
     <td class="n pil"><input class="num" data-md="${i}|antes" value="${esc(r.antes || '')}" inputmode="decimal"></td>
     <td class="n md-dif" data-dif="${i}|antes">${difMed(r.antes, r.tab)}</td>
@@ -3074,7 +3086,7 @@ function paginaMedicao(pc) {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const { origem, ...resto } = M;
-      const med = { ...resto, linhas: M.linhas.filter(r => r.pom || r.desc || r.tab || r.antes || r.depois || r.ajuste), em: agoraISO(), por: nomeUsuario().split(' ')[0] };
+      const med = { ...resto, linhas: M.linhas.filter(linhaMedUsada), em: agoraISO(), por: nomeUsuario().split(' ')[0] };
       fila = fila.then(async () => {
         try {
           const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
@@ -3103,7 +3115,7 @@ function paginaMedicao(pc) {
     if (p && !r.desc) { r.desc = p.nome; const d = body.querySelector(`[data-md="${i}|desc"]`); if (d) d.value = p.nome; salvar(); }
   });
   body.addEventListener('click', e => { const b = e.target.closest('[data-md-rm]'); if (!b) return; M.linhas.splice(+b.dataset.mdRm, 1); desenhaLinhas(); salvar(0); });
-  $('#md-add').onclick = () => { M.linhas.push({ pom: '', desc: '', tab: '', antes: '', depois: '', ajuste: '' }); desenhaLinhas(); const u = body.querySelector(`[data-md="${M.linhas.length - 1}|pom"]`); if (u) u.focus(); };
+  $('#md-add').onclick = () => { M.linhas.push({ pom: '', desc: '', molde: '', pp1: '', pp2: '', tab: '', antes: '', depois: '', ajuste: '' }); desenhaLinhas(); const u = body.querySelector(`[data-md="${M.linhas.length - 1}|pom"]`); if (u) u.focus(); };
   $('#md-tam').onchange = e => {
     M.tam = e.target.value; $('#md-th-tam').textContent = M.tam;
     // troca o tamanho: puxa os valores desse tamanho da ficha, se existirem
@@ -3122,6 +3134,7 @@ function paginaMedicao(pc) {
     } catch (err) { toast(msgErro(err), 'erro'); }
   };
   $('#md-print').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M); window.print(); };
+  $('#md-pdf').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M); baixarPdfFolha('#md-folha', `engenharia-${nomeSeguro(pc.ref)}`, '#md-pdf'); };
 }
 
 /* ================================================================
@@ -3989,6 +4002,13 @@ function porDoProduto(pc) {
   const p = S.db.pedidos.filter(x => x.peca_id === pc.id).sort((a, b) => new Date(a.pedido_em) - new Date(b.pedido_em))[0];
   return p ? ((pessoa(p.de_id) || {}).nome || '') : '';
 }
+// chip da pessoa: a cor do cadastro (pelo nome todo ou só o primeiro nome); quem não está cadastrado ganha uma cor fixa
+function chipPor(por) {
+  const n = norm(por), pri = n.split(' ')[0];
+  const p = S.db.pessoas.find(x => norm(x.nome) === n) || S.db.pessoas.find(x => norm(x.nome).split(' ')[0] === pri);
+  const cor = p ? p.cor : CORES[[...n].reduce((a, c) => a + c.charCodeAt(0), 0) % CORES.length];
+  return `<span class="pchip" style="--c:${esc(cor)}">${esc(por)}</span>`;
+}
 function viewProduto(arg) {
   if (arg && peca(arg)) return paginaProduto(peca(arg));
   const f = S.f.prod || (S.f.prod = { q: '', cli: '', st: '', por: '', per: 'tudo', sala: '', lim: 150 });
@@ -4025,13 +4045,12 @@ function viewProduto(arg) {
     let ultimo = '';
     $('#pl').innerHTML = `<table class="tbl tbl-ped tbl-prod"><thead><tr><th>Criado</th><th>Referência</th><th>Por</th><th>Status</th><th>Etapa</th><th></th></tr></thead><tbody>${lista.slice(0, f.lim).map(pc => {
       const d = inData(pc.criado_em), d0 = new Date(pc.criado_em), t = ((fichaDe(pc.id) || {}).tecnica) || {}, ops = opsDaPeca(pc), sf = situacaoFluxo(pc), por = porDoProduto(pc);
-      const pes = S.db.pessoas.find(p => norm(p.nome) === norm(por));
       const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="6"><b>${fDia(pc.criado_em)}</b><span>${DIAS[d0.getDay()]}${mesmoDia(d0, new Date()) ? ' · hoje' : ''}</span><span class="dia-n">${plural(porDia[d], 'produto')}</span></td></tr>` : '';
       ultimo = d;
       return `${sep}<tr class="lin-prod" data-href="#/produto/${pc.id}">
         <td class="quando"><b>${fDia(pc.criado_em)}</b><small>${fHora(pc.criado_em)}</small></td>
         <td><div class="ref-cel">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${ops.length ? `<span>OP ${esc(ops.join(', '))}</span>` : ''}</small>${pc.descricao ? `<small class="desc">${esc(pc.descricao)}</small>` : ''}</div></div></td>
-        <td>${pes ? pchip(pes.id) : por ? `<span class="pchip">${esc(por)}</span>` : '<span class="muted">—</span>'}</td>
+        <td>${por ? chipPor(por) : '<span class="muted">—</span>'}</td>
         <td>${t.status ? `<span class="tag ${t.status === 'Cancelado' ? 'gray' : t.status === 'Vendido' || t.status === 'Entregue' ? 'green' : 'brand'} sem">${esc(t.status)}</span>` : '<span class="muted">—</span>'}</td>
         <td class="small">${sf.atual ? esc(nomeFluxo(sf.atual)) : sf.fl ? '<span class="c-green">Concluído</span>' : '<span class="muted">—</span>'}</td>
         <td class="x">${ic('chevR')}</td></tr>`;
@@ -4102,8 +4121,9 @@ function formNovoProduto() {
             ['modelista', fd.get('modelista')], ['piloteira', fd.get('piloteira')],
           ].map(([k, v]) => [k, String(v || '').trim()]).filter(([, v]) => v));
           await salvarReg('fichas', { peca_id: pc.id, tecnica, consumo: {} });
-          await salvarReg('fluxos', { peca_id: pc.id, etapas: {} });
-          m.fechar(); toast('Produto criado e colocado nas etapas.'); location.hash = `#/produto/${pc.id}`;
+          const agora = agoraISO();
+          await salvarReg('fluxos', { peca_id: pc.id, etapas: { criacao: { st: 'feito', em: agora, hist: [{ st: 'feito', em: agora, por: nomeUsuario().split(' ')[0] }] } } });
+          m.fechar(); toast('Produto criado e colocado nas etapas, com a Criação feita.'); location.hash = `#/produto/${pc.id}`;
         } catch (err) {
           ocupado(btn, false);
           toast(msgErro(err), 'erro');
@@ -4131,7 +4151,9 @@ function paginaProduto(pc) {
       <div class="r">
         <a class="btn sm" href="#/peca/${pc.id}">${ic('dress')}<span class="tx">Peça</span></a>
         <a class="btn sm" href="#/${ehBaila(pc) ? 'etapas-baila' : 'etapas'}/${pc.id}">${ic('flow')}<span class="tx">Etapas</span></a>
-        <a class="btn sm primary" href="#/ficha-tecnica/${pc.id}">${ic('file')}<span class="tx">Ficha técnica</span></a>
+        <a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}<span class="tx">Ficha técnica</span></a>
+        <button type="button" class="btn sm" id="prod-print">${ic('download')}<span class="tx">Imprimir</span></button>
+        <button type="button" class="btn sm primary" id="prod-pdf">${ic('download')}<span class="tx">Baixar PDF</span></button>
       </div>
     </div>
     <div class="prod" id="prod">
@@ -4151,6 +4173,10 @@ function paginaProduto(pc) {
           ${campo('Modelista', inK('tecnica.modelista'))}
           ${campo('Piloteira', inK('tecnica.piloteira'))}
           ${campo('Cliente', `<select data-peca="cliente_id">${opClientes(pc.cliente_id || '', '—')}</select>`)}
+          ${campo('Comprador', inK('tecnica.compradora'))}
+          ${campo('Cadastro', `<input value="${esc(fData(cadastroProduto(pc)))}" disabled title="Dia em que o produto foi criado">`)}
+          ${campo('Entrega', inK('tecnica.data_entrega', 'type="date"'))}
+          ${campo('Código 2', inK('tecnica.codigo2'))}
         </div>
       </div>
     </div>
@@ -4166,11 +4192,9 @@ function paginaProduto(pc) {
         ${campo('Quantidade', inK('tecnica.quantidade', 'inputmode="numeric"'))}
         ${campo('Coleção', inK('tecnica.colecao'))}
         ${campo('Aprovado dia', inK('tecnica.mod_aprovada', 'type="date"'))}
-        ${campo('Data de entrega', inK('tecnica.data_entrega', 'type="date"'))}
         ${campo('Data de envio', inK('tecnica.data_envio', 'type="date"'))}
         ${campo('Cor do produto', inK('consumo.cor'))}
         ${campo('Pedido', inK('tecnica.pedido'))}
-        ${campo('Código', inK('tecnica.codigo2'))}
         ${campo('Lacre', inK('tecnica.lacre'))}
         ${campo('Obs.', `<textarea data-k="tecnica.obs_produto" rows="2">${esc(t.obs_produto || '')}</textarea>`, 'span4')}
       </div>
@@ -4179,7 +4203,8 @@ function paginaProduto(pc) {
     <div class="card prod-card">
       <div class="card-h"><h3>Materiais</h3><div class="r"><span class="small muted">O que mudar aqui muda também na ficha de consumo</span></div></div>
       <div class="prod-mat" id="prod-mat">${secoesMateriaisHtml(E)}</div>
-    </div></div>`;
+    </div></div>
+    <div class="md-folha" id="prod-folha"></div>`;
   const root = $('#prod-root');
   let sel = 0;
   const main = $('#pg-main');
@@ -4230,6 +4255,43 @@ function paginaProduto(pc) {
   });
   $$('textarea', root).forEach(autoAltura);
   hidratarFotos(root);
+  const montarFolha = async () => {
+    const fo = $('#prod-folha'); fo.innerHTML = folhaProdutoHtml(peca(pc.id) || pc, E);
+    hidratarFotos(fo);
+    await new Promise(r => setTimeout(r, 400));
+    $$('img', fo).forEach(i => { i.loading = 'eager'; });
+    await Promise.race([new Promise(r => setTimeout(r, 5000)),
+      Promise.all($$('img', fo).map(i => (i.complete ? null : new Promise(r => { i.onload = i.onerror = r; }))))]);
+  };
+  $('#prod-print').onclick = async () => { await montarFolha(); window.print(); };
+  $('#prod-pdf').onclick = async () => { await montarFolha(); baixarPdfFolha('#prod-folha', `produto-${nomeSeguro(pc.ref)}`, '#prod-pdf'); };
+}
+const cadastroProduto = pc => (fichaDe(pc.id) || {}).criado_em || pc.criado_em;
+// folha A4 do produto: o topo, as informações e os materiais
+function folhaProdutoHtml(pc, E) {
+  const t = E.F.tecnica || {}, k = E.F.consumo || {}, cli = cliente(pc.cliente_id), ops = opsDaPeca(pc);
+  const dia = v => (v ? fData(dataDe(v)) : '');
+  const cel = (rot, v) => `<div><small>${rot}</small><span>${esc(v || '')}</span></div>`;
+  const tab = (titulo, cols, linhas) => `<div class="fe-t2">${titulo}</div><table class="fe-tab fp-tab"><thead><tr>${cols.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
+    <tbody>${linhas.map(r => `<tr>${cols.map(([c]) => `<td>${esc(r[c] ?? '')}</td>`).join('')}</tr>`).join('')}${`<tr>${'<td></td>'.repeat(cols.length)}</tr>`.repeat(Math.max(0, 3 - linhas.length))}</tbody></table>`;
+  return `<div class="fe fp">
+    <div class="fe-t">FICHA DE PRODUTO · ${esc(pc.ref)}${cli ? ` · ${esc(cli.nome)}` : ''}</div>
+    <div class="fp-top">
+      ${thumb(capa(pc) || imgsCons(pc)[0], 'th fp-foto')}
+      <div class="fp-grid">
+        ${cel('Status', t.status)}${cel('OP', pc.op || ops.join(', '))}${cel('Cliente', cli && cli.nome)}${cel('Responsável', t.resp)}
+        ${cel('Modelista', t.modelista)}${cel('Piloteira', t.piloteira)}${cel('Comprador', t.compradora)}${cel('Cadastro', fData(cadastroProduto(pc)))}
+        ${cel('Entrega', dia(t.data_entrega))}${cel('Código 2', t.codigo2)}${cel('Descrição', pc.descricao)}${cel('Marca / etiqueta', t.etiqueta)}
+        ${cel('Sala', pc.sala)}${cel('Preço', t.preco)}${cel('Peça piloto', t.piloto)}${cel('Grade', gradeDe(E.F).join(', '))}
+        ${cel('Quantidade', t.quantidade)}${cel('Coleção', t.colecao)}${cel('Aprovado dia', dia(t.mod_aprovada))}${cel('Data de envio', dia(t.data_envio))}
+        ${cel('Cor do produto', k.cor)}${cel('Pedido', t.pedido)}${cel('Lacre', t.lacre)}${cel('Etapa', situacaoFluxo(pc).atual ? nomeFluxo(situacaoFluxo(pc).atual) : '')}
+      </div>
+    </div>
+    ${t.obs_produto ? `<div class="fe-t2">OBSERVAÇÕES</div><div class="fe-obs fp-obs">${esc(t.obs_produto)}</div>` : ''}
+    ${tab('TECIDOS', [['codigo', 'CÓDIGO'], ['tecido', 'TECIDO'], ['gramatura', 'GRAMATURA'], ['largura', 'LARGURA'], ['consumo', 'CONSUMO'], ['composicao', 'COMPOSIÇÃO'], ['cor', 'COR']], k.tecidos || [])}
+    ${tab('AVIAMENTOS', [['codigo', 'CÓDIGO'], ['material', 'MATERIAL / INSUMO'], ['tamanho', 'TAMANHO'], ['aplicacao', 'APLICAÇÃO'], ['un', 'UN'], ['cor', 'COR'], ['consumo', 'CONSUMO']], k.aviamentos || [])}
+    ${tab('ETIQUETAS', [['codigo', 'CÓDIGO'], ['tamanho', 'TAMANHO'], ['etiqueta', 'ETIQUETA'], ['tipo', 'TIPO'], ['aplicacao', 'APLICAÇÃO'], ['un', 'UN'], ['cor', 'COR'], ['consumo', 'CONSUMO']], k.etiquetas || [])}
+  </div>`;
 }
 
 /* ================================================================
@@ -5047,6 +5109,40 @@ async function baixarFichaImagem(E, destino = 'baixar', idBtn = '#f-img') {
     else destino.location.href = URL.createObjectURL(pdf.output('blob'));
   } catch (err) { if (destino !== 'baixar') destino.close(); toast(msgErro(err), 'erro'); }
   finally { limparImpressao(); ocupado(btn, false); }
+}
+
+// PDF A4 de uma folha que só aparece na impressão (medição, produto); folha comprida vira mais de uma página
+async function baixarPdfFolha(sel, nome, idBtn) {
+  const btn = $(idBtn); ocupado(btn, true, 'Gerando…');
+  try {
+    await Promise.all([carregarScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
+      carregarScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')]);
+    const LARG = 733;
+    const canvas = await window.html2canvas($(sel), {
+      useCORS: true, scale: ehIOS() ? 2.5 : 3, backgroundColor: '#ffffff', logging: false, windowWidth: 1280,
+      onclone: doc => {
+        const st = doc.createElement('style'); st.textContent = cssImpressao(); doc.head.append(st);
+        const f = doc.querySelector(sel);
+        Object.assign(f.style, { display: 'block', width: `${LARG}px`, maxWidth: 'none', margin: '0' });
+        $$('img.ft', f).forEach(img => {
+          Object.assign(img.parentElement.style, { backgroundImage: `url("${img.src}")`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundColor: '#fff' });
+          img.style.display = 'none';
+        });
+      },
+    });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const altPg = Math.floor(canvas.width * 281 / 194);
+    for (let y0 = 0, i = 0; y0 < canvas.height - 4; y0 += altPg, i++) {
+      const h = Math.min(altPg, canvas.height - y0);
+      const pg = document.createElement('canvas'); pg.width = canvas.width; pg.height = h;
+      pg.getContext('2d').drawImage(canvas, 0, y0, canvas.width, h, 0, 0, canvas.width, h);
+      if (i) pdf.addPage();
+      pdf.addImage(pg.toDataURL('image/jpeg', 0.95), 'JPEG', 8, 8, 194, h / canvas.width * 194);
+    }
+    pdf.save(`${nome}.pdf`);
+  } catch (err) { toast(msgErro(err), 'erro'); }
+  finally { ocupado(btn, false); }
 }
 
 /* exemplo para o modo demonstração */

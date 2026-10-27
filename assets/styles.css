@@ -1644,3 +1644,35 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .prod-mat input:focus { background: var(--card); border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-50); }
 .prod-mat .fs-h { border-radius: 0; }
 .prod-mat .so-print { display: none; }
+
+/* medição: data no topo, colunas de peça pronta com data, instrução de montagem */
+.md-top .md-data { margin: 0; width: 220px; }
+.md-cab.md-cab3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.md-tab th.md-pp { vertical-align: bottom; }
+.md-tab th.md-pp input { display: block; width: 118px; margin-top: 4px; height: 28px; padding: 0 6px; font-size: 11.5px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.md-dir { display: grid; gap: 10px; }
+@media (max-width: 640px) { .md-top .md-data { width: 100%; } .md-cab.md-cab3 { grid-template-columns: 1fr 1fr; } }
+
+/* folha do produto (impressão e PDF) */
+@media print {
+  body:has(.md-folha) #prod-root { display: none !important; }
+  .fp-top { display: grid; grid-template-columns: 170px 1fr; border-bottom: 1px solid #000; }
+  .fp-foto { width: 170px; height: 212px; border-right: 1px solid #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .fp .fp-foto { background-color: #fff !important; border-radius: 0; }
+  .fp .fp-foto svg { display: none !important; }
+  .fp-foto img { width: 100%; height: 100%; object-fit: contain; }
+  .fp-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: start; }
+  .fp-grid > div { border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 2px 5px; min-height: 30px; }
+  .fp-grid > div:nth-child(4n) { border-right: 0; }
+  .fp-grid small { display: block; font-size: 6.5pt; font-weight: 700; text-transform: uppercase; color: #555; }
+  .fp-grid span { font-size: 9pt; text-transform: uppercase; }
+  .fp-obs { min-height: 0; text-align: left; }
+  .fp-tab td { text-transform: uppercase; }
+  .fe-tab th small { font-weight: 400; font-size: 7pt; }
+}
+.md-tab td:first-child input { width: 64px; min-width: 0; }
+.md-tab td.n input { width: 62px; }
+.md-tab td:nth-child(2) input { min-width: 190px; }
+.md-tab th.md-pp input { width: 112px; }
+.md-tab th.n { white-space: normal; line-height: 1.2; }
+.md-tab input.md-aj { width: 120px; min-width: 0; }
