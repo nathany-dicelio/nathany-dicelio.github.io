@@ -2921,10 +2921,12 @@ setInterval(() => { const t = inHora(agoraISO()); $$('[data-relogio]').forEach(e
 
 /* ================================================================
    MEDIÇÃO (engenharia) — tabela de medidas de cada peça
-   guardada em fluxos.etapas.medicao.med = { tam, pp1_data, pp2_data, linhas[{pom, desc, molde, pp1, pp2, tab, antes, depois, ajuste}], inst_montagem, em, por }
+   guardada em fluxos.etapas.medicao.med = { dias: [{ id, data, tam, pp1_data, pp2_data, linhas[{pom, desc, molde, pp1, pp2, tab, antes, depois, ajuste}], inst_montagem, em, por }], em, por }
+   cada dia em que a peça é medida (depois de cada alteração na costura ou no molde) é uma ficha separada
    modelos por cliente e tipo em config "medicao_modelos" = { "<cliente_id>|<tipo>": [{pom, desc}] }
    ================================================================ */
-const medDe = pc => ((((fluxoDe(pc.id) || {}).etapas) || {}).medicao || {}).med || null;
+const medDias = pc => { const m = ((((fluxoDe(pc.id) || {}).etapas) || {}).medicao || {}).med; return !m ? [] : Array.isArray(m.dias) ? m.dias : [m]; };
+const medDe = pc => medDias(pc).slice(-1)[0] || null; // a medição mais recente
 const GRUPO_TIPO = { blusa: /blusa|regata|top/i, vestido: /vestido/i, saia: /^saia/i, calca: /cal[cç]a/i, bermuda: /bermuda|short/i, macacao: /macac/i };
 const cfgMedModelos = () => S.db.config.find(x => x.chave === 'medicao_modelos');
 const chaveModelo = pc => `${pc.cliente_id || ''}|${(tipoPeca(pc.ref) || {}).k || ''}`;
@@ -2967,7 +2969,7 @@ function viewMedicao(arg) {
       const md = medDe(pc), ops = opsDaPeca(pc);
       const sub = [pc.descricao, ops.length ? `OP ${ops.join(', ')}` : ''].filter(Boolean).map(esc).join(' · ') || 'Sem descrição';
       return `<a class="fl-it" href="#/medicao/${pc.id}">${thumb(capa(pc) || imgsCons(pc)[0])}<div class="t"><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${sub}</small></div>
-        ${md ? `<span class="tag ${md.status === 'reprovado' ? 'red' : md.status === 'com' ? 'amber' : 'green'}">${md.status ? esc(nomeStEng(md.status)) : 'Medida'} · ${fDia(md.em)}</span>` : '<span class="tag gray">Sem medição</span>'}${ic('chevR')}</a>`;
+        ${md ? `<span class="tag ${md.status === 'reprovado' ? 'red' : md.status === 'com' ? 'amber' : 'green'}">${md.status ? esc(nomeStEng(md.status)) : 'Medida'} · ${fDia(md.em)}${medDias(pc).length > 1 ? ` · ${medDias(pc).length} medições` : ''}</span>` : '<span class="tag gray">Sem medição</span>'}${ic('chevR')}</a>`;
     }).join('')}</div>` : vazio('search', 'Nenhuma peça com esses filtros');
     hidratarFotos($('#ml'));
   };
@@ -3013,21 +3015,57 @@ function folhaEngenhariaHtml(pc, M) {
 
 function paginaMedicao(pc) {
   const fi = fichaDe(pc.id), t = (fi && fi.tecnica) || {}, grade = (t.grade || []).length ? t.grade : GRADE_PADRAO;
-  const salvo = medDe(pc);
+  const salvos = clone(medDias(pc));
   const nomes = ks => ks.flatMap(k => nomesResp(respPadrao(k)))[0] || '';
-  const M = salvo ? clone(salvo) : (() => {
+  const vaziaLinha = r => ({ pom: r.pom || '', desc: r.desc || '', tab: r.tab || '', molde: '', pp1: '', pp2: '', antes: '', depois: '', ajuste: '' });
+  // nova medição: repete os POMs e o cabeçalho da anterior, com as medidas em branco
+  const diaNovo = ant => {
+    if (ant) {
+      return { id: uid(), data: inData(new Date()), tam: ant.tam, op: ant.op, lacre: ant.lacre, eng: ant.eng, mod: ant.mod, status: '', obs_eng: '', obs_mod: '', inst_montagem: '',
+        linhas: ant.linhas.filter(r => r.pom || r.desc).map(vaziaLinha) };
+    }
     const tam = grade.includes(t.piloto) ? t.piloto : (grade.includes('P') ? 'P' : grade[0]);
     const ini = linhasIniciais(pc, tam);
-    return { tam, linhas: ini.linhas, origem: ini.origem, data: inData(new Date()), op: opsDaPeca(pc).join(' - ') || pc.op || '', lacre: t.lacre || '',
-      status: '', obs_eng: '', obs_mod: '', eng: nomes(['medicao', 'engenharia']), mod: t.modelista || nomes(['liberacao_modelagem', 'modelagem']) };
-  })();
-  M.linhas.forEach(r => { if (r.ajuste == null) r.ajuste = ''; });
+    return { id: uid(), tam, linhas: ini.linhas, origem: ini.origem, data: inData(new Date()), op: opsDaPeca(pc).join(' - ') || pc.op || '', lacre: t.lacre || '',
+      status: '', obs_eng: '', obs_mod: '', inst_montagem: '', eng: nomes(['medicao', 'engenharia']), mod: t.modelista || nomes(['liberacao_modelagem', 'modelagem']) };
+  };
+  const D = salvos.length ? salvos : [diaNovo()];
+  D.forEach(d => { if (!d.id) d.id = uid(); d.linhas.forEach(r => { if (r.ajuste == null) r.ajuste = ''; }); });
+  let sel = D.length - 1, temSalvo = salvos.length > 0;
   const pts = pontosGuia(pc.cliente_id);
+  const nomeDia = (d, i) => `${d.data ? fDia(dataDe(d.data)) : 'Sem data'}<small>${i + 1}ª medição</small>`;
   setPage(`Medição · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
-  const campo = (rot, k, extra = '', cls = '') => `<label class="fld ${cls}"><span>${rot}</span><input data-mc="${k}" value="${esc(M[k] || '')}" ${extra}></label>`;
-  view().innerHTML = `<div class="folha-barra no-print">
+
+  let timer = null, fila = Promise.resolve();
+  const sujos = new Set();
+  const salvar = (ms = 700, marcar = true) => {
+    if (marcar) sujos.add(D[sel].id);
+    const st = $('#salvo'); if (st) { st.className = 'salvo'; st.innerHTML = `${ic('clock')}Salvando…`; }
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const agora = agoraISO(), por = nomeUsuario().split(' ')[0];
+      D.forEach(d => { if (sujos.has(d.id)) { d.em = agora; d.por = por; } });
+      sujos.clear();
+      const dias = D.map(({ origem, ...d }) => ({ ...d, linhas: d.linhas.filter(linhaMedUsada) }));
+      fila = fila.then(async () => {
+        try {
+          const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
+          et.medicao = { ...(et.medicao || {}), med: { dias, em: agora, por } };
+          await salvarFluxo(pc, et);
+          temSalvo = true;
+          if ($('#salvo')) { $('#salvo').className = 'salvo ok'; $('#salvo').innerHTML = `${ic('check')}Tudo salvo`; }
+          const pe = $('#md-pe'); if (pe && D[sel].em) pe.textContent = `Salva em ${fQuando(D[sel].em)}${D[sel].por ? ` por ${D[sel].por}` : ''}`;
+        } catch (err) { if ($('#salvo')) { $('#salvo').className = 'salvo erro'; $('#salvo').innerHTML = `${ic('alert')}Não salvou, tente de novo`; } toast(msgErro(err), 'erro'); }
+      });
+    }, ms);
+  };
+
+  const render = () => {
+    const M = D[sel];
+    const campo = (rot, k, extra = '', cls = '') => `<label class="fld ${cls}"><span>${rot}</span><input data-mc="${k}" value="${esc(M[k] || '')}" ${extra}></label>`;
+    view().innerHTML = `<div class="folha-barra no-print">
       <a class="link-btn" href="#/medicao">${ic('chevL')}Outra peça</a>
-      <span class="salvo ok" id="salvo">${ic('check')}${salvo ? 'Tudo salvo' : 'Ainda não salva'}</span>
+      <span class="salvo ok" id="salvo">${ic('check')}${temSalvo ? 'Tudo salvo' : 'Ainda não salva'}</span>
       <div class="r">
         <a class="btn sm" href="#/produto/${pc.id}">${ic('dress')}<span class="tx">Produto</span></a>
         <a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}<span class="tx">Ficha técnica</span></a>
@@ -3036,13 +3074,15 @@ function paginaMedicao(pc) {
       </div>
     </div>
     <div class="card md-card no-print">
+      <div class="chips md-dias">${D.map((d, i) => `<button type="button" class="chip${i === sel ? ' on' : ''}" data-md-dia="${i}">${nomeDia(d, i)}</button>`).join('')}
+        <button type="button" class="chip md-novo" id="md-novo" title="Mediu de novo depois de uma alteração? Abre uma ficha nova com os mesmos POMs">${ic('plus')}Nova medição</button></div>
       <div class="md-top">
-        <div class="md-ref">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>Ficha de engenharia · ${esc(nomeModelo(pc))}</small></div></div>
+        <div class="md-ref">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>Ficha de engenharia · ${esc(nomeModelo(pc))}${D.length > 1 ? ` · ${sel + 1}ª medição` : ''}</small></div></div>
         ${campo('Data', 'data', 'type="date"', 'md-data')}
       </div>
       <div class="md-cab md-cab3">${campo('OP', 'op', 'inputmode="numeric"')}${campo('Lacre', 'lacre')}
         <label class="fld"><span>Tamanho</span><select id="md-tam">${opcoes(grade.map(g => [g, g]), M.tam)}</select></label></div>
-      ${!salvo && M.origem ? `<div class="aviso">${ic('info')}<span>Tabela pronta a partir do ${esc(M.origem)}. É só preencher as medidas.</span></div>` : ''}
+      ${!temSalvo && M.origem ? `<div class="aviso">${ic('info')}<span>Tabela pronta a partir do ${esc(M.origem)}. É só preencher as medidas.</span></div>` : ''}
       <div class="tbl-wrap"><table class="ft-tab md-tab"><thead><tr><th>POM</th><th>Descrição</th><th class="n">Molde</th>
         ${['pp1', 'pp2'].map(k => `<th class="n md-pp">Peça pronta<input type="date" data-mc="${k}_data" value="${esc(M[`${k}_data`] || '')}" title="Data da peça pronta"></th>`).join('')}
         <th class="n">Tam: <span id="md-th-tam">${esc(M.tam)}</span></th><th class="n">Antes passar</th><th class="n">≠</th><th class="n">Depois passar</th><th class="n">≠</th><th>Ajuste</th><th></th></tr></thead>
@@ -3060,81 +3100,84 @@ function paginaMedicao(pc) {
         </div>
       </div>
       <div class="md-cab">${campo('Engenharia', 'eng', 'list="dl-pes-md"')}${campo('Modelagem', 'mod', 'list="dl-pes-md"')}</div>
-      ${salvo ? `<div class="small muted md-pe">Salva em ${fQuando(salvo.em)}${salvo.por ? ` por ${esc(salvo.por)}` : ''}</div>` : ''}
+      <div class="md-pe"><span class="small muted" id="md-pe">${M.em ? `Salva em ${fQuando(M.em)}${M.por ? ` por ${esc(M.por)}` : ''}` : ''}</span>
+        ${D.length > 1 ? `<button type="button" class="link-btn danger" id="md-del">${ic('trash')}Apagar esta medição</button>` : ''}</div>
     </div>
     <div class="md-folha" id="md-folha"></div>
     <datalist id="dl-pes-md">${pessoasOrd().filter(p => p.ativo !== false).map(p => `<option value="${esc(p.nome)}">`).join('')}</datalist>
     ${pts.length ? `<datalist id="dl-pom-md">${pts.map(p => `<option value="${esc(String(p.codigo || '').split(/[/,\s]+/)[0])}">${esc(p.nome)}</option>`).join('')}</datalist>` : ''}`;
-  hidratarFotos(view());
-  const body = $('#md-body');
-  const linha = (r, i) => `<tr>
-    <td><input class="cod" data-md="${i}|pom" value="${esc(r.pom || '')}"${pts.length ? ' list="dl-pom-md"' : ''}></td>
-    <td><input data-md="${i}|desc" value="${esc(r.desc || '')}"></td>
-    ${['molde', 'pp1', 'pp2'].map(k => `<td class="n"><input class="num" data-md="${i}|${k}" value="${esc(r[k] || '')}" inputmode="decimal"></td>`).join('')}
-    <td class="n"><input class="num" data-md="${i}|tab" value="${esc(r.tab || '')}" inputmode="decimal"></td>
-    <td class="n pil"><input class="num" data-md="${i}|antes" value="${esc(r.antes || '')}" inputmode="decimal"></td>
-    <td class="n md-dif" data-dif="${i}|antes">${difMed(r.antes, r.tab)}</td>
-    <td class="n pil"><input class="num" data-md="${i}|depois" value="${esc(r.depois || '')}" inputmode="decimal"></td>
-    <td class="n md-dif" data-dif="${i}|depois">${difMed(r.depois, r.tab)}</td>
-    <td><input class="md-aj" data-md="${i}|ajuste" value="${esc(r.ajuste || '')}" placeholder="—"></td>
-    <td class="x"><button type="button" class="icon-btn danger" data-md-rm="${i}" title="Tirar linha">${ic('x')}</button></td></tr>`;
-  const desenhaLinhas = () => { body.innerHTML = M.linhas.map(linha).join(''); };
-  desenhaLinhas();
-  let timer = null, fila = Promise.resolve();
-  const salvar = (ms = 700) => {
-    $('#salvo').className = 'salvo'; $('#salvo').innerHTML = `${ic('clock')}Salvando…`;
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      const { origem, ...resto } = M;
-      const med = { ...resto, linhas: M.linhas.filter(linhaMedUsada), em: agoraISO(), por: nomeUsuario().split(' ')[0] };
-      fila = fila.then(async () => {
-        try {
-          const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
-          et.medicao = { ...(et.medicao || {}), med };
-          await salvarFluxo(pc, et);
-          if ($('#salvo')) { $('#salvo').className = 'salvo ok'; $('#salvo').innerHTML = `${ic('check')}Tudo salvo`; }
-        } catch (err) { if ($('#salvo')) { $('#salvo').className = 'salvo erro'; $('#salvo').innerHTML = `${ic('alert')}Não salvou, tente de novo`; } toast(msgErro(err), 'erro'); }
-      });
-    }, ms);
+    hidratarFotos(view());
+    const body = $('#md-body');
+    const linha = (r, i) => `<tr>
+      <td><input class="cod" data-md="${i}|pom" value="${esc(r.pom || '')}"${pts.length ? ' list="dl-pom-md"' : ''}></td>
+      <td><input data-md="${i}|desc" value="${esc(r.desc || '')}" title="${esc(r.desc || '')}"></td>
+      ${['molde', 'pp1', 'pp2'].map(k => `<td class="n"><input class="num" data-md="${i}|${k}" value="${esc(r[k] || '')}" inputmode="decimal"></td>`).join('')}
+      <td class="n"><input class="num" data-md="${i}|tab" value="${esc(r.tab || '')}" inputmode="decimal"></td>
+      <td class="n pil"><input class="num" data-md="${i}|antes" value="${esc(r.antes || '')}" inputmode="decimal"></td>
+      <td class="n md-dif" data-dif="${i}|antes">${difMed(r.antes, r.tab)}</td>
+      <td class="n pil"><input class="num" data-md="${i}|depois" value="${esc(r.depois || '')}" inputmode="decimal"></td>
+      <td class="n md-dif" data-dif="${i}|depois">${difMed(r.depois, r.tab)}</td>
+      <td><input class="md-aj" data-md="${i}|ajuste" value="${esc(r.ajuste || '')}" placeholder="—"></td>
+      <td class="x"><button type="button" class="icon-btn danger" data-md-rm="${i}" title="Tirar linha">${ic('x')}</button></td></tr>`;
+    const desenhaLinhas = () => { body.innerHTML = M.linhas.map(linha).join(''); };
+    desenhaLinhas();
+    const card = $('.md-card');
+    card.addEventListener('click', async e => {
+      const b = e.target.closest('[data-md-dia]');
+      if (b) { if (+b.dataset.mdDia !== sel) { sel = +b.dataset.mdDia; render(); } return; }
+      if (e.target.closest('#md-novo')) {
+        D.push(diaNovo(D[D.length - 1])); sel = D.length - 1; render(); salvar(0);
+        toast('Nova medição aberta com os mesmos POMs. É só preencher.'); return;
+      }
+      if (e.target.closest('#md-del')) {
+        if (!await confirmar(`Apagar a medição de <b>${M.data ? fData(dataDe(M.data)) : 'sem data'}</b>? As outras continuam.`, { ok: 'Apagar' })) return;
+        D.splice(sel, 1); sel = Math.min(sel, D.length - 1); render(); salvar(0, false);
+      }
+    });
+    card.addEventListener('input', e => {
+      const c = e.target.closest('[data-mc]');
+      if (c) {
+        M[c.dataset.mc] = c.value; salvar();
+        if (c.dataset.mc === 'data') { const tb = card.querySelector(`[data-md-dia="${sel}"]`); if (tb) tb.innerHTML = nomeDia(M, sel); }
+        return;
+      }
+      const x = e.target.closest('[data-md]'); if (!x) return;
+      const [i, k] = x.dataset.md.split('|'); M.linhas[+i][k] = x.value;
+      const r = M.linhas[+i];
+      if (k === 'desc') x.title = x.value;
+      ['antes', 'depois'].forEach(q => { const d = body.querySelector(`[data-dif="${i}|${q}"]`); if (d) d.textContent = difMed(r[q], r.tab); });
+      salvar();
+    });
+    card.addEventListener('change', e => {
+      if (e.target.name === 'md-st') { M.status = e.target.value; salvar(0); return; }
+      const x = e.target.closest('[data-md$="|pom"]'); if (!x) return;
+      const i = +x.dataset.md.split('|')[0], r = M.linhas[i], cod = x.value.trim().toUpperCase();
+      const p = pts.find(pp => String(pp.codigo || '').toUpperCase().split(/[/,\s]+/).includes(cod));
+      if (p && !r.desc) { r.desc = p.nome; const d = body.querySelector(`[data-md="${i}|desc"]`); if (d) { d.value = p.nome; d.title = p.nome; } salvar(); }
+    });
+    body.addEventListener('click', e => { const b = e.target.closest('[data-md-rm]'); if (!b) return; M.linhas.splice(+b.dataset.mdRm, 1); desenhaLinhas(); salvar(0); });
+    $('#md-add').onclick = () => { M.linhas.push(vaziaLinha({})); desenhaLinhas(); const u = body.querySelector(`[data-md="${M.linhas.length - 1}|pom"]`); if (u) u.focus(); };
+    $('#md-tam').onchange = e => {
+      M.tam = e.target.value; $('#md-th-tam').textContent = M.tam;
+      // troca o tamanho: puxa os valores desse tamanho da ficha, se existirem
+      const meds = ((((fichaDe(pc.id) || {}).tecnica) || {}).medidas || []);
+      M.linhas.forEach(r => { const m = meds.find(x => norm(x.dim) === norm(r.pom)); if (m && (m.v || {})[M.tam] != null) r.tab = String(m.v[M.tam]); });
+      desenhaLinhas(); salvar(0);
+    };
+    $('#md-modelo').onclick = async () => {
+      const pontos = M.linhas.filter(r => r.pom || r.desc).map(r => ({ pom: r.pom, desc: r.desc }));
+      if (!pontos.length) return toast('Coloque pelo menos um POM antes.', 'erro');
+      if (!await confirmar(`As próximas peças de <b>${esc(nomeModelo(pc))}</b> vão abrir com estes ${pontos.length} POMs.`, { titulo: 'Usar como modelo', ok: 'Usar como modelo', perigo: false })) return;
+      try {
+        const cfg = cfgMedModelos(), valor = { ...((cfg && cfg.valor) || {}), [chaveModelo(pc)]: pontos };
+        await salvarReg('config', cfg ? { valor } : { chave: 'medicao_modelos', valor }, cfg && cfg.id);
+        toast(`Modelo de ${nomeModelo(pc)} salvo.`);
+      } catch (err) { toast(msgErro(err), 'erro'); }
+    };
+    $('#md-print').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M); window.print(); };
+    $('#md-pdf').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M); baixarPdfFolha('#md-folha', `engenharia-${nomeSeguro(pc.ref)}${M.data ? `-${M.data}` : ''}`, '#md-pdf'); };
   };
-  const card = $('.md-card');
-  card.addEventListener('input', e => {
-    const c = e.target.closest('[data-mc]');
-    if (c) { M[c.dataset.mc] = c.value; salvar(); return; }
-    const x = e.target.closest('[data-md]'); if (!x) return;
-    const [i, k] = x.dataset.md.split('|'); M.linhas[+i][k] = x.value;
-    const r = M.linhas[+i];
-    ['antes', 'depois'].forEach(q => { const d = body.querySelector(`[data-dif="${i}|${q}"]`); if (d) d.textContent = difMed(r[q], r.tab); });
-    salvar();
-  });
-  card.addEventListener('change', e => {
-    if (e.target.name === 'md-st') { M.status = e.target.value; salvar(0); return; }
-    const x = e.target.closest('[data-md$="|pom"]'); if (!x) return;
-    const i = +x.dataset.md.split('|')[0], r = M.linhas[i], cod = x.value.trim().toUpperCase();
-    const p = pts.find(pp => String(pp.codigo || '').toUpperCase().split(/[/,\s]+/).includes(cod));
-    if (p && !r.desc) { r.desc = p.nome; const d = body.querySelector(`[data-md="${i}|desc"]`); if (d) d.value = p.nome; salvar(); }
-  });
-  body.addEventListener('click', e => { const b = e.target.closest('[data-md-rm]'); if (!b) return; M.linhas.splice(+b.dataset.mdRm, 1); desenhaLinhas(); salvar(0); });
-  $('#md-add').onclick = () => { M.linhas.push({ pom: '', desc: '', molde: '', pp1: '', pp2: '', tab: '', antes: '', depois: '', ajuste: '' }); desenhaLinhas(); const u = body.querySelector(`[data-md="${M.linhas.length - 1}|pom"]`); if (u) u.focus(); };
-  $('#md-tam').onchange = e => {
-    M.tam = e.target.value; $('#md-th-tam').textContent = M.tam;
-    // troca o tamanho: puxa os valores desse tamanho da ficha, se existirem
-    const meds = ((((fichaDe(pc.id) || {}).tecnica) || {}).medidas || []);
-    M.linhas.forEach(r => { const m = meds.find(x => norm(x.dim) === norm(r.pom)); if (m && (m.v || {})[M.tam] != null) r.tab = String(m.v[M.tam]); });
-    desenhaLinhas(); salvar(0);
-  };
-  $('#md-modelo').onclick = async () => {
-    const pontos = M.linhas.filter(r => r.pom || r.desc).map(r => ({ pom: r.pom, desc: r.desc }));
-    if (!pontos.length) return toast('Coloque pelo menos um POM antes.', 'erro');
-    if (!await confirmar(`As próximas peças de <b>${esc(nomeModelo(pc))}</b> vão abrir com estes ${pontos.length} POMs.`, { titulo: 'Usar como modelo', ok: 'Usar como modelo', perigo: false })) return;
-    try {
-      const cfg = cfgMedModelos(), valor = { ...((cfg && cfg.valor) || {}), [chaveModelo(pc)]: pontos };
-      await salvarReg('config', cfg ? { valor } : { chave: 'medicao_modelos', valor }, cfg && cfg.id);
-      toast(`Modelo de ${nomeModelo(pc)} salvo.`);
-    } catch (err) { toast(msgErro(err), 'erro'); }
-  };
-  $('#md-print').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M); window.print(); };
-  $('#md-pdf').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M); baixarPdfFolha('#md-folha', `engenharia-${nomeSeguro(pc.ref)}`, '#md-pdf'); };
+  render();
 }
 
 /* ================================================================
@@ -3522,8 +3565,9 @@ function histPecaHtml(pc) {
     });
     (e.arquivos || []).forEach(a => { if (a.em) item(a.em, 'file', false, `Arquivo · ${esc(l)}`, `${esc(a.n)} · ${fQuando(a.em)}`); });
   });
-  const md = (et.medicao || {}).med;
-  if (md && md.em) item(md.em, 'ruler', md.status === 'sem' || md.status === 'com', 'Medição (engenharia)', `${md.status ? `${esc(nomeStEng(md.status))} · ` : ''}${fQuando(md.em)}${md.por ? ` · ${esc(md.por)}` : ''}`);
+  medDias(pc).forEach((md, i) => {
+    if (md.em) item(md.em, 'ruler', md.status === 'sem' || md.status === 'com', `Medição (engenharia)${md.data ? ` de ${fDia(dataDe(md.data))}` : ` ${i + 1}`}`, `${md.status ? `${esc(nomeStEng(md.status))} · ` : ''}${fQuando(md.em)}${md.por ? ` · ${esc(md.por)}` : ''}`);
+  });
   const fi = fichaDe(pc.id);
   if (fi && fi.atualizado_em) item(fi.atualizado_em, 'file', false, 'Ficha técnica e consumo atualizadas', fQuando(fi.atualizado_em));
   if (pc.criado_em) item(pc.criado_em, 'dress', false, 'Peça criada', fQuando(pc.criado_em));

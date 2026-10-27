@@ -1676,3 +1676,13 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .md-tab th.md-pp input { width: 112px; }
 .md-tab th.n { white-space: normal; line-height: 1.2; }
 .md-tab input.md-aj { width: 120px; min-width: 0; }
+
+/* medição: uma ficha por dia */
+.md-dias { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.md-dias .chip { height: auto; min-height: 34px; padding: 5px 12px; flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.2; font-weight: 700; }
+.md-dias .chip small { font-size: 10.5px; font-weight: 500; opacity: .75; }
+.md-dias .md-novo { flex-direction: row; align-items: center; gap: 6px; border-style: dashed; }
+.md-pe { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.md-pe .link-btn.danger { color: var(--red); }
+.md-tab td:nth-child(2) input { width: 100%; min-width: 210px; }
+.md-tab th.md-pp input { width: 106px; }
