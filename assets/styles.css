@@ -1715,3 +1715,7 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .md-tab .md-gap { width: 22px; min-width: 22px; }
 .md-tab td input.md-desc { width: 290px; }
 .md-tab input.md-aj { width: 100px; }
+/* POM colado na descrição; a descrição fica com o espaço que sobra e o campo vai até o fim */
+.md-tab th:first-child, .md-tab td:first-child { width: 1%; }
+.md-tab td input.md-desc { width: 100%; min-width: 290px; }
+.md-tab th:nth-last-child(2), .md-tab td:nth-last-child(2) { width: 1%; }
