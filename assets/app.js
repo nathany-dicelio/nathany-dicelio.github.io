@@ -2995,12 +2995,11 @@ function folhaEngenhariaHtml(pc, M) {
   const linhas = M.linhas.filter(linhaMedUsada);
   const vazias = Math.max(0, 24 - linhas.length);
   const td = (v, cls = '') => `<td class="${cls}">${esc(v ?? '')}</td>`;
-  const dPP = d => `<br><small>DATA: ${d ? fDia(dataDe(d)) : ''}</small>`;
   return `<div class="fe">
     <div class="fe-t">FICHA DE ENGENHARIA</div>
     <table class="fe-cab"><tr><td><b>DATA:</b> ${M.data ? fData(dataDe(M.data)) : ''}</td><td><b>OP:</b> ${esc(M.op || '')}</td><td><b>REF:</b> ${esc(pc.ref)}</td><td><b>LACRE:</b> ${esc(M.lacre || '')}</td></tr></table>
     <div class="fe-t2">TABELA DE MEDIDAS - AMOSTRA ENGENHARIA</div>
-    <table class="fe-tab"><thead><tr><th>POM</th><th>DESCRIÇÃO</th><th>MOLDE</th><th>PEÇA<br>PRONTA${dPP(M.pp1_data)}</th><th>PEÇA<br>PRONTA${dPP(M.pp2_data)}</th><th>TAM:<br>${esc(M.tam)}</th><th>ANTES<br>PASSAR</th><th>≠</th><th>DEPOIS<br>PASSAR</th><th>≠</th><th>AJUSTE</th></tr></thead>
+    <table class="fe-tab"><thead><tr><th>POM</th><th>DESCRIÇÃO</th><th>MOLDE</th><th>PEÇA<br>PRONTA</th><th>PEÇA<br>PRONTA</th><th>TAM:<br>${esc(M.tam)}</th><th>ANTES<br>PASSAR</th><th>≠</th><th>DEPOIS<br>PASSAR</th><th>≠</th><th>AJUSTE</th></tr></thead>
       <tbody>${linhas.map(r => `<tr>${td(r.pom, 'c')}${td(r.desc, 'd')}${td(r.molde)}${td(r.pp1)}${td(r.pp2)}${td(r.tab)}${td(r.antes)}${td(difMed(r.antes, r.tab))}${td(r.depois)}${td(difMed(r.depois, r.tab))}${td(r.ajuste, 'aj')}</tr>`).join('')}
       ${`<tr>${'<td></td>'.repeat(11)}</tr>`.repeat(vazias)}</tbody></table>
     <div class="fe-t2">OBSERVAÇÕES ENGENHARIA</div>
@@ -3031,9 +3030,10 @@ function paginaMedicao(pc) {
   };
   const D = salvos.length ? salvos : [diaNovo()];
   D.forEach(d => { if (!d.id) d.id = uid(); d.linhas.forEach(r => { if (r.ajuste == null) r.ajuste = ''; }); });
+  D.sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
   let sel = D.length - 1, temSalvo = salvos.length > 0;
   const pts = pontosGuia(pc.cliente_id);
-  const nomeDia = (d, i) => `${d.data ? fDia(dataDe(d.data)) : 'Sem data'}<small>${i + 1}ª medição</small>`;
+  const nomeDia = (d, i) => `<b>${d.data ? fDia(dataDe(d.data)) : 'Sem data'}</b><small>${i + 1}ª medição</small>`;
   setPage(`Medição · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
 
   let timer = null, fila = Promise.resolve();
@@ -3061,7 +3061,10 @@ function paginaMedicao(pc) {
   };
 
   const render = () => {
+    // dias sempre em ordem de data (a mais recente por último)
     const M = D[sel];
+    D.sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
+    sel = D.indexOf(M);
     const campo = (rot, k, extra = '', cls = '') => `<label class="fld ${cls}"><span>${rot}</span><input data-mc="${k}" value="${esc(M[k] || '')}" ${extra}></label>`;
     view().innerHTML = `<div class="folha-barra no-print">
       <a class="link-btn" href="#/medicao">${ic('chevL')}Outra peça</a>
@@ -3074,18 +3077,18 @@ function paginaMedicao(pc) {
       </div>
     </div>
     <div class="card md-card no-print">
-      <div class="chips md-dias">${D.map((d, i) => `<button type="button" class="chip${i === sel ? ' on' : ''}" data-md-dia="${i}">${nomeDia(d, i)}</button>`).join('')}
-        <button type="button" class="chip md-novo" id="md-novo" title="Mediu de novo depois de uma alteração? Abre uma ficha nova com os mesmos POMs">${ic('plus')}Nova medição</button></div>
       <div class="md-top">
-        <div class="md-ref">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>Ficha de engenharia · ${esc(nomeModelo(pc))}${D.length > 1 ? ` · ${sel + 1}ª medição` : ''}</small></div></div>
-        ${campo('Data', 'data', 'type="date"', 'md-data')}
+        <div class="md-ref">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>Ficha de engenharia · ${esc(nomeModelo(pc))}</small></div></div>
       </div>
       <div class="md-cab md-cab3">${campo('OP', 'op', 'inputmode="numeric"')}${campo('Lacre', 'lacre')}
         <label class="fld"><span>Tamanho</span><select id="md-tam">${opcoes(grade.map(g => [g, g]), M.tam)}</select></label></div>
+      <div class="md-dias-l"><span class="lbl">Dias em que foi medida</span><span class="small muted">clique no dia para ver a tabela · no dia aberto, clique de novo para trocar a data</span></div>
+      <div class="md-dias">${D.map((d, i) => `<span class="md-dia-w"><button type="button" class="md-dia${i === sel ? ' on' : ''}" data-md-dia="${i}" title="${i === sel ? 'Clique para trocar a data' : 'Ver a medição deste dia'}">${nomeDia(d, i)}</button>${i === sel ? `<input type="date" class="md-dia-in" data-mc="data" value="${esc(M.data || '')}" tabindex="-1" aria-label="Data desta medição">` : ''}</span>`).join('')}
+        <button type="button" class="md-dia md-novo" id="md-novo" title="Mediu de novo depois de uma alteração? Abre uma tabela nova com os mesmos POMs">${ic('plus')}Nova medição</button></div>
       ${!temSalvo && M.origem ? `<div class="aviso">${ic('info')}<span>Tabela pronta a partir do ${esc(M.origem)}. É só preencher as medidas.</span></div>` : ''}
-      <div class="tbl-wrap"><table class="ft-tab md-tab"><thead><tr><th>POM</th><th>Descrição</th><th class="n">Molde</th>
-        ${['pp1', 'pp2'].map(k => `<th class="n md-pp">Peça pronta<input type="date" data-mc="${k}_data" value="${esc(M[`${k}_data`] || '')}" title="Data da peça pronta"></th>`).join('')}
-        <th class="n">Tam: <span id="md-th-tam">${esc(M.tam)}</span></th><th class="n">Antes passar</th><th class="n">≠</th><th class="n">Depois passar</th><th class="n">≠</th><th>Ajuste</th><th></th></tr></thead>
+      <div class="tbl-wrap"><table class="ft-tab md-tab"><thead><tr><th class="ini">POM</th><th class="fim">Descrição</th><th class="md-gap"></th>
+        <th class="n ini">Molde</th><th class="n">Peça pronta</th><th class="n fim">Peça pronta</th><th class="md-gap"></th>
+        <th class="n ini">Tam: <span id="md-th-tam">${esc(M.tam)}</span></th><th class="n">Antes passar</th><th class="n">≠</th><th class="n">Depois passar</th><th class="n">≠</th><th>Ajuste</th><th class="fim"></th></tr></thead>
         <tbody id="md-body"></tbody></table></div>
       <div class="fs-pe"><button type="button" class="btn sm" id="md-add">${ic('plus')}Adicionar POM</button>
         <button type="button" class="btn sm" id="md-modelo">${ic('star')}Usar como modelo para ${esc(nomeModelo(pc))}</button>
@@ -3109,22 +3112,27 @@ function paginaMedicao(pc) {
     hidratarFotos(view());
     const body = $('#md-body');
     const linha = (r, i) => `<tr>
-      <td><input class="cod" data-md="${i}|pom" value="${esc(r.pom || '')}"${pts.length ? ' list="dl-pom-md"' : ''}></td>
-      <td><input data-md="${i}|desc" value="${esc(r.desc || '')}" title="${esc(r.desc || '')}"></td>
-      ${['molde', 'pp1', 'pp2'].map(k => `<td class="n"><input class="num" data-md="${i}|${k}" value="${esc(r[k] || '')}" inputmode="decimal"></td>`).join('')}
-      <td class="n"><input class="num" data-md="${i}|tab" value="${esc(r.tab || '')}" inputmode="decimal"></td>
+      <td class="ini"><input class="cod" data-md="${i}|pom" value="${esc(r.pom || '')}"${pts.length ? ' list="dl-pom-md"' : ''}></td>
+      <td class="fim"><input class="md-desc" data-md="${i}|desc" value="${esc(r.desc || '')}" title="${esc(r.desc || '')}"></td><td class="md-gap"></td>
+      ${['molde', 'pp1', 'pp2'].map((k, j) => `<td class="n${j === 0 ? ' ini' : j === 2 ? ' fim' : ''}"><input class="num" data-md="${i}|${k}" value="${esc(r[k] || '')}" inputmode="decimal"></td>`).join('')}<td class="md-gap"></td>
+      <td class="n ini"><input class="num" data-md="${i}|tab" value="${esc(r.tab || '')}" inputmode="decimal"></td>
       <td class="n pil"><input class="num" data-md="${i}|antes" value="${esc(r.antes || '')}" inputmode="decimal"></td>
       <td class="n md-dif" data-dif="${i}|antes">${difMed(r.antes, r.tab)}</td>
       <td class="n pil"><input class="num" data-md="${i}|depois" value="${esc(r.depois || '')}" inputmode="decimal"></td>
       <td class="n md-dif" data-dif="${i}|depois">${difMed(r.depois, r.tab)}</td>
       <td><input class="md-aj" data-md="${i}|ajuste" value="${esc(r.ajuste || '')}" placeholder="—"></td>
-      <td class="x"><button type="button" class="icon-btn danger" data-md-rm="${i}" title="Tirar linha">${ic('x')}</button></td></tr>`;
+      <td class="x fim"><button type="button" class="icon-btn danger" data-md-rm="${i}" title="Tirar linha">${ic('x')}</button></td></tr>`;
     const desenhaLinhas = () => { body.innerHTML = M.linhas.map(linha).join(''); };
     desenhaLinhas();
     const card = $('.md-card');
     card.addEventListener('click', async e => {
       const b = e.target.closest('[data-md-dia]');
-      if (b) { if (+b.dataset.mdDia !== sel) { sel = +b.dataset.mdDia; render(); } return; }
+      if (b) {
+        if (+b.dataset.mdDia !== sel) { sel = +b.dataset.mdDia; render(); return; }
+        const di = card.querySelector('.md-dia-in');
+        try { di.showPicker(); } catch (err) { di.focus(); }
+        return;
+      }
       if (e.target.closest('#md-novo')) {
         D.push(diaNovo(D[D.length - 1])); sel = D.length - 1; render(); salvar(0);
         toast('Nova medição aberta com os mesmos POMs. É só preencher.'); return;
@@ -3138,7 +3146,7 @@ function paginaMedicao(pc) {
       const c = e.target.closest('[data-mc]');
       if (c) {
         M[c.dataset.mc] = c.value; salvar();
-        if (c.dataset.mc === 'data') { const tb = card.querySelector(`[data-md-dia="${sel}"]`); if (tb) tb.innerHTML = nomeDia(M, sel); }
+        if (c.dataset.mc === 'data') render();
         return;
       }
       const x = e.target.closest('[data-md]'); if (!x) return;

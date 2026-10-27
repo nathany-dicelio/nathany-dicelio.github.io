@@ -1678,14 +1678,9 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .md-tab input.md-aj { width: 120px; min-width: 0; }
 
 /* medição: uma ficha por dia */
-.md-dias { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-.md-dias .chip { height: auto; min-height: 34px; padding: 5px 12px; flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.2; font-weight: 700; }
-.md-dias .chip small { font-size: 10.5px; font-weight: 500; opacity: .75; }
-.md-dias .md-novo { flex-direction: row; align-items: center; gap: 6px; border-style: dashed; }
 .md-pe { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
 .md-pe .link-btn.danger { color: var(--red); }
 .md-tab td:nth-child(2) input { width: 100%; min-width: 210px; }
-.md-tab th.md-pp input { width: 106px; }
 
 /* aviso de versão nova */
 .nova-versao { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 9000; display: flex; align-items: center; gap: 12px;
@@ -1693,3 +1688,30 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
   font-size: 14px; font-weight: 600; max-width: calc(100vw - 32px); }
 .nova-versao > svg { width: 18px; height: 18px; color: var(--brand); flex: none; }
 @media print { .nova-versao { display: none !important; } }
+
+/* medição: dias em caixinhas e a tabela em três blocos, mais junta */
+.md-dias-l { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 16px 0 6px; }
+.md-dias-l .lbl { font-size: 12.5px; font-weight: 700; }
+.md-dias { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.md-dia-w { position: relative; display: inline-flex; }
+.md-dia { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-width: 96px; padding: 6px 14px; border: 1.5px solid var(--line); border-radius: 10px;
+  background: var(--card); color: var(--ink); cursor: pointer; font: inherit; line-height: 1.25; text-align: left; }
+.md-dia:hover { border-color: var(--border-hover); }
+.md-dia b { font-size: 16px; }
+.md-dia small { font-size: 10.5px; color: var(--mute); }
+.md-dia.on { border-color: var(--brand); background: var(--brand-50); color: var(--brand); }
+.md-dia.md-novo { flex-direction: row; align-items: center; gap: 6px; border-style: dashed; color: var(--mute); font-weight: 600; font-size: 13px; }
+.md-dia.md-novo svg { width: 15px; height: 15px; }
+.md-dia-in { position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+.ft-tab.md-tab { width: auto; }
+.md-tab th { padding: 8px 5px 6px; vertical-align: bottom; background: var(--brand-50); border-top: 1px solid var(--line); }
+.md-tab td { padding: 3px; }
+.md-tab th.ini, .md-tab td.ini { border-left: 1px solid var(--line); }
+.md-tab th.fim, .md-tab td.fim { border-right: 1px solid var(--line); }
+.md-tab tbody tr:last-child td { border-bottom: 1px solid var(--line); }
+.md-tab .md-gap { width: 16px; min-width: 16px; padding: 0; border-top: 0; border-bottom: 0 !important; background: transparent !important; }
+.md-tab td input.md-desc { width: 300px; min-width: 0; }
+.md-tab td.n input { width: 60px; }
+.md-tab .md-gap { width: 22px; min-width: 22px; }
+.md-tab td input.md-desc { width: 290px; }
+.md-tab input.md-aj { width: 100px; }
