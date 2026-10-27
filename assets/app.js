@@ -2425,9 +2425,9 @@ async function exportarExcel() {
   })]);
   abas.push(['Consumo', S.db.fichas.flatMap(fi => {
     const k = fi.consumo || {}, base = { REF: ref(fi.peca_id), Cliente: refCli(fi.peca_id) };
-    return [...(k.tecidos || []).map(r => ({ ...base, Tipo: 'Tecido', 'Código': r.codigo || '', Material: r.tecido || '', Cor: r.cor || '', Largura: r.largura || '', Gramatura: r.gramatura || '', Consumo: r.consumo || '', UN: 'MT', 'Aplicação': '' })),
-      ...(k.aviamentos || []).map(r => ({ ...base, Tipo: 'Aviamento', 'Código': r.codigo || '', Material: r.material || '', Cor: r.cor || '', Largura: '', Gramatura: '', Consumo: r.consumo || '', UN: r.un || '', 'Aplicação': r.aplicacao || '' })),
-      ...(k.etiquetas || []).map(r => ({ ...base, Tipo: 'Etiqueta', 'Código': r.codigo || '', Material: r.etiqueta || '', Cor: r.cor || '', Largura: '', Gramatura: '', Consumo: r.consumo || '', UN: r.un || '', 'Aplicação': r.aplicacao || '' }))];
+    return [...(k.tecidos || []).map(r => ({ ...base, Tipo: 'Tecido', 'Código': r.codigo || '', Material: r.tecido || '', Tamanho: '', Cor: r.cor || '', Largura: r.largura || '', Gramatura: r.gramatura || '', Consumo: r.consumo || '', UN: 'MT', 'Aplicação': '' })),
+      ...(k.aviamentos || []).map(r => ({ ...base, Tipo: 'Aviamento', 'Código': r.codigo || '', Material: r.material || '', Tamanho: r.tamanho || '', Cor: r.cor || '', Largura: '', Gramatura: '', Consumo: r.consumo || '', UN: r.un || '', 'Aplicação': r.aplicacao || '' })),
+      ...(k.etiquetas || []).map(r => ({ ...base, Tipo: 'Etiqueta', 'Código': r.codigo || '', Material: r.etiqueta || '', Tamanho: r.tamanho || '', Cor: r.cor || '', Largura: '', Gramatura: '', Consumo: r.consumo || '', UN: r.un || '', 'Aplicação': r.aplicacao || '' }))];
   })]);
   abas.push(['Materiais', S.db.materiais.map(m => ({ Tipo: { tecido: 'Tecido', aviamento: 'Aviamento', etiqueta: 'Etiqueta' }[m.tipo] || m.tipo, 'Código': m.codigo || '', Nome: m.nome || '',
     Cliente: cli(valMat(m, 'cliente_id')), Tamanho: valMat(m, 'tamanho') || '', Gramatura: valMat(m, 'gramatura') || '', Largura: valMat(m, 'largura') || '', 'Composição': valMat(m, 'composicao') || '', UN: valMat(m, 'un') || '',
@@ -3797,8 +3797,8 @@ const TIPOS_MAT = {
 // na ficha de consumo: qual campo da linha corresponde a cada campo do material
 const MAT_FICHA = {
   tecidos: { tipo: 'tecido', nome: 'tecido', copia: ['gramatura', 'largura', 'composicao'] },
-  aviamentos: { tipo: 'aviamento', nome: 'material', copia: ['un', 'aplicacao'] },
-  etiquetas: { tipo: 'etiqueta', nome: 'etiqueta', copia: ['tipo', 'un', 'aplicacao'] },
+  aviamentos: { tipo: 'aviamento', nome: 'material', copia: ['tamanho', 'un', 'aplicacao'] },
+  etiquetas: { tipo: 'etiqueta', nome: 'etiqueta', copia: ['tamanho', 'tipo', 'un', 'aplicacao'] },
 };
 const CORES_SUGERIDAS = [['Preto', '#1f1f1f'], ['Branco', '#ffffff'], ['Off white', '#f3eee2'], ['Bege', '#d8c3a5'], ['Azul', '#2f63c9'], ['Vermelho', '#c8102e'], ['Verde', '#17925a'], ['Rosa', '#e3a5b6'], ['Amarelo', '#e8c547'], ['Marrom', '#7a5233'], ['Cinza', '#9a9a9a']];
 const valMat = (m, k) => (k === 'codigo' || k === 'nome' ? m[k] : (m.dados || {})[k]) || '';
@@ -4453,8 +4453,8 @@ const MODELOS_LINHA = {
   'tecnica.acabamento': () => ({ desc: '', v: {} }),
   'tecnica.avi_tam': () => ({ desc: '', v: {} }),
   'consumo.tecidos': () => ({ codigo: '', tecido: '', gramatura: '', largura: '', consumo: '', composicao: '', cor: '' }),
-  'consumo.aviamentos': () => ({ codigo: '', material: '', aplicacao: '0 - Geral', un: '', cor: '', consumo: '' }),
-  'consumo.etiquetas': () => ({ codigo: '', etiqueta: '', tipo: '', aplicacao: '', un: 'UN', cor: '', consumo: '' }),
+  'consumo.aviamentos': () => ({ codigo: '', material: '', tamanho: '', aplicacao: '0 - Geral', un: '', cor: '', consumo: '' }),
+  'consumo.etiquetas': () => ({ codigo: '', tamanho: '', etiqueta: '', tipo: '', aplicacao: '', un: 'UN', cor: '', consumo: '' }),
 };
 const ROTA_FICHA = { tecnica: 'ficha-tecnica', consumo: 'ficha-consumo' };
 const NOME_FICHA = { tecnica: 'Ficha técnica', consumo: 'Ficha de consumo' };
@@ -4670,30 +4670,32 @@ function secoesMateriaisHtml(E) {
   </section>
   <section class="fs">
     <div class="fs-h"><h3>Aviamentos</h3><div class="r small muted">${plural(avi.length, 'aviamento')}</div></div>
-    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Material / insumo</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print"></th></tr></thead>
+    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Material / insumo</th><th>Tamanho</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print"></th></tr></thead>
     <tbody>${avi.map((r, i) => `<tr>
       <td><input class="cod" data-k="consumo.aviamentos.${i}.codigo" value="${esc(r.codigo || '')}" list="dl-mt-aviamento-c" placeholder="20.02.0001"></td>
       <td><input data-k="consumo.aviamentos.${i}.material" value="${esc(r.material || '')}" list="dl-mt-aviamento-n"></td>
+      <td><input data-k="consumo.aviamentos.${i}.tamanho" value="${esc(r.tamanho || '')}" style="max-width:110px"></td>
       <td><input data-k="consumo.aviamentos.${i}.aplicacao" value="${esc(r.aplicacao || '')}"></td>
       <td><input data-k="consumo.aviamentos.${i}.un" value="${esc(r.un || '')}" list="dl-un" style="max-width:70px"></td>
       <td><input data-k="consumo.aviamentos.${i}.cor" value="${esc(r.cor || '')}" list="dlc-aviamentos-${i}"></td>
       <td class="n pil"><input class="num" data-k="consumo.aviamentos.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
-      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.aviamentos.${i}" title="Tirar aviamento">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - avi.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.aviamentos.${i}" title="Tirar aviamento">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - avi.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.aviamentos">${ic('plus')}Adicionar aviamento</button>
       <span class="small muted">Os aviamentos daqui aparecem como sugestão em “Consumos de aviamentos”, mais acima.</span></div>
   </section>
   <section class="fs">
     <div class="fs-h"><h3>Etiquetas</h3><div class="r small muted">${plural(etq.length, 'etiqueta')}</div></div>
-    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Etiqueta</th><th>Tipo</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print"></th></tr></thead>
+    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Tamanho</th><th>Etiqueta</th><th>Tipo</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print"></th></tr></thead>
     <tbody>${etq.map((r, i) => `<tr>
       <td><input class="cod" data-k="consumo.etiquetas.${i}.codigo" value="${esc(r.codigo || '')}" list="dl-mt-etiqueta-c" placeholder="20.03.0818"></td>
+      <td><input data-k="consumo.etiquetas.${i}.tamanho" value="${esc(r.tamanho || '')}" style="max-width:110px"></td>
       <td><input data-k="consumo.etiquetas.${i}.etiqueta" value="${esc(r.etiqueta || '')}" list="dl-mt-etiqueta-n"></td>
       <td><input data-k="consumo.etiquetas.${i}.tipo" value="${esc(r.tipo || '')}" list="dl-etq" style="min-width:150px"></td>
       <td><input data-k="consumo.etiquetas.${i}.aplicacao" value="${esc(r.aplicacao || '')}"></td>
       <td><input data-k="consumo.etiquetas.${i}.un" value="${esc(r.un || '')}" list="dl-un" style="max-width:70px"></td>
       <td><input data-k="consumo.etiquetas.${i}.cor" value="${esc(r.cor || '')}" list="dlc-etiquetas-${i}"></td>
       <td class="n pil"><input class="num" data-k="consumo.etiquetas.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
-      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.etiquetas.${i}" title="Tirar etiqueta">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - etq.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
+      <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.etiquetas.${i}" title="Tirar etiqueta">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - etq.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.etiquetas">${ic('plus')}Adicionar etiqueta</button></div>
   </section>
   ${datalistsMateriais(E.pc.cliente_id)}${['tecidos', 'aviamentos', 'etiquetas'].map(l => (k[l] || []).map((r, i) => dlCoresLinha(l, i, r)).join('')).join('')}
