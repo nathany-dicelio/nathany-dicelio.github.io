@@ -1686,3 +1686,10 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .md-pe .link-btn.danger { color: var(--red); }
 .md-tab td:nth-child(2) input { width: 100%; min-width: 210px; }
 .md-tab th.md-pp input { width: 106px; }
+
+/* aviso de versão nova */
+.nova-versao { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 9000; display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px 10px 16px; border-radius: 14px; background: var(--card); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0,0,0,.18);
+  font-size: 14px; font-weight: 600; max-width: calc(100vw - 32px); }
+.nova-versao > svg { width: 18px; height: 18px; color: var(--brand); flex: none; }
+@media print { .nova-versao { display: none !important; } }

@@ -5269,5 +5269,31 @@ document.addEventListener('visibilitychange', async () => {
   try { await carregarTudo(); if (!$('.modal-bg')) rerender(); } catch (e) { /* tenta depois */ }
 });
 
+// versão nova no ar: o navegador guarda a página antiga por alguns minutos, então compara com a publicada e oferece atualizar
+const VERSAO = (((document.currentScript || {}).src || '').split('v=')[1] || '');
+if (new URLSearchParams(location.search).has('v')) { const u = new URL(location.href); u.searchParams.delete('v'); history.replaceState(null, '', u.href); }
+let avisouVersao = false;
+async function checarVersao() {
+  if (!VERSAO || avisouVersao || document.visibilityState !== 'visible') return;
+  try {
+    const html = await (await fetch(`${location.pathname}?versao=${Date.now()}`, { cache: 'no-store' })).text();
+    const v = (/assets\/app\.js\?v=([\w-]+)/.exec(html) || [])[1];
+    if (!v || v === VERSAO) return;
+    avisouVersao = true;
+    const el = document.createElement('div');
+    el.className = 'nova-versao';
+    el.innerHTML = `${ic('info')}<span>Tem uma versão nova do sistema.</span><button type="button" class="btn sm primary">Atualizar agora</button>`;
+    el.querySelector('button').onclick = () => {
+      const st = $('.salvo');
+      if (st && !st.classList.contains('ok')) return toast('Espere terminar de salvar e clique de novo.', 'erro');
+      const u = new URL(location.href); u.searchParams.set('v', v); location.replace(u.href);
+    };
+    document.body.append(el);
+  } catch (e) { /* sem internet: tenta de novo depois */ }
+}
+setInterval(checarVersao, 5 * 60e3);
+document.addEventListener('visibilitychange', checarVersao);
+setTimeout(checarVersao, 15e3);
+
 boot();
 })();
