@@ -3489,6 +3489,34 @@ function ligacoesEtapa(pc, k) {
   return `<div class="lig">${itens.map(([id, href, icn, nome, [txt, cor]]) => `<a class="lig-i${id === destaque ? ' on' : ''}" href="${href}">${ic(icn)}<div><b>${nome}</b><small class="${cor ? 'c-' + cor : ''}">${esc(txt)}</small></div></a>`).join('')}</div>`;
 }
 
+/* ---------- histórico completo da peça (pedidos, tarefas, etapas, pendências, arquivos, medição) ---------- */
+function resumoTipoPeca(pc, t) {
+  const a = S.db.pedidos.filter(p => p.peca_id === pc.id && p.tipo === t).sort((x, y) => new Date(y.pedido_em) - new Date(x.pedido_em));
+  if (!a.length) return '<span class="muted">—</span>';
+  return a[0].finalizado_em ? `<span class="c-green">Pronto ${fDia(a[0].finalizado_em)}</span>` : '<span class="c-amber">Em andamento</span>';
+}
+function histPecaHtml(pc) {
+  const ev = [], et = ((fluxoDe(pc.id) || {}).etapas) || {};
+  const item = (d, icone, ok, titulo, texto) => ev.push({ d, h: `<div class="tl"><div class="pt${ok ? ' ok' : ''}">${ic(icone)}</div><div class="bx"><div class="hd"><b>${titulo}</b></div><div class="ds">${texto}</div></div></div>` });
+  S.db.pedidos.filter(p => p.peca_id === pc.id).forEach(p => ev.push({ d: p.pedido_em, h: itemHistPedido(p) }));
+  S.db.tarefas.filter(t => t.peca_id === pc.id).forEach(t => ev.push({ d: t.pedido_em, h: itemHistTarefa(t) }));
+  FLUXO.forEach(([k, l]) => {
+    const e = et[k] || {};
+    (e.hist || []).forEach(h => item(h.em, IC_FLUXO[h.st] || 'flow', h.st === 'feito', `${esc(l)}: ${esc(nomeSt(h.st))}`, `${fQuando(h.em)}${h.por ? ` · ${esc(h.por)}` : ''}`));
+    (e.pend || []).forEach(p => {
+      item(p.em, 'alert', false, `Pendência · ${esc(l)}`, `${esc(p.t)} · criada ${fQuando(p.em)}${p.por ? ` por ${esc(p.por)}` : ''}${p.resp ? ` · para ${esc((pessoa(p.resp) || {}).nome || '')}` : ''}`);
+      if (p.ok && p.ok_em) item(p.ok_em, 'check', true, `Pendência resolvida · ${esc(l)}`, `${esc(p.t)} · ${fQuando(p.ok_em)}${p.ok_por ? ` por ${esc(p.ok_por)}` : ''}`);
+    });
+    (e.arquivos || []).forEach(a => { if (a.em) item(a.em, 'file', false, `Arquivo · ${esc(l)}`, `${esc(a.n)} · ${fQuando(a.em)}`); });
+  });
+  const md = (et.medicao || {}).med;
+  if (md && md.em) item(md.em, 'ruler', md.status === 'sem' || md.status === 'com', 'Medição (engenharia)', `${md.status ? `${esc(nomeStEng(md.status))} · ` : ''}${fQuando(md.em)}${md.por ? ` · ${esc(md.por)}` : ''}`);
+  const fi = fichaDe(pc.id);
+  if (fi && fi.atualizado_em) item(fi.atualizado_em, 'file', false, 'Ficha técnica e consumo atualizadas', fQuando(fi.atualizado_em));
+  if (pc.criado_em) item(pc.criado_em, 'dress', false, 'Peça criada', fQuando(pc.criado_em));
+  return ev.filter(x => x.d).sort((a, b) => new Date(b.d) - new Date(a.d)).map(x => x.h).join('') || '<div class="muted small">Nada registrado ainda.</div>';
+}
+
 /* ---------- uma etapa: status, arquivos, pendências e responsável ---------- */
 const ehImgArq = n => /\.(jpe?g|png|webp|gif|bmp|heic)$/i.test(n || '');
 
@@ -3546,13 +3574,26 @@ function formEtapa(pc, k) {
   const outrasPend = FLUXO.filter(([x]) => x !== k).flatMap(([x, l]) => ((((fl0 && fl0.etapas) || {})[x] || {}).pend || []).map(p => ({ ...p, k: x, l })));
   let mudouPend = false;
   modal({
-    titulo: pc.ref, tamanho: 'lg', aoFechar: () => { if (mudouPend) rerender(); },
+    titulo: pc.ref, tamanho: 'xl', aoFechar: () => { if (mudouPend) rerender(); },
     corpo: `<div class="et-top">
         <div class="et-sub">Atualizar etapa: <b>${esc(nomeFluxo(k))}</b><span class="muted"> · ${idx + 1} de ${FLUXO.length}</span></div>
         <div class="et-nav"><button type="button" class="icon-btn" data-ir="${idx - 1}" ${idx ? '' : 'disabled'} title="Etapa anterior">${ic('chevL')}</button><button type="button" class="icon-btn" data-ir="${idx + 1}" ${idx < FLUXO.length - 1 ? '' : 'disabled'} title="Próxima etapa">${ic('chevR')}</button></div>
       </div>
       <div class="et-pc">${cbadge(pc.cliente_id)}${pc.sala ? `<span class="tag gray sem">${esc(pc.sala)}</span>` : ''}${pc.descricao ? `<span class="muted small">${esc(pc.descricao)}</span>` : ''}</div>
-      <div class="abas" id="abas"><button type="button" class="on" data-aba="status">Status</button><button type="button" data-aba="pend">Pendências<span class="n" id="n-pend"></span></button><button type="button" data-aba="resp">Responsável</button></div>
+      <div class="et-cols">
+      <aside class="et-lado">
+        <button type="button" class="th et-capa"${capa(pc) || imgsCons(pc)[0] ? ` data-foto="${esc(capa(pc) || imgsCons(pc)[0])}" data-fit="contain" data-et-capa` : ''}>${ic('dress')}</button>
+        <div class="et-info">
+          <div><small>OP</small><b>${opsDaPeca(pc).length ? esc(opsDaPeca(pc).join(', ')) : '—'}</b></div>
+          <div><small>Desenho</small><b>${resumoTipoPeca(pc, 'desenho')}</b></div>
+          <div><small>Consumo</small><b>${resumoTipoPeca(pc, 'consumo')}</b></div>
+          <div><small>Etapa atual</small><b>${situacaoFluxo(pc).atual ? esc(nomeFluxo(situacaoFluxo(pc).atual)) : 'Concluído'}</b></div>
+        </div>
+        ${(pc.detalhes || []).length ? `<div class="et-det"><small>Informações</small><ol>${pc.detalhes.map(d => `<li>${esc(d)}</li>`).join('')}</ol></div>` : ''}
+        <a class="btn sm" href="#/peca/${pc.id}">${ic('external')}Abrir a página da peça</a>
+      </aside>
+      <div class="et-main">
+      <div class="abas" id="abas"><button type="button" class="on" data-aba="status">Status</button><button type="button" data-aba="pend">Pendências<span class="n" id="n-pend"></span></button><button type="button" data-aba="hist">Histórico</button></div>
       <form class="form" id="fet" autocomplete="off" novalidate>
         <div data-p="status">
           <div class="fld"><span class="lbl">Ligado a esta peça</span>${ligacoesEtapa(pc, k)}</div>
@@ -3563,22 +3604,23 @@ function formEtapa(pc, k) {
           <div class="fld"><span class="lbl">Selecione um status para a etapa</span>
             <div class="pick">${ST_FLUXO.map(([s, l, cor]) => `<label><input type="radio" name="st" value="${s}"${est.st === s ? ' checked' : ''}><span class="pk" style="--c:${cor}">${l}</span></label>`).join('')}</div>
             ${est.auto ? `<span class="hint">Marcado sozinho: ${esc(est.auto)}${est.em ? ' em ' + fQuando(est.em) : ''}. Pode mudar se precisar.</span>` : est.andamento ? `<span class="hint">${esc(est.andamento)}. Fica “Feito” sozinho quando finalizar.</span>` : ''}</div>
+          <div class="et-rp">
+            <label class="fld"><span>Responsável</span><select name="resp">${opcoes(pessoasOrd().filter(p => p.ativo !== false || p.id === e0.resp).map(p => [p.id, p.nome]), e0.resp || '', respPadrao(k).length ? `Normalmente: ${nomesResp(respPadrao(k)).join(', ')}` : 'Ninguém')}</select></label>
+            <label class="fld"><span>Prazo</span><input type="date" name="prazo" value="${esc(e0.prazo || '')}"></label>
+          </div>
           <label class="fld"><span>Observação</span><textarea name="obs" rows="2" placeholder="Anotações desta etapa">${esc(e0.obs || '')}</textarea></label>
           ${(e0.hist || []).length ? `<div class="fld"><span class="lbl">Histórico</span><ul class="et-hist">${e0.hist.slice().reverse().map(h => `<li><span class="dot" style="--c:${(ST_FLUXO.find(([s]) => s === h.st) || [])[2]}"></span><b>${esc(nomeSt(h.st))}</b><span class="muted">${fQuando(h.em)}${h.por ? ' · ' + esc(h.por) : ''}</span></li>`).join('')}</ul></div>` : ''}
         </div>
         <div data-p="pend" hidden>
           <div class="et-pend" id="pend"></div>
-          <div class="et-add"><input class="inp" id="pend-txt" placeholder="Nova pendência (ex.: faltou o aviamento do bolso)"><button type="button" class="btn" id="pend-add">${ic('plus')}Adicionar</button></div>
+          <div class="et-add"><input class="inp" id="pend-txt" placeholder="Nova pendência (ex.: faltou o aviamento do bolso)"><select class="inp et-pend-resp" id="pend-resp" title="Quem vai resolver">${opcoes(pessoasOrd().filter(p => p.ativo !== false).map(p => [p.id, p.nome]), e0.resp || respPadrao(k)[0] || '', 'Quem resolve?')}</select><button type="button" class="btn" id="pend-add">${ic('plus')}Adicionar</button></div>
           <div class="hint" style="margin-top:6px">Cada pendência fica gravada na hora, com data e hora, mesmo sem clicar em “Salvar alterações”.</div>
           ${outrasPend.length ? `<div class="et-outras"><div class="lbl">Pendências das outras etapas</div>${outrasPend.map(p => `<button type="button" class="et-pi${p.ok ? ' ok' : ''}" data-ir-et="${p.k}"><span class="et-ok">${ic(p.ok ? 'check' : 'alert')}</span>
-            <div class="tx"><span>${esc(p.t)}</span><small>${esc(p.l)} · criada ${fQuando(p.em)}${p.ok && p.ok_em ? ` · resolvida ${fQuando(p.ok_em)}` : ''}</small></div>${ic('chevR')}</button>`).join('')}</div>` : ''}
+            <div class="tx"><span>${esc(p.t)}${p.resp ? ` ${pchip(p.resp)}` : ''}</span><small>${esc(p.l)} · criada ${fQuando(p.em)}${p.ok && p.ok_em ? ` · resolvida ${fQuando(p.ok_em)}` : ''}</small></div>${ic('chevR')}</button>`).join('')}</div>` : ''}
         </div>
-        <div data-p="resp" hidden>
-          <div class="fld"><span class="lbl">Quem é responsável por esta etapa</span>${pickPessoas('resp', e0.resp || null)}
-            ${respPadrao(k).length ? `<span class="hint">Normalmente: ${esc(nomesResp(respPadrao(k)).join(', '))}. Escolha alguém só se neste modelo for outra pessoa.</span>` : `<span class="hint">Dá para definir quem cuida desta etapa em todos os modelos no botão “Responsáveis”, na tela de etapas.</span>`}</div>
-          <label class="fld" style="max-width:240px"><span>Prazo</span><input type="date" name="prazo" value="${esc(e0.prazo || '')}"></label>
-        </div>
-      </form>`,
+        <div data-p="hist" hidden><div class="timeline et-tl">${histPecaHtml(pc)}</div></div>
+      </form>
+      </div></div>`,
     rodape: `<button type="button" class="btn esq" id="et-del" title="${oculto ? 'Volta a mostrar o modelo na tela Etapas' : 'Esconde o modelo da tela Etapas (ex.: peça antiga). Nada é apagado.'}">${ic(oculto ? 'eye' : 'eyeOff')}<span class="tx">${oculto ? 'Mostrar nas etapas' : 'Esconder das etapas'}</span></button><button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fet" class="btn primary">Salvar alterações</button>`,
     aoAbrir: m => {
       const form = m.$('#fet');
@@ -3590,6 +3632,7 @@ function formEtapa(pc, k) {
         m.$$('[data-aba]').forEach(x => x.classList.toggle('on', x === b));
         m.$$('[data-p]').forEach(p => { p.hidden = p.dataset.p !== b.dataset.aba; });
         if (b.dataset.aba === 'pend') setTimeout(() => m.$('#pend-txt').focus(), 30);
+        if (b.dataset.aba === 'hist') m.$('.et-tl').innerHTML = histPecaHtml(peca(pc.id));
       });
       m.$$('[data-ir]').forEach(b => { b.onclick = () => { const i = +b.dataset.ir; if (FLUXO[i]) { m.fechar(); formEtapa(peca(pc.id), FLUXO[i][0]); } }; });
       const desenhaArqs = () => {
@@ -3625,7 +3668,7 @@ function formEtapa(pc, k) {
       desenhaArqs();
       const desenhaPend = () => {
         m.$('#pend').innerHTML = pend.length ? pend.map((p, i) => `<label class="et-pi${p.ok ? ' ok' : ''}"><input type="checkbox" data-pi="${i}"${p.ok ? ' checked' : ''}>
-          <div class="tx"><span>${esc(p.t)}</span><small>criada ${fQuando(p.em)}${p.por ? ` por ${esc(p.por)}` : ''}${p.ok && p.ok_em ? ` · resolvida ${fQuando(p.ok_em)}${p.ok_por ? ` por ${esc(p.ok_por)}` : ''}` : ''}</small></div>
+          <div class="tx"><span>${esc(p.t)}${p.resp ? ` ${pchip(p.resp)}` : ''}</span><small>criada ${fQuando(p.em)}${p.por ? ` por ${esc(p.por)}` : ''}${p.ok && p.ok_em ? ` · resolvida ${fQuando(p.ok_em)}${p.ok_por ? ` por ${esc(p.ok_por)}` : ''}` : ''}</small></div>
           <button type="button" class="icon-btn danger" data-prm="${i}" title="Apagar">${ic('x')}</button></label>`).join('')
           : '<div class="muted small" style="padding:6px 2px 10px">Nenhuma pendência nesta etapa.</div>';
         const n = pend.filter(p => !p.ok).length;
@@ -3644,7 +3687,7 @@ function formEtapa(pc, k) {
         });
       };
       const quem = () => nomeUsuario().split(' ')[0];
-      const addPend = () => { const i = m.$('#pend-txt'), t = i.value.trim(); if (!t) return; pend.push({ id: uid(), t, ok: false, em: agoraISO(), por: quem() }); i.value = ''; desenhaPend(); gravarPend(); i.focus(); };
+      const addPend = () => { const i = m.$('#pend-txt'), t = i.value.trim(); if (!t) return; pend.push({ id: uid(), t, ok: false, em: agoraISO(), por: quem(), resp: m.$('#pend-resp').value || null }); i.value = ''; desenhaPend(); gravarPend(); i.focus(); };
       m.$('#pend-add').onclick = addPend;
       m.$('#pend-txt').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addPend(); } });
       m.$('#pend').addEventListener('change', e => { const c = e.target.closest('[data-pi]'); if (c) { const p = pend[+c.dataset.pi]; p.ok = c.checked; p.ok_em = c.checked ? agoraISO() : null; p.ok_por = c.checked ? quem() : null; desenhaPend(); gravarPend(); } });
@@ -3656,6 +3699,8 @@ function formEtapa(pc, k) {
         pend.splice(pend.indexOf(p), 1); desenhaPend(); gravarPend();
       });
       m.el.addEventListener('click', e => { const b = e.target.closest('[data-ir-et]'); if (b) { m.fechar(); formEtapa(peca(pc.id), b.dataset.irEt); } });
+      m.el.addEventListener('click', e => { if (e.target.closest('[data-et-capa]')) { const fs = imagens(pc).length ? imagens(pc) : imgsCons(pc); if (fs.length) lightbox(fs, 0); } });
+      hidratarFotos(m.$('.et-lado'));
       desenhaPend();
       m.$('#et-del').onclick = async () => {
         try {
@@ -3936,31 +3981,67 @@ function completarComMaterial(E, k) {
 /* ================================================================
    PRODUTO — tudo de uma referência numa página
    ================================================================ */
-const STATUS_PROD = ['Desenvolvimento', 'Aguardando aprovação', 'Aprovado', 'Em produção', 'Entregue', 'Cancelado'];
+const STATUS_PROD = ['Desenvolvimento', 'Aguardando aprovação', 'Aprovado', 'Vendido', 'Em produção', 'Entregue', 'Cancelado'];
+// "por": quem cuida do produto (Responsável) ou quem pediu o primeiro desenho
+function porDoProduto(pc) {
+  const t = ((fichaDe(pc.id) || {}).tecnica) || {};
+  if (t.resp) return t.resp;
+  const p = S.db.pedidos.filter(x => x.peca_id === pc.id).sort((a, b) => new Date(a.pedido_em) - new Date(b.pedido_em))[0];
+  return p ? ((pessoa(p.de_id) || {}).nome || '') : '';
+}
 function viewProduto(arg) {
   if (arg && peca(arg)) return paginaProduto(peca(arg));
-  const f = S.f.prod || (S.f.prod = { q: '' });
-  setPage('Produto', 'Tudo de cada referência: fotos, informações, tecidos, aviamentos e etiquetas', `<button class="btn primary" data-novo="produto">${ic('plus')}<span class="tx">Novo produto</span></button>`);
+  const f = S.f.prod || (S.f.prod = { q: '', cli: '', st: '', por: '', per: 'tudo', sala: '', lim: 150 });
+  setPage('Produto', 'Cada peça nasce aqui · tudo da referência numa página', `<button class="btn primary" data-novo="produto">${ic('plus')}<span class="tx">Novo produto</span></button>`);
+  const pors = [...new Set(S.db.pecas.map(porDoProduto).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   view().innerHTML = `<div class="card">
-    <div class="guia-top"><div class="busca guia-busca">${ic('search')}<input class="inp" id="pq" placeholder="REF, OP ou descrição do produto" value="${esc(f.q)}" autocomplete="off" spellcheck="false"></div></div>
-    <div class="guia-info small muted" id="pi"></div><div id="pl"></div></div>`;
+    <div class="toolbar">
+      <div class="busca">${ic('search')}<input class="inp" data-f="q" placeholder="Filtrar por REF, OP, descrição ou pessoa" value="${esc(f.q)}"></div>
+      <select class="inp" data-f="cli">${opClientes(f.cli, 'Todos os clientes')}</select>
+      <select class="inp" data-f="st">${opcoes([...STATUS_PROD.map(x => [x, x]), ['_sem', 'Sem status']], f.st, 'Todos os status')}</select>
+      <select class="inp" data-f="por">${opcoes(pors.map(x => [x, x]), f.por, 'Todas as pessoas')}</select>
+      <select class="inp" data-f="sala">${opcoes(salasLista().filter(x => S.db.pecas.some(p => p.sala === x)).map(x => [x, x]), f.sala, 'Todas as salas')}</select>
+      <select class="inp" data-f="per">${opcoes(PERIODOS, f.per)}</select>
+    </div>
+    <div class="small muted" id="pi" style="margin-top:10px"></div>
+    <div class="tbl-wrap" id="pl" style="margin-top:8px"></div>
+  </div>`;
   const desenhar = () => {
-    const q = f.q.trim();
-    const lista = q ? pecasQue(q) : [...S.db.pecas].sort((a, b) => String(b.atualizado_em).localeCompare(String(a.atualizado_em)));
-    $('#pi').textContent = q ? plural(lista.length, 'produto encontrado', 'produtos encontrados') : 'Produtos mais recentes · pesquise para achar qualquer outro';
-    $('#pl').innerHTML = lista.length ? `<div class="fl-lista">${lista.slice(0, q ? 60 : 30).map(pc => {
-      const t = (fichaDe(pc.id) || {}).tecnica || {}, ops = opsDaPeca(pc);
-      const sub = [pc.descricao, ops.length ? `OP ${ops.join(', ')}` : '', pc.sala].filter(Boolean).map(esc).join(' · ') || 'Sem descrição';
-      return `<a class="fl-it" href="#/produto/${pc.id}">${thumb(capa(pc) || imgsCons(pc)[0])}<div class="t"><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${sub}</small></div>
-        ${t.status ? `<span class="tag brand sem">${esc(t.status)}</span>` : ''}${ic('chevR')}</a>`;
-    }).join('')}</div>` : vazio(q ? 'search' : 'dress', q ? `Nada encontrado para “${q}”` : 'Nenhum produto cadastrado', '', `<button class="btn primary" data-novo="produto">${ic('plus')}Criar produto</button>`);
+    const ini = inicioPeriodo(f.per), qn = norm(f.q);
+    const lista = S.db.pecas.filter(pc => {
+      const t = ((fichaDe(pc.id) || {}).tecnica) || {};
+      if (f.cli && pc.cliente_id !== f.cli) return false;
+      if (f.sala && pc.sala !== f.sala) return false;
+      if (f.st && (f.st === '_sem' ? !!t.status : t.status !== f.st)) return false;
+      if (f.por && porDoProduto(pc) !== f.por) return false;
+      if (ini && new Date(pc.criado_em) < ini) return false;
+      if (qn && !norm([pc.ref, pc.op, ...opsDaPeca(pc), pc.descricao, pc.sala, porDoProduto(pc), t.status, (cliente(pc.cliente_id) || {}).nome].join(' ')).includes(qn)) return false;
+      return true;
+    }).sort((a, b) => new Date(b.criado_em) - new Date(a.criado_em));
+    $('#pi').textContent = plural(lista.length, 'produto', 'produtos');
+    if (!lista.length) { $('#pl').innerHTML = vazio('dress', S.db.pecas.length ? 'Nada encontrado com esses filtros' : 'Nenhum produto cadastrado', '', `<button class="btn primary" data-novo="produto">${ic('plus')}Criar produto</button>`); return; }
+    const porDia = {};
+    lista.forEach(pc => { const d = inData(pc.criado_em); porDia[d] = (porDia[d] || 0) + 1; });
+    let ultimo = '';
+    $('#pl').innerHTML = `<table class="tbl tbl-ped tbl-prod"><thead><tr><th>Criado</th><th>Referência</th><th>Por</th><th>Status</th><th>Etapa</th><th></th></tr></thead><tbody>${lista.slice(0, f.lim).map(pc => {
+      const d = inData(pc.criado_em), d0 = new Date(pc.criado_em), t = ((fichaDe(pc.id) || {}).tecnica) || {}, ops = opsDaPeca(pc), sf = situacaoFluxo(pc), por = porDoProduto(pc);
+      const pes = S.db.pessoas.find(p => norm(p.nome) === norm(por));
+      const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="6"><b>${fDia(pc.criado_em)}</b><span>${DIAS[d0.getDay()]}${mesmoDia(d0, new Date()) ? ' · hoje' : ''}</span><span class="dia-n">${plural(porDia[d], 'produto')}</span></td></tr>` : '';
+      ultimo = d;
+      return `${sep}<tr class="lin-prod" data-href="#/produto/${pc.id}">
+        <td class="quando"><b>${fDia(pc.criado_em)}</b><small>${fHora(pc.criado_em)}</small></td>
+        <td><div class="ref-cel">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${ops.length ? `<span>OP ${esc(ops.join(', '))}</span>` : ''}</small>${pc.descricao ? `<small class="desc">${esc(pc.descricao)}</small>` : ''}</div></div></td>
+        <td>${pes ? pchip(pes.id) : por ? `<span class="pchip">${esc(por)}</span>` : '<span class="muted">—</span>'}</td>
+        <td>${t.status ? `<span class="tag ${t.status === 'Cancelado' ? 'gray' : t.status === 'Vendido' || t.status === 'Entregue' ? 'green' : 'brand'} sem">${esc(t.status)}</span>` : '<span class="muted">—</span>'}</td>
+        <td class="small">${sf.atual ? esc(nomeFluxo(sf.atual)) : sf.fl ? '<span class="c-green">Concluído</span>' : '<span class="muted">—</span>'}</td>
+        <td class="x">${ic('chevR')}</td></tr>`;
+    }).join('')}</tbody></table>${lista.length > f.lim ? `<div style="text-align:center;padding:14px"><button class="btn" id="pl-mais">Mostrar mais ${Math.min(150, lista.length - f.lim)}</button></div>` : ''}`;
     hidratarFotos($('#pl'));
+    const mais = $('#pl-mais'); if (mais) mais.onclick = () => { f.lim += 150; desenhar(); };
   };
-  const inp = $('#pq');
-  inp.addEventListener('input', () => { f.q = inp.value; desenhar(); });
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter' && f.q.trim()) { const l = pecasQue(f.q); if (l.length) location.hash = `#/produto/${l[0].id}`; } });
+  $$('[data-f]', view()).forEach(el => el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', () => { f[el.dataset.f] = el.value; f.lim = 150; desenhar(); }));
+  $('#pl').addEventListener('click', e => { const tr = e.target.closest('tr[data-href]'); if (tr) location.hash = tr.dataset.href; });
   desenhar();
-  if (!matchMedia('(max-width: 640px)').matches) setTimeout(() => inp.focus(), 50);
 }
 
 function formNovoProduto() {
@@ -4038,16 +4119,12 @@ function paginaProduto(pc) {
     ? S.fichaAberta
     : (S.fichaAberta = { pc, tipo: 'tecnica', F: { tecnica: clone((fi && fi.tecnica) || {}), consumo: clone((fi && fi.consumo) || {}) }, fila: Promise.resolve() });
   E.pc = pc;
-  const t = E.F.tecnica, k = E.F.consumo, grade = gradeDe(E.F);
+  const t = E.F.tecnica, grade = gradeDe(E.F);
   const fotos = imagens(pc), docs = pdfs(pc), ops = opsDaPeca(pc), sf = situacaoFluxo(pc), st = statusPeca(pc.id);
   setPage(`Produto · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
   const campo = (rot, html, cls = '') => `<label class="pf ${cls}"><span>${rot}</span>${html}</label>`;
   const inK = (key, extra = '') => `<input data-k="${key}" value="${esc(getPath(E.F, key) ?? '')}" autocomplete="off" ${extra}>`;
   const inP = (c, extra = '') => `<input data-peca="${c}" value="${esc(pc[c] ?? '')}" autocomplete="off" ${extra}>`;
-  const fornecedor = (tipo, r, nomeK) => { const m = acharMaterial(tipo, r.codigo, r[nomeK]); return m ? valMat(m, 'fornecedor') : ''; };
-  const tabela = (titulo, linhas, cols) => `<div class="prod-sec"><div class="fs-sub">${titulo}</div>${linhas.length
-    ? `<div class="tbl-wrap"><table class="ft-tab"><thead><tr>${cols.map(([l]) => `<th>${l}</th>`).join('')}</tr></thead><tbody>${linhas.map(r => `<tr>${cols.map(([, fn]) => `<td>${esc(fn(r) || '') || '<span class="muted">—</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
-    : `<div class="muted small">Nada na ficha de consumo ainda.</div>`}</div>`;
   view().innerHTML = `<div id="prod-root"><div class="folha-barra no-print">
       <a class="link-btn" href="#/produto">${ic('chevL')}Outro produto</a>
       <span class="salvo ok" id="salvo">${ic('check')}Tudo salvo</span>
@@ -4069,7 +4146,7 @@ function paginaProduto(pc) {
         <div class="prod-tags">${sf.atual ? `<span class="tag brand">Etapa: ${esc(nomeFluxo(sf.atual))}</span>` : '<span class="tag green">Etapas concluídas</span>'}${tagStatus('desenho', st.desenho)}${tagStatus('consumo', st.consumo)}</div>
         <div class="prod-grid">
           ${campo('Status', `<select data-k="tecnica.status">${opcoes(STATUS_PROD.map(s => [s, s]), t.status || '', '—')}</select>`)}
-          ${campo('OP', inP('op', 'inputmode="numeric"'))}
+          ${campo('OP', inP('op', `inputmode="numeric" placeholder="${esc(ops.join(', '))}"`))}
           ${campo('Responsável', inK('tecnica.resp'))}
           ${campo('Modelista', inK('tecnica.modelista'))}
           ${campo('Piloteira', inK('tecnica.piloteira'))}
@@ -4100,12 +4177,8 @@ function paginaProduto(pc) {
     </div>
     ${libCard(pc)}
     <div class="card prod-card">
-      <div class="card-h"><h3>Materiais</h3><div class="r"><a class="link-btn" href="#/ficha-tecnica/${pc.id}">Editar na ficha de consumo</a></div></div>
-      <div class="card-b">
-        ${tabela('Tecidos', k.tecidos || [], [['Fornecedor', r => fornecedor('tecido', r, 'tecido')], ['Código', r => r.codigo], ['Tecido', r => r.tecido], ['Largura', r => r.largura], ['Cor', r => r.cor], ['Consumo', r => r.consumo]])}
-        ${tabela('Aviamentos', k.aviamentos || [], [['Fornecedor', r => fornecedor('aviamento', r, 'material')], ['Código', r => r.codigo], ['Material', r => r.material], ['Cor', r => r.cor], ['UN', r => r.un], ['Consumo', r => r.consumo]])}
-        ${tabela('Etiquetas', k.etiquetas || [], [['Código', r => r.codigo], ['Etiqueta', r => r.etiqueta], ['Tipo', r => r.tipo], ['Cor', r => r.cor], ['Consumo', r => r.consumo]])}
-      </div>
+      <div class="card-h"><h3>Materiais</h3><div class="r"><span class="small muted">O que mudar aqui muda também na ficha de consumo</span></div></div>
+      <div class="prod-mat" id="prod-mat">${secoesMateriaisHtml(E)}</div>
     </div></div>`;
   const root = $('#prod-root');
   let sel = 0;
@@ -4118,6 +4191,23 @@ function paginaProduto(pc) {
   });
   main.addEventListener('click', () => { if (fotos.length) lightbox(fotos, sel); });
   root.addEventListener('click', e => { const b = e.target.closest('[data-lib-img]'); if (b) lightbox(libDe(pc).imgs, +b.dataset.libImg); });
+  // materiais: mesmas linhas da ficha de consumo (E.F.consumo), salvas juntas
+  const redesenharMat = () => { const b = $('#prod-mat'); if (b) b.innerHTML = secoesMateriaisHtml(E); };
+  E.redesenhar = redesenharMat;
+  $('#prod-mat').addEventListener('click', e => {
+    const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]');
+    if (add) {
+      const k2 = add.dataset.add, lista = getPath(E.F, k2) || [];
+      lista.push(MODELOS_LINHA[k2]()); setPath(E.F, k2, lista); agendarSalvar(E); redesenharMat();
+      const ult = $('#prod-mat').querySelector(`[data-k^="${k2}.${lista.length - 1}."]`); if (ult) ult.focus();
+    }
+    if (rm) { const ks = rm.dataset.rm.split('.'), i = +ks.pop(), lista = getPath(E.F, ks.join('.')) || []; lista.splice(i, 1); agendarSalvar(E); redesenharMat(); }
+  });
+  $('#prod-mat').addEventListener('change', e => {
+    const x = e.target;
+    if (x.dataset.audaces !== undefined) { const fs = [...x.files]; x.value = ''; if (fs.length) lerAudaces(E, fs); return; }
+    if (completarComMaterial(E, x.dataset.k)) { agendarSalvar(E); redesenharMat(); }
+  });
   $$('[data-pdf]', root).forEach(b => { b.onclick = () => abrirArquivo(b.dataset.pdf); });
   $('#pg-add').addEventListener('change', async e => {
     const files = [...e.target.files].filter(x => x.type.startsWith('image/') || ehPdfArq(x)); if (!files.length) return;
@@ -4449,7 +4539,7 @@ function folhaFicha(tipo, pecaId) {
   const E = S.fichaAberta && S.fichaAberta.pc.id === pc.id && S.fichaAberta.pendente
     ? S.fichaAberta
     : (S.fichaAberta = { pc, tipo, F: { tecnica: clone((fi && fi.tecnica) || {}), consumo: clone((fi && fi.consumo) || {}) }, fila: Promise.resolve() });
-  E.pc = pc; E.tipo = tipo;
+  E.pc = pc; E.tipo = tipo; E.redesenhar = null;
   setPage(`${NOME_FICHA[tipo]} · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
   const outro = tipo === 'tecnica' ? 'consumo' : 'tecnica';
   view().innerHTML = `<div class="folha-barra no-print">
@@ -4558,17 +4648,11 @@ function folhaTecnicaHtml(E) {
   <datalist id="dl-avi">${avis.map(a => `<option value="${esc(a)}">`).join('')}</datalist>`;
 }
 
-function folhaConsumoHtml(E) {
-  const { F } = E, k = F.consumo;
-  const grade = gradeDe(F);
+// tecidos, aviamentos e etiquetas: os mesmos campos na ficha de consumo e na página do produto
+function secoesMateriaisHtml(E) {
+  const k = E.F.consumo;
   const tec = k.tecidos || [], avi = k.aviamentos || [], etq = k.etiquetas || [];
-  return `${tituloFolha(E, 'Ficha de consumo')}
-  <div class="ft-grid">
-    ${fcCliente(E).replace('class="fc"', 'class="fc na-faixa"')}${fcPeca(E, 'OP', 'op', 'na-faixa')}${fcPeca(E, 'Descrição', 'descricao', 'span2 na-faixa')}
-    ${fcInput(E, 'Cor do produto', 'consumo.cor', '', 'span2')}
-    <label class="fc span2"><span>Grade (da ficha técnica)</span><input value="${esc(grade.join(' / '))}" readonly tabindex="-1"></label>
-  </div>
-  <section class="fs">
+  return `  <section class="fs">
     <div class="fs-h"><h3>Tecidos</h3><div class="r small muted">${plural(tec.length, 'tecido')}</div></div>
     <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Tecido</th><th class="n">Gramatura</th><th class="n">Largura</th><th class="n">Consumo</th><th>Composição</th><th>Cor</th><th class="no-print"></th></tr></thead>
     <tbody>${tec.map((r, i) => `<tr>
@@ -4615,6 +4699,17 @@ function folhaConsumoHtml(E) {
   ${datalistsMateriais(E.pc.cliente_id)}${['tecidos', 'aviamentos', 'etiquetas'].map(l => (k[l] || []).map((r, i) => dlCoresLinha(l, i, r)).join('')).join('')}
   <datalist id="dl-etq"><option value="Marca / tamanho"><option value="Composição"><option value="Tag cód. barras"><option value="Tag de preço"><option value="Pino / alarme"><option value="Lacre"><option value="Etiqueta interna"></datalist>
   <datalist id="dl-un"><option value="MT"><option value="UN"><option value="KG"><option value="CM"><option value="PC"></datalist>`;
+}
+function folhaConsumoHtml(E) {
+  const { F } = E;
+  const grade = gradeDe(F);
+  return `${tituloFolha(E, 'Ficha de consumo')}
+  <div class="ft-grid">
+    ${fcCliente(E).replace('class="fc"', 'class="fc na-faixa"')}${fcPeca(E, 'OP', 'op', 'na-faixa')}${fcPeca(E, 'Descrição', 'descricao', 'span2 na-faixa')}
+    ${fcInput(E, 'Cor do produto', 'consumo.cor', '', 'span2')}
+    <label class="fc span2"><span>Grade (da ficha técnica)</span><input value="${esc(grade.join(' / '))}" readonly tabindex="-1"></label>
+  </div>
+  ${secoesMateriaisHtml(E)}`;
 }
 
 /* ---------- salvar ---------- */
@@ -4684,13 +4779,21 @@ function lerEncaixe(txt) {
   return r.largura || r.consumo ? r : null;
 }
 const opTecAud = (tec, i) => `<option value="novo">Novo tecido</option>${tec.map((t, j) => `<option value="${j}"${j === i ? ' selected' : ''}>Linha ${j + 1}${t.tecido ? ' · ' + esc(t.tecido) : ''}${t.cor ? ' · ' + esc(t.cor) : ''}</option>`).join('')}`;
+const tecidoEncaixe = r => { const t = String(r.tecido || '').trim(); return t && !/^tecido$/i.test(t) ? t : ''; };
 function aplicarEncaixe(lista, r, alvo) {
   let row = alvo === 'novo' ? null : lista[+alvo];
   if (!row) { row = MODELOS_LINHA['consumo.tecidos'](); lista.push(row); }
+  const nome = tecidoEncaixe(r);
+  if (nome && !row.tecido) {
+    // o nome que veio do Audaces; se o tecido estiver em Materiais, vêm também o código, a gramatura e a composição
+    const m = acharMaterial('tecido', '', nome);
+    row.tecido = m ? m.nome : nome;
+    if (m) { row.codigo = row.codigo || m.codigo || ''; ['gramatura', 'composicao'].forEach(c => { const v = valMat(m, c); if (v && !row[c]) row[c] = v; }); }
+  }
   if (r.largura) row.largura = fmtNum(r.largura / 100, 2);
   if (r.consumo) row.consumo = fmtNum(r.consumo / 100, 3);
 }
-const resumoEncaixe = r => [r.largura ? `largura <b>${fmtNum(r.largura / 100, 2)} m</b>` : '', r.consumo ? `consumo <b>${fmtNum(r.consumo / 100, 3)} m</b> por peça${r.perda != null ? ` (${fmtNum(r.perda, 0)}% de perda)` : ''}` : '',
+const resumoEncaixe = r => [tecidoEncaixe(r) ? `tecido <b>${esc(tecidoEncaixe(r))}</b>` : '', r.largura ? `largura <b>${fmtNum(r.largura / 100, 2)} m</b>` : '', r.consumo ? `consumo <b>${fmtNum(r.consumo / 100, 3)} m</b> por peça${r.perda != null ? ` (${fmtNum(r.perda, 0)}% de perda)` : ''}` : '',
   r.aproveitamento ? `aproveitamento ${fmtNum(r.aproveitamento, 2)}%` : ''].filter(Boolean).join(' · ');
 async function lerAudaces(E, files) {
   statusSalvo('Lendo o PDF…');
@@ -4708,6 +4811,7 @@ async function lerAudaces(E, files) {
         <div class="aud-h">${ic('file')}<b title="${esc(x.nome)}">${esc(x.nome)}</b></div>
         ${x.r.descricao ? `<div class="small muted">${esc(x.r.descricao)}</div>` : ''}
         <div class="aud-v">
+          ${tecidoEncaixe(x.r) ? `<div><small>Tecido</small><b>${esc(tecidoEncaixe(x.r))}</b></div>` : ''}
           ${x.r.largura ? `<div><small>Largura</small><b>${fmtNum(x.r.largura / 100, 2)} m</b></div>` : ''}
           ${x.r.consumo ? `<div><small>Consumo por peça</small><b>${fmtNum(x.r.consumo / 100, 3)} m</b>${x.r.perda != null ? `<small>com ${fmtNum(x.r.perda, 0)}% de perda</small>` : ''}</div>` : ''}
           ${x.r.aproveitamento ? `<div><small>Aproveitamento</small><b>${fmtNum(x.r.aproveitamento, 2)}%</b></div>` : ''}
@@ -4722,7 +4826,7 @@ async function lerAudaces(E, files) {
       ok.onclick = () => {
         const lista = E.F.consumo.tecidos || (E.F.consumo.tecidos = []);
         Array.from(m.$$('[data-aud]')).forEach(c => aplicarEncaixe(lista, lidos[+c.dataset.aud].r, c.querySelector('[data-alvo]').value));
-        agendarSalvar(E, 0); desenharFolha(E); m.fechar(); toast('Largura e consumo preenchidos pelo Audaces.');
+        agendarSalvar(E, 0); (E.redesenhar || desenharFolha)(E); m.fechar(); toast('Consumo preenchido pelo Audaces.');
       };
     },
   });

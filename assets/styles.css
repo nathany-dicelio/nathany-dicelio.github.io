@@ -1605,3 +1605,42 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .md-tab td.n input { width: 74px; min-width: 0; }
 .md-tab td:nth-child(2) input { min-width: 240px; }
 .md-tab td.md-dif { min-width: 34px; text-align: center; }
+
+/* etapas: linhas maiores */
+.fx td { padding: 16px 0; }
+.fx-m .th { width: 56px; height: 66px; }
+.fx-m b { font-size: 14.5px; }
+
+/* janela da etapa: resumo da peça ao lado */
+.modal.xl { max-width: 1120px; }
+.et-cols { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 22px; align-items: start; }
+.et-lado { display: grid; gap: 12px; position: sticky; top: 0; }
+.et-capa { width: 100%; aspect-ratio: 4 / 5; border-radius: 14px; border: 1px solid var(--line); cursor: zoom-in; background: var(--surface-2); }
+.et-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.et-info small, .et-det small { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); }
+.et-info b { font-size: 13.5px; }
+.et-det ol { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink-2); }
+.c-green { color: var(--green); } .c-amber { color: var(--amber, #C98A06); }
+.et-rp { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 12px; }
+.et-pend-resp { max-width: 190px; }
+.et-tl { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+@media (max-width: 860px) { .et-cols { grid-template-columns: 1fr; } .et-lado { position: static; grid-template-columns: 120px 1fr; } .et-lado .et-det, .et-lado .btn { grid-column: span 2; } .et-rp { grid-template-columns: 1fr; } }
+
+/* produto: lista como a do desenho */
+.tbl-prod tr.lin-prod { cursor: pointer; }
+.tbl-prod tr.lin-prod:hover td { background: var(--row-hover, var(--surface-2)); }
+.tbl-prod td.quando b { display: block; } .tbl-prod td.quando small { color: var(--mute); }
+.tbl-prod .ref-cel { display: flex; gap: 12px; align-items: center; }
+.tbl-prod .ref-cel .th { width: 48px; height: 58px; border-radius: 8px; flex: none; }
+.tbl-prod .ref-cel b { display: block; font-size: 14px; }
+.tbl-prod .ref-cel small { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--mute); margin-top: 2px; }
+.tbl-prod .ref-cel small.desc { display: block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbl-prod td.x { width: 30px; color: var(--mute); }
+
+/* produto: materiais editáveis (mesmos campos da ficha de consumo) */
+.prod-mat { border-top: 1px solid var(--line); }
+.prod-mat input, .prod-mat select { width: 100%; border: 1px solid transparent; background: transparent; border-radius: 7px; padding: 5px 7px; font: inherit; color: inherit; outline: none; min-width: 0; }
+.prod-mat input:hover { background: var(--surface-2); }
+.prod-mat input:focus { background: var(--card); border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-50); }
+.prod-mat .fs-h { border-radius: 0; }
+.prod-mat .so-print { display: none; }
