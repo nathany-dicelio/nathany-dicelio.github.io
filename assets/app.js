@@ -875,6 +875,7 @@ function renderShell() {
         <a href="#/etapas" data-r="etapas">${ic('flow')}Etapas<span class="cnt hidden" data-cnt="etapas"></span></a>
         <a href="#/etapas-baila" data-r="etapas-baila">${ic('flow')}Etapa Baila<span class="cnt hidden" data-cnt="etapas-baila"></span></a>
         <a href="#/medicao" data-r="medicao">${ic('ruler')}Medição</a>
+        <a href="#/engenharia" data-r="engenharia">${ic('ruler')}Engenharia</a>
         <a href="#/corte" data-r="corte">${ic('calendar')}Programação de corte</a>
         <div class="grp">Fichas</div>
         <a href="#/ficha-tecnica" data-r="ficha-tecnica">${ic('file')}Ficha técnica</a>
@@ -1032,6 +1033,7 @@ const ROTAS = {
   etapas: a => viewEtapas(a),
   'etapas-baila': viewEtapasBaila,
   medicao: viewMedicao,
+  engenharia: a => viewMedicao(a, 'engenharia'),
   produto: viewProduto,
   corte: viewCorte,
   materiais: viewMateriais,
@@ -2920,13 +2922,19 @@ function demoPonto() {
 setInterval(() => { const t = inHora(agoraISO()); $$('[data-relogio]').forEach(e => { e.textContent = t; }); }, 10000);
 
 /* ================================================================
-   MEDIÇÃO (engenharia) — tabela de medidas de cada peça
-   guardada em fluxos.etapas.medicao.med = { dias: [{ id, data, tam, pp1_data, pp2_data, linhas[{pom, desc, molde, pp1, pp2, tab, antes, depois, ajuste}], inst_montagem, em, por }], em, por }
+   MEDIÇÃO e ENGENHARIA E GRADUAÇÃO — tabela de medidas de cada peça
+   medição (molde e peça pronta) em fluxos.etapas.medicao.med e engenharia (antes e depois de passar, ajuste, observações)
+   em fluxos.etapas.engenharia.med, as duas no formato { dias: [{ id, data, tam, op, lacre, linhas[{pom, desc, molde, pp1, pp2, tab, antes, depois, ajuste}],
+   obs_med, status, obs_eng, obs_mod, inst_montagem, eng, mod, em, por }], em, por }
    cada dia em que a peça é medida (depois de cada alteração na costura ou no molde) é uma ficha separada
    modelos por cliente e tipo em config "medicao_modelos" = { "<cliente_id>|<tipo>": [{pom, desc}] }
    ================================================================ */
-const medDias = pc => { const m = ((((fluxoDe(pc.id) || {}).etapas) || {}).medicao || {}).med; return !m ? [] : Array.isArray(m.dias) ? m.dias : [m]; };
-const medDe = pc => medDias(pc).slice(-1)[0] || null; // a medição mais recente
+const MODO_MED = {
+  medicao: { nome: 'Medição', sub: 'a tabela de medidas de cada peça: molde e peça pronta', ficha: 'Ficha de medição', sem: 'Sem medição' },
+  engenharia: { nome: 'Engenharia e graduação', sub: 'antes e depois de passar, ajuste, observações e aviamentos de cada peça', ficha: 'Ficha de engenharia', sem: 'Sem engenharia' },
+};
+const medDias = (pc, k = 'medicao') => { const m = ((((fluxoDe(pc.id) || {}).etapas) || {})[k] || {}).med; return !m ? [] : Array.isArray(m.dias) ? m.dias : [m]; };
+const medDe = (pc, k = 'medicao') => medDias(pc, k).slice(-1)[0] || null; // a medição mais recente
 const GRUPO_TIPO = { blusa: /blusa|regata|top/i, vestido: /vestido/i, saia: /^saia/i, calca: /cal[cç]a/i, bermuda: /bermuda|short/i, macacao: /macac/i };
 const cfgMedModelos = () => S.db.config.find(x => x.chave === 'medicao_modelos');
 const chaveModelo = pc => `${pc.cliente_id || ''}|${(tipoPeca(pc.ref) || {}).k || ''}`;
@@ -2937,20 +2945,20 @@ function linhasIniciais(pc, tam) {
   const modelo = ((cfgMedModelos() || {}).valor || {})[chaveModelo(pc)];
   const fi = fichaDe(pc.id), meds = (((fi || {}).tecnica || {}).medidas || []).filter(r => r.dim || r.desc);
   const tabDe = pom => { const r = meds.find(x => norm(x.dim) === norm(pom)); return r ? String((r.v || {})[tam] ?? '') : ''; };
-  if (modelo && modelo.length) return { linhas: modelo.map(r => ({ pom: r.pom, desc: r.desc, tab: tabDe(r.pom), antes: '', depois: '' })), origem: `modelo ${nomeModelo(pc)}` };
-  if (meds.length) return { linhas: meds.map(r => ({ pom: r.dim || '', desc: r.desc || '', tab: String((r.v || {})[tam] ?? ''), antes: '', depois: '' })), origem: 'tabela da ficha técnica' };
+  if (modelo && modelo.length) return { linhas: modelo.map(r => ({ pom: r.pom, desc: r.desc, tab: tabDe(r.pom), antes: '', depois: '' })), origem: `do modelo ${nomeModelo(pc)}` };
+  if (meds.length) return { linhas: meds.map(r => ({ pom: r.dim || '', desc: r.desc || '', tab: String((r.v || {})[tam] ?? ''), antes: '', depois: '' })), origem: 'da tabela da ficha técnica' };
   const tp = tipoPeca(pc.ref), re = tp && GRUPO_TIPO[tp.k];
   const grupo = re && [...new Set(pontosGuia(pc.cliente_id).map(p => p.grupo))].find(g => re.test(g || ''));
   if (grupo && pontosGuia(pc.cliente_id).filter(p => p.grupo === grupo).length <= 25) {
-    return { linhas: pontosGuia(pc.cliente_id).filter(p => p.grupo === grupo).map(p => ({ pom: String(p.codigo || '').split(/[/,\s]+/)[0], desc: p.nome, tab: '', antes: '', depois: '' })), origem: `guia da ${(cliente(pc.cliente_id) || {}).nome} · ${grupo}` };
+    return { linhas: pontosGuia(pc.cliente_id).filter(p => p.grupo === grupo).map(p => ({ pom: String(p.codigo || '').split(/[/,\s]+/)[0], desc: p.nome, tab: '', antes: '', depois: '' })), origem: `do guia da ${(cliente(pc.cliente_id) || {}).nome} · ${grupo}` };
   }
   return { linhas: Array.from({ length: 6 }, () => ({ pom: '', desc: '', tab: '', antes: '', depois: '' })), origem: '' };
 }
 
-function viewMedicao(arg) {
-  if (arg && peca(arg)) return paginaMedicao(peca(arg));
-  const f = S.f.medicao || (S.f.medicao = { q: '', tipo: '', cli: '' });
-  setPage('Medição', 'Engenharia · a tabela de medidas de cada peça, pronta para preencher');
+function viewMedicao(arg, modo = 'medicao') {
+  if (arg && peca(arg)) return paginaMedicao(peca(arg), modo);
+  const f = S.f[modo] || (S.f[modo] = { q: '', tipo: '', cli: '' }), MO = MODO_MED[modo];
+  setPage(MO.nome, `${capital(MO.sub)}, pronta para preencher`);
   const tipos = TIPOS_PECA.filter(t => S.db.pecas.some(p => (tipoPeca(p.ref) || {}).k === t.k));
   const clis = clientesOrd().filter(c => S.db.pecas.some(p => p.cliente_id === c.id));
   view().innerHTML = `<div class="card">
@@ -2960,16 +2968,16 @@ function viewMedicao(arg) {
     <div class="guia-info small muted" id="mi"></div><div id="ml"></div></div>`;
   const desenhar = () => {
     const q = f.q.trim();
-    const quando = pc => String((medDe(pc) || {}).em || (fichaDe(pc.id) || {}).atualizado_em || pc.atualizado_em || '');
+    const quando = pc => String((medDe(pc, modo) || {}).em || (fichaDe(pc.id) || {}).atualizado_em || pc.atualizado_em || '');
     let lista = q ? pecasQue(q) : [...S.db.pecas].sort((a, b) => quando(b).localeCompare(quando(a)));
     if (f.tipo) lista = lista.filter(pc => (tipoPeca(pc.ref) || {}).k === f.tipo);
     if (f.cli) lista = lista.filter(pc => pc.cliente_id === f.cli);
     $('#mi').textContent = q || f.tipo || f.cli ? plural(lista.length, 'peça encontrada', 'peças encontradas') : 'Peças mais recentes · busque ou filtre para achar qualquer outra';
     $('#ml').innerHTML = lista.length ? `<div class="fl-lista">${lista.slice(0, 60).map(pc => {
-      const md = medDe(pc), ops = opsDaPeca(pc);
+      const md = medDe(pc, modo), ops = opsDaPeca(pc), nd = medDias(pc, modo).length;
       const sub = [pc.descricao, ops.length ? `OP ${ops.join(', ')}` : ''].filter(Boolean).map(esc).join(' · ') || 'Sem descrição';
-      return `<a class="fl-it" href="#/medicao/${pc.id}">${thumb(capa(pc) || imgsCons(pc)[0])}<div class="t"><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${sub}</small></div>
-        ${md ? `<span class="tag ${md.status === 'reprovado' ? 'red' : md.status === 'com' ? 'amber' : 'green'}">${md.status ? esc(nomeStEng(md.status)) : 'Medida'} · ${fDia(md.em)}${medDias(pc).length > 1 ? ` · ${medDias(pc).length} medições` : ''}</span>` : '<span class="tag gray">Sem medição</span>'}${ic('chevR')}</a>`;
+      return `<a class="fl-it" href="#/${modo}/${pc.id}">${thumb(capa(pc) || imgsCons(pc)[0])}<div class="t"><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${sub}</small></div>
+        ${md ? `<span class="tag ${md.status === 'reprovado' ? 'red' : md.status === 'com' ? 'amber' : 'green'}">${md.status && modo === 'engenharia' ? esc(nomeStEng(md.status)) : 'Medida'} · ${fDia(md.em)}${nd > 1 ? ` · ${nd} medições` : ''}</span>` : `<span class="tag gray">${MO.sem}</span>`}${ic('chevR')}</a>`;
     }).join('')}</div>` : vazio('search', 'Nenhuma peça com esses filtros');
     hidratarFotos($('#ml'));
   };
@@ -2991,36 +2999,52 @@ const difMed = (medido, tab) => {
   return d ? String(d).replace('.', ',') : '';
 };
 const linhaMedUsada = r => ['pom', 'desc', 'molde', 'pp1', 'pp2', 'tab', 'antes', 'depois', 'ajuste'].some(c => r[c]);
-function folhaEngenhariaHtml(pc, M) {
+function folhaEngenhariaHtml(pc, M, modo = 'engenharia') {
   const linhas = M.linhas.filter(linhaMedUsada);
-  const vazias = Math.max(0, 24 - linhas.length);
   const td = (v, cls = '') => `<td class="${cls}">${esc(v ?? '')}</td>`;
+  const cab = `<table class="fe-cab"><tr><td><b>DATA:</b> ${M.data ? fData(dataDe(M.data)) : ''}</td><td><b>OP:</b> ${esc(M.op || '')}</td><td><b>REF:</b> ${esc(pc.ref)}</td><td><b>LACRE:</b> ${esc(M.lacre || '')}</td></tr></table>`;
+  const ass = `<div class="fe-ass"><div><span>${esc(M.eng || '')}</span><b>ENGENHARIA</b></div><div><span>${esc(M.mod || '')}</span><b>MODELAGEM</b></div></div>`;
+  if (modo === 'medicao') {
+    return `<div class="fe">
+    <div class="fe-t">FICHA DE MEDIÇÃO</div>
+    ${cab}
+    <div class="fe-t2">TABELA DE MEDIDAS - MEDIÇÃO · TAMANHO ${esc(M.tam || '')}</div>
+    <table class="fe-tab"><thead><tr><th>POM</th><th>DESCRIÇÃO</th><th>MOLDE</th><th>PEÇA<br>PRONTA</th><th>PEÇA<br>PRONTA</th></tr></thead>
+      <tbody>${linhas.map(r => `<tr>${td(r.pom, 'c')}${td(r.desc, 'd')}${td(r.molde)}${td(r.pp1)}${td(r.pp2)}</tr>`).join('')}
+      ${`<tr>${'<td></td>'.repeat(5)}</tr>`.repeat(Math.max(0, 30 - linhas.length))}</tbody></table>
+    <div class="fe-t2">ANOTAÇÕES DA MEDIÇÃO</div>
+    <div class="fe-obs">${esc(M.obs_med || '')}</div>
+    ${ass}
+  </div>`;
+  }
+  const vazias = Math.max(0, 24 - linhas.length);
   return `<div class="fe">
     <div class="fe-t">FICHA DE ENGENHARIA</div>
-    <table class="fe-cab"><tr><td><b>DATA:</b> ${M.data ? fData(dataDe(M.data)) : ''}</td><td><b>OP:</b> ${esc(M.op || '')}</td><td><b>REF:</b> ${esc(pc.ref)}</td><td><b>LACRE:</b> ${esc(M.lacre || '')}</td></tr></table>
+    ${cab}
     <div class="fe-t2">TABELA DE MEDIDAS - AMOSTRA ENGENHARIA</div>
-    <table class="fe-tab"><thead><tr><th>POM</th><th>DESCRIÇÃO</th><th>MOLDE</th><th>PEÇA<br>PRONTA</th><th>PEÇA<br>PRONTA</th><th>TAM:<br>${esc(M.tam)}</th><th>ANTES<br>PASSAR</th><th>≠</th><th>DEPOIS<br>PASSAR</th><th>≠</th><th>AJUSTE</th></tr></thead>
-      <tbody>${linhas.map(r => `<tr>${td(r.pom, 'c')}${td(r.desc, 'd')}${td(r.molde)}${td(r.pp1)}${td(r.pp2)}${td(r.tab)}${td(r.antes)}${td(difMed(r.antes, r.tab))}${td(r.depois)}${td(difMed(r.depois, r.tab))}${td(r.ajuste, 'aj')}</tr>`).join('')}
-      ${`<tr>${'<td></td>'.repeat(11)}</tr>`.repeat(vazias)}</tbody></table>
+    <table class="fe-tab"><thead><tr><th>POM</th><th>DESCRIÇÃO</th><th>TAM:<br>${esc(M.tam)}</th><th>ANTES<br>PASSAR</th><th>≠</th><th>DEPOIS<br>PASSAR</th><th>≠</th><th>AJUSTE</th></tr></thead>
+      <tbody>${linhas.map(r => `<tr>${td(r.pom, 'c')}${td(r.desc, 'd')}${td(r.tab)}${td(r.antes)}${td(difMed(r.antes, r.tab))}${td(r.depois)}${td(difMed(r.depois, r.tab))}${td(r.ajuste, 'aj')}</tr>`).join('')}
+      ${`<tr>${'<td></td>'.repeat(8)}</tr>`.repeat(vazias)}</tbody></table>
     <div class="fe-t2">OBSERVAÇÕES ENGENHARIA</div>
     <div class="fe-obs">${M.status ? `<div class="fe-st">${esc(nomeStEng(M.status).toUpperCase())}</div>` : ''}${esc(M.obs_eng || '')}</div>
     <div class="fe-t2">OBSERVAÇÕES MODELAGEM</div>
     <div class="fe-obs">${esc(M.obs_mod || '')}</div>
     <div class="fe-t2">INSTRUÇÃO DE MONTAGEM</div>
     <div class="fe-obs">${esc(M.inst_montagem || '')}</div>
-    <div class="fe-ass"><div><span>${esc(M.eng || '')}</span><b>ENGENHARIA</b></div><div><span>${esc(M.mod || '')}</span><b>MODELAGEM</b></div></div>
+    ${ass}
   </div>`;
 }
 
-function paginaMedicao(pc) {
+function paginaMedicao(pc, modo = 'medicao') {
   const fi = fichaDe(pc.id), t = (fi && fi.tecnica) || {}, grade = (t.grade || []).length ? t.grade : GRADE_PADRAO;
-  const salvos = clone(medDias(pc));
+  const ME = modo === 'medicao', MO = MODO_MED[modo];
+  const salvos = clone(medDias(pc, modo));
   const nomes = ks => ks.flatMap(k => nomesResp(respPadrao(k)))[0] || '';
   const vaziaLinha = r => ({ pom: r.pom || '', desc: r.desc || '', tab: r.tab || '', molde: '', pp1: '', pp2: '', antes: '', depois: '', ajuste: '' });
   // nova medição: repete os POMs e o cabeçalho da anterior, com as medidas em branco
   const diaNovo = ant => {
     if (ant) {
-      return { id: uid(), data: inData(new Date()), tam: ant.tam, op: ant.op, lacre: ant.lacre, eng: ant.eng, mod: ant.mod, status: '', obs_eng: '', obs_mod: '', inst_montagem: '',
+      return { id: uid(), data: inData(new Date()), tam: ant.tam, op: ant.op, lacre: ant.lacre, eng: ant.eng, mod: ant.mod, obs_med: '', status: '', obs_eng: '', obs_mod: '', inst_montagem: '',
         linhas: ant.linhas.filter(r => r.pom || r.desc).map(vaziaLinha) };
     }
     const tam = grade.includes(t.piloto) ? t.piloto : (grade.includes('P') ? 'P' : grade[0]);
@@ -3028,13 +3052,16 @@ function paginaMedicao(pc) {
     return { id: uid(), tam, linhas: ini.linhas, origem: ini.origem, data: inData(new Date()), op: opsDaPeca(pc).join(' - ') || pc.op || '', lacre: t.lacre || '',
       status: '', obs_eng: '', obs_mod: '', inst_montagem: '', eng: nomes(['medicao', 'engenharia']), mod: t.modelista || nomes(['liberacao_modelagem', 'modelagem']) };
   };
-  const D = salvos.length ? salvos : [diaNovo()];
+  // engenharia ainda vazia: começa com o que já foi digitado na medição (POMs, medidas e observações)
+  const daMedicao = !ME && !salvos.length ? clone(medDias(pc, 'medicao')).map(d => ({ ...d, origem: 'da aba Medição' })) : [];
+  const D = salvos.length ? salvos : daMedicao.length ? daMedicao : [diaNovo()];
   D.forEach(d => { if (!d.id) d.id = uid(); d.linhas.forEach(r => { if (r.ajuste == null) r.ajuste = ''; }); });
   D.sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
   let sel = D.length - 1, temSalvo = salvos.length > 0;
   const pts = pontosGuia(pc.cliente_id);
   const nomeDia = (d, i) => `<b>${d.data ? fDia(dataDe(d.data)) : 'Sem data'}</b><small>${i + 1}ª medição</small>`;
-  setPage(`Medição · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
+  setPage(`${MO.nome} · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
+  const E = ME ? null : fichaAbertaDe(pc);
 
   let timer = null, fila = Promise.resolve();
   const sujos = new Set();
@@ -3050,7 +3077,7 @@ function paginaMedicao(pc) {
       fila = fila.then(async () => {
         try {
           const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
-          et.medicao = { ...(et.medicao || {}), med: { dias, em: agora, por } };
+          et[modo] = { ...(et[modo] || {}), med: { dias, em: agora, por } };
           await salvarFluxo(pc, et);
           temSalvo = true;
           if ($('#salvo')) { $('#salvo').className = 'salvo ok'; $('#salvo').innerHTML = `${ic('check')}Tudo salvo`; }
@@ -3067,33 +3094,33 @@ function paginaMedicao(pc) {
     sel = D.indexOf(M);
     const campo = (rot, k, extra = '', cls = '') => `<label class="fld ${cls}"><span>${rot}</span><input data-mc="${k}" value="${esc(M[k] || '')}" ${extra}></label>`;
     view().innerHTML = `<div class="folha-barra no-print">
-      <a class="link-btn" href="#/medicao">${ic('chevL')}Outra peça</a>
+      <a class="link-btn" href="#/${modo}">${ic('chevL')}Outra peça</a>
       <span class="salvo ok" id="salvo">${ic('check')}${temSalvo ? 'Tudo salvo' : 'Ainda não salva'}</span>
       <div class="r">
         <a class="btn sm" href="#/produto/${pc.id}">${ic('dress')}<span class="tx">Produto</span></a>
-        <a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}<span class="tx">Ficha técnica</span></a>
+        <a class="btn sm" href="#/${ME ? 'engenharia' : 'medicao'}/${pc.id}">${ic('ruler')}<span class="tx">${ME ? 'Engenharia' : 'Medição'}</span></a>
         <button type="button" class="btn sm" id="md-print">${ic('download')}<span class="tx">Imprimir</span></button>
         <button type="button" class="btn sm primary" id="md-pdf">${ic('download')}<span class="tx">Baixar PDF</span></button>
       </div>
     </div>
     <div class="card md-card no-print">
       <div class="md-top">
-        <div class="md-ref">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>Ficha de engenharia · ${esc(nomeModelo(pc))}</small></div></div>
+        <div class="md-ref">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)} ${cbadge(pc.cliente_id)}</b><small>${MO.ficha} · ${esc(nomeModelo(pc))}</small></div></div>
       </div>
       <div class="md-cab md-cab3">${campo('OP', 'op', 'inputmode="numeric"')}${campo('Lacre', 'lacre')}
         <label class="fld"><span>Tamanho</span><select id="md-tam">${opcoes(grade.map(g => [g, g]), M.tam)}</select></label></div>
       <div class="md-dias-l"><span class="lbl">Dias em que foi medida</span><span class="small muted">clique no dia para ver a tabela · no dia aberto, clique de novo para trocar a data</span></div>
       <div class="md-dias">${D.map((d, i) => `<span class="md-dia-w"><button type="button" class="md-dia${i === sel ? ' on' : ''}" data-md-dia="${i}" title="${i === sel ? 'Clique para trocar a data' : 'Ver a medição deste dia'}">${nomeDia(d, i)}</button>${i === sel ? `<input type="date" class="md-dia-in" data-mc="data" value="${esc(M.data || '')}" tabindex="-1" aria-label="Data desta medição">` : ''}</span>`).join('')}
         <button type="button" class="md-dia md-novo" id="md-novo" title="Mediu de novo depois de uma alteração? Abre uma tabela nova com os mesmos POMs">${ic('plus')}Nova medição</button></div>
-      ${!temSalvo && M.origem ? `<div class="aviso">${ic('info')}<span>Tabela pronta a partir do ${esc(M.origem)}. É só preencher as medidas.</span></div>` : ''}
+      ${!temSalvo && M.origem ? `<div class="aviso">${ic('info')}<span>Tabela pronta a partir ${esc(M.origem)}. É só preencher as medidas.</span></div>` : ''}
       <div class="tbl-wrap"><table class="ft-tab md-tab"><thead><tr><th class="ini">POM</th><th class="fim">Descrição</th><th class="md-gap"></th>
-        <th class="n ini">Molde</th><th class="n">Peça pronta</th><th class="n fim">Peça pronta</th><th class="md-gap"></th>
-        <th class="n ini">Tam: <span id="md-th-tam">${esc(M.tam)}</span></th><th class="n">Antes passar</th><th class="n">≠</th><th class="n">Depois passar</th><th class="n">≠</th><th>Ajuste</th><th class="fim"></th></tr></thead>
+        ${ME ? '<th class="n ini">Molde</th><th class="n">Peça pronta</th><th class="n">Peça pronta</th>'
+    : `<th class="n ini">Tam: <span id="md-th-tam">${esc(M.tam)}</span></th><th class="n">Antes passar</th><th class="n">≠</th><th class="n">Depois passar</th><th class="n">≠</th><th>Ajuste</th>`}<th class="fim"></th></tr></thead>
         <tbody id="md-body"></tbody></table></div>
       <div class="fs-pe"><button type="button" class="btn sm" id="md-add">${ic('plus')}Adicionar POM</button>
         <button type="button" class="btn sm" id="md-modelo">${ic('star')}Usar como modelo para ${esc(nomeModelo(pc))}</button>
         <span class="small muted">${pts.length ? `Digite o código do POM e a descrição vem do guia da ${esc((cliente(pc.cliente_id) || {}).nome || '')}.` : ''}</span></div>
-      <div class="md-obs">
+      ${ME ? `<label class="fld"><span>Anotações da medição</span><textarea data-mc="obs_med" rows="3" placeholder="Anotações da medição">${esc(M.obs_med || '')}</textarea></label>` : `<div class="md-obs">
         <div class="fld"><span class="lbl">Observações engenharia</span>
           <div class="pick">${ST_ENG.filter(([k]) => k).map(([k, l]) => `<label><input type="radio" name="md-st" value="${k}"${M.status === k ? ' checked' : ''}><span class="pk" style="--c:${k === 'sem' ? '#17925A' : k === 'com' ? '#C98A06' : '#C93545'}">${l}</span></label>`).join('')}</div>
           <textarea data-mc="obs_eng" rows="2" placeholder="Anotações da engenharia">${esc(M.obs_eng || '')}</textarea></div>
@@ -3101,11 +3128,15 @@ function paginaMedicao(pc) {
           <label class="fld"><span>Observações modelagem</span><textarea data-mc="obs_mod" rows="2" placeholder="Anotações da modelagem">${esc(M.obs_mod || '')}</textarea></label>
           <label class="fld"><span>Instrução de montagem</span><textarea data-mc="inst_montagem" rows="2" placeholder="Como montar a peça">${esc(M.inst_montagem || '')}</textarea></label>
         </div>
-      </div>
+      </div>`}
       <div class="md-cab">${campo('Engenharia', 'eng', 'list="dl-pes-md"')}${campo('Modelagem', 'mod', 'list="dl-pes-md"')}</div>
       <div class="md-pe"><span class="small muted" id="md-pe">${M.em ? `Salva em ${fQuando(M.em)}${M.por ? ` por ${esc(M.por)}` : ''}` : ''}</span>
         ${D.length > 1 ? `<button type="button" class="link-btn danger" id="md-del">${ic('trash')}Apagar esta medição</button>` : ''}</div>
     </div>
+    ${ME ? '' : `<div class="card prod-card no-print">
+      <div class="card-h"><h3>Aviamentos</h3><div class="r"><span class="small muted">Os mesmos do produto e da ficha de consumo: o que mudar aqui muda lá também</span></div></div>
+      <div class="prod-mat" id="prod-mat" data-quais="aviamentos">${secoesMateriaisHtml(E, ['aviamentos'])}</div>
+    </div>`}
     <div class="md-folha" id="md-folha"></div>
     <datalist id="dl-pes-md">${pessoasOrd().filter(p => p.ativo !== false).map(p => `<option value="${esc(p.nome)}">`).join('')}</datalist>
     ${pts.length ? `<datalist id="dl-pom-md">${pts.map(p => `<option value="${esc(String(p.codigo || '').split(/[/,\s]+/)[0])}">${esc(p.nome)}</option>`).join('')}</datalist>` : ''}`;
@@ -3114,13 +3145,13 @@ function paginaMedicao(pc) {
     const linha = (r, i) => `<tr>
       <td class="ini"><input class="cod" data-md="${i}|pom" value="${esc(r.pom || '')}"${pts.length ? ' list="dl-pom-md"' : ''}></td>
       <td class="fim"><input class="md-desc" data-md="${i}|desc" value="${esc(r.desc || '')}" title="${esc(r.desc || '')}"></td><td class="md-gap"></td>
-      ${['molde', 'pp1', 'pp2'].map((k, j) => `<td class="n${j === 0 ? ' ini' : j === 2 ? ' fim' : ''}"><input class="num" data-md="${i}|${k}" value="${esc(r[k] || '')}" inputmode="decimal"></td>`).join('')}<td class="md-gap"></td>
+      ${ME ? ['molde', 'pp1', 'pp2'].map((k, j) => `<td class="n${j ? '' : ' ini'}"><input class="num" data-md="${i}|${k}" value="${esc(r[k] || '')}" inputmode="decimal"></td>`).join('') : `
       <td class="n ini"><input class="num" data-md="${i}|tab" value="${esc(r.tab || '')}" inputmode="decimal"></td>
       <td class="n pil"><input class="num" data-md="${i}|antes" value="${esc(r.antes || '')}" inputmode="decimal"></td>
       <td class="n md-dif" data-dif="${i}|antes">${difMed(r.antes, r.tab)}</td>
       <td class="n pil"><input class="num" data-md="${i}|depois" value="${esc(r.depois || '')}" inputmode="decimal"></td>
       <td class="n md-dif" data-dif="${i}|depois">${difMed(r.depois, r.tab)}</td>
-      <td><input class="md-aj" data-md="${i}|ajuste" value="${esc(r.ajuste || '')}" placeholder="—"></td>
+      <td><input class="md-aj" data-md="${i}|ajuste" value="${esc(r.ajuste || '')}" placeholder="—"></td>`}
       <td class="x fim"><button type="button" class="icon-btn danger" data-md-rm="${i}" title="Tirar linha">${ic('x')}</button></td></tr>`;
     const desenhaLinhas = () => { body.innerHTML = M.linhas.map(linha).join(''); };
     desenhaLinhas();
@@ -3166,7 +3197,7 @@ function paginaMedicao(pc) {
     body.addEventListener('click', e => { const b = e.target.closest('[data-md-rm]'); if (!b) return; M.linhas.splice(+b.dataset.mdRm, 1); desenhaLinhas(); salvar(0); });
     $('#md-add').onclick = () => { M.linhas.push(vaziaLinha({})); desenhaLinhas(); const u = body.querySelector(`[data-md="${M.linhas.length - 1}|pom"]`); if (u) u.focus(); };
     $('#md-tam').onchange = e => {
-      M.tam = e.target.value; $('#md-th-tam').textContent = M.tam;
+      M.tam = e.target.value; const th = $('#md-th-tam'); if (th) th.textContent = M.tam;
       // troca o tamanho: puxa os valores desse tamanho da ficha, se existirem
       const meds = ((((fichaDe(pc.id) || {}).tecnica) || {}).medidas || []);
       M.linhas.forEach(r => { const m = meds.find(x => norm(x.dim) === norm(r.pom)); if (m && (m.v || {})[M.tam] != null) r.tab = String(m.v[M.tam]); });
@@ -3182,8 +3213,9 @@ function paginaMedicao(pc) {
         toast(`Modelo de ${nomeModelo(pc)} salvo.`);
       } catch (err) { toast(msgErro(err), 'erro'); }
     };
-    $('#md-print').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M); window.print(); };
-    $('#md-pdf').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M); baixarPdfFolha('#md-folha', `engenharia-${nomeSeguro(pc.ref)}${M.data ? `-${M.data}` : ''}`, '#md-pdf'); };
+    $('#md-print').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M, modo); window.print(); };
+    $('#md-pdf').onclick = () => { $('#md-folha').innerHTML = folhaEngenhariaHtml(pc, M, modo); baixarPdfFolha('#md-folha', `${modo}-${nomeSeguro(pc.ref)}${M.data ? `-${M.data}` : ''}`, '#md-pdf'); };
+    if (!ME) ligarMateriais(E);
   };
   render();
 }
@@ -3549,7 +3581,9 @@ function ligacoesEtapa(pc, k) {
   if (c && S.db.guia_manuais.some(x => x.cliente_id === c.id)) itens.push(['medidas', `#/medidas/${c.id}`, 'ruler', 'Guia de medidas', [c.nome, '']]);
   const md = medDe(pc);
   itens.push(['medicao', `#/medicao/${pc.id}`, 'ruler', 'Medição', md ? [`Medida ${fDia(md.em)}`, 'green'] : ['Ainda não medida', '']]);
-  const destaque = { ficha_desenv: 'desenho', consumo: 'consumo', ficha_tecnica: 'ficha_tecnica', medicao: 'medicao', engenharia: 'medicao', modelagem: 'ficha_tecnica', ajuste_modelagem: 'ficha_tecnica' }[k];
+  const mg = medDe(pc, 'engenharia');
+  itens.push(['engenharia', `#/engenharia/${pc.id}`, 'ruler', 'Engenharia', mg ? [mg.status ? nomeStEng(mg.status) : `Medida ${fDia(mg.em)}`, mg.status === 'reprovado' ? 'red' : 'green'] : ['Ainda não feita', '']]);
+  const destaque = { ficha_desenv: 'desenho', consumo: 'consumo', ficha_tecnica: 'ficha_tecnica', medicao: 'medicao', engenharia: 'engenharia', modelagem: 'ficha_tecnica', ajuste_modelagem: 'ficha_tecnica' }[k];
   return `<div class="lig">${itens.map(([id, href, icn, nome, [txt, cor]]) => `<a class="lig-i${id === destaque ? ' on' : ''}" href="${href}">${ic(icn)}<div><b>${nome}</b><small class="${cor ? 'c-' + cor : ''}">${esc(txt)}</small></div></a>`).join('')}</div>`;
 }
 
@@ -3573,9 +3607,10 @@ function histPecaHtml(pc) {
     });
     (e.arquivos || []).forEach(a => { if (a.em) item(a.em, 'file', false, `Arquivo · ${esc(l)}`, `${esc(a.n)} · ${fQuando(a.em)}`); });
   });
-  medDias(pc).forEach((md, i) => {
-    if (md.em) item(md.em, 'ruler', md.status === 'sem' || md.status === 'com', `Medição (engenharia)${md.data ? ` de ${fDia(dataDe(md.data))}` : ` ${i + 1}`}`, `${md.status ? `${esc(nomeStEng(md.status))} · ` : ''}${fQuando(md.em)}${md.por ? ` · ${esc(md.por)}` : ''}`);
-  });
+  [['medicao', 'Medição'], ['engenharia', 'Engenharia e graduação']].forEach(([k, l]) => medDias(pc, k).forEach((md, i) => {
+    const st = k === 'engenharia' && md.status;
+    if (md.em) item(md.em, 'ruler', st === 'sem' || st === 'com', `${l}${md.data ? ` de ${fDia(dataDe(md.data))}` : ` ${i + 1}`}`, `${st ? `${esc(nomeStEng(st))} · ` : ''}${fQuando(md.em)}${md.por ? ` · ${esc(md.por)}` : ''}`);
+  }));
   const fi = fichaDe(pc.id);
   if (fi && fi.atualizado_em) item(fi.atualizado_em, 'file', false, 'Ficha técnica e consumo atualizadas', fQuando(fi.atualizado_em));
   if (pc.criado_em) item(pc.criado_em, 'dress', false, 'Peça criada', fQuando(pc.criado_em));
@@ -4185,12 +4220,39 @@ function formNovoProduto() {
   });
 }
 
-function paginaProduto(pc) {
+// a ficha da peça para editar fora da ficha técnica (produto, engenharia): continua a que está salvando, se houver
+function fichaAbertaDe(pc) {
   const fi = fichaDe(pc.id);
   const E = S.fichaAberta && S.fichaAberta.pc.id === pc.id && S.fichaAberta.pendente
     ? S.fichaAberta
     : (S.fichaAberta = { pc, tipo: 'tecnica', F: { tecnica: clone((fi && fi.tecnica) || {}), consumo: clone((fi && fi.consumo) || {}) }, fila: Promise.resolve() });
   E.pc = pc;
+  return E;
+}
+// tabelas de materiais (#prod-mat) editando a ficha de consumo: adicionar, tirar, digitar e completar pelo cadastro
+function ligarMateriais(E) {
+  const box = $('#prod-mat'); if (!box) return;
+  const quais = (box.dataset.quais || '').split(',').filter(Boolean);
+  const redesenhar = () => { const b = $('#prod-mat'); if (b) b.innerHTML = secoesMateriaisHtml(E, quais.length ? quais : undefined); };
+  E.redesenhar = redesenhar;
+  box.addEventListener('click', e => {
+    const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]');
+    if (add) {
+      const k2 = add.dataset.add, lista = getPath(E.F, k2) || [];
+      lista.push(MODELOS_LINHA[k2]()); setPath(E.F, k2, lista); agendarSalvar(E); redesenhar();
+      const ult = $('#prod-mat').querySelector(`[data-k^="${k2}.${lista.length - 1}."]`); if (ult) ult.focus();
+    }
+    if (rm) { const ks = rm.dataset.rm.split('.'), i = +ks.pop(), lista = getPath(E.F, ks.join('.')) || []; lista.splice(i, 1); agendarSalvar(E); redesenhar(); }
+  });
+  if (!box.closest('#prod-root')) box.addEventListener('input', e => { const x = e.target; if (x.dataset.k) { setPath(E.F, x.dataset.k, x.value); agendarSalvar(E); } });
+  box.addEventListener('change', e => {
+    const x = e.target;
+    if (x.dataset.audaces !== undefined) { const fs = [...x.files]; x.value = ''; if (fs.length) lerAudaces(E, fs); return; }
+    if (completarComMaterial(E, x.dataset.k)) { agendarSalvar(E); redesenhar(); }
+  });
+}
+function paginaProduto(pc) {
+  const E = fichaAbertaDe(pc);
   const t = E.F.tecnica, grade = gradeDe(E.F);
   const fotos = imagens(pc), docs = pdfs(pc), ops = opsDaPeca(pc), sf = situacaoFluxo(pc), st = statusPeca(pc.id);
   setPage(`Produto · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
@@ -4269,22 +4331,7 @@ function paginaProduto(pc) {
   main.addEventListener('click', () => { if (fotos.length) lightbox(fotos, sel); });
   root.addEventListener('click', e => { const b = e.target.closest('[data-lib-img]'); if (b) lightbox(libDe(pc).imgs, +b.dataset.libImg); });
   // materiais: mesmas linhas da ficha de consumo (E.F.consumo), salvas juntas
-  const redesenharMat = () => { const b = $('#prod-mat'); if (b) b.innerHTML = secoesMateriaisHtml(E); };
-  E.redesenhar = redesenharMat;
-  $('#prod-mat').addEventListener('click', e => {
-    const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]');
-    if (add) {
-      const k2 = add.dataset.add, lista = getPath(E.F, k2) || [];
-      lista.push(MODELOS_LINHA[k2]()); setPath(E.F, k2, lista); agendarSalvar(E); redesenharMat();
-      const ult = $('#prod-mat').querySelector(`[data-k^="${k2}.${lista.length - 1}."]`); if (ult) ult.focus();
-    }
-    if (rm) { const ks = rm.dataset.rm.split('.'), i = +ks.pop(), lista = getPath(E.F, ks.join('.')) || []; lista.splice(i, 1); agendarSalvar(E); redesenharMat(); }
-  });
-  $('#prod-mat').addEventListener('change', e => {
-    const x = e.target;
-    if (x.dataset.audaces !== undefined) { const fs = [...x.files]; x.value = ''; if (fs.length) lerAudaces(E, fs); return; }
-    if (completarComMaterial(E, x.dataset.k)) { agendarSalvar(E); redesenharMat(); }
-  });
+  ligarMateriais(E);
   $$('[data-pdf]', root).forEach(b => { b.onclick = () => abrirArquivo(b.dataset.pdf); });
   $('#pg-add').addEventListener('change', async e => {
     const files = [...e.target.files].filter(x => x.type.startsWith('image/') || ehPdfArq(x)); if (!files.length) return;
@@ -4763,10 +4810,11 @@ function folhaTecnicaHtml(E) {
 }
 
 // tecidos, aviamentos e etiquetas: os mesmos campos na ficha de consumo e na página do produto
-function secoesMateriaisHtml(E) {
+function secoesMateriaisHtml(E, quais = ['tecidos', 'aviamentos', 'etiquetas']) {
   const k = E.F.consumo;
   const tec = k.tecidos || [], avi = k.aviamentos || [], etq = k.etiquetas || [];
-  return `  <section class="fs">
+  const sec = {};
+  sec.tecidos = `  <section class="fs">
     <div class="fs-h"><h3>Tecidos</h3><div class="r small muted">${plural(tec.length, 'tecido')}</div></div>
     <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Tecido</th><th class="n">Gramatura</th><th class="n">Largura</th><th class="n">Consumo</th><th>Composição</th><th>Cor</th><th class="no-print"></th></tr></thead>
     <tbody>${tec.map((r, i) => `<tr>
@@ -4781,8 +4829,8 @@ function secoesMateriaisHtml(E) {
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.tecidos">${ic('plus')}Adicionar tecido</button>
       <label class="btn sm">${ic('file')}Ler PDF do Audaces<input type="file" accept="application/pdf,.pdf" multiple hidden data-audaces></label>
       <span class="small muted">O relatório do encaixe preenche a largura e o consumo sozinho.</span></div>
-  </section>
-  <section class="fs">
+  </section>`;
+  sec.aviamentos = `  <section class="fs">
     <div class="fs-h"><h3>Aviamentos</h3><div class="r small muted">${plural(avi.length, 'aviamento')}</div></div>
     <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Material / insumo</th><th>Tamanho</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print"></th></tr></thead>
     <tbody>${avi.map((r, i) => `<tr>
@@ -4795,9 +4843,9 @@ function secoesMateriaisHtml(E) {
       <td class="n pil"><input class="num" data-k="consumo.aviamentos.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
       <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.aviamentos.${i}" title="Tirar aviamento">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - avi.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.aviamentos">${ic('plus')}Adicionar aviamento</button>
-      <span class="small muted">Os aviamentos daqui aparecem como sugestão em “Consumos de aviamentos”, mais acima.</span></div>
-  </section>
-  <section class="fs">
+      ${quais.length === 3 ? '<span class="small muted">Os aviamentos daqui aparecem como sugestão em “Consumos de aviamentos”, mais acima.</span>' : ''}</div>
+  </section>`;
+  sec.etiquetas = `  <section class="fs">
     <div class="fs-h"><h3>Etiquetas</h3><div class="r small muted">${plural(etq.length, 'etiqueta')}</div></div>
     <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Tamanho</th><th>Etiqueta</th><th>Tipo</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print"></th></tr></thead>
     <tbody>${etq.map((r, i) => `<tr>
@@ -4811,7 +4859,8 @@ function secoesMateriaisHtml(E) {
       <td class="n pil"><input class="num" data-k="consumo.etiquetas.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
       <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.etiquetas.${i}" title="Tirar etiqueta">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - etq.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.etiquetas">${ic('plus')}Adicionar etiqueta</button></div>
-  </section>
+  </section>`;
+  return `${quais.map(q => sec[q]).join('\n')}
   ${datalistsMateriais(E.pc.cliente_id)}${['tecidos', 'aviamentos', 'etiquetas'].map(l => (k[l] || []).map((r, i) => dlCoresLinha(l, i, r)).join('')).join('')}
   <datalist id="dl-etq"><option value="Marca / tamanho"><option value="Composição"><option value="Tag cód. barras"><option value="Tag de preço"><option value="Pino / alarme"><option value="Lacre"><option value="Etiqueta interna"></datalist>
   <datalist id="dl-un"><option value="MT"><option value="UN"><option value="KG"><option value="CM"><option value="PC"></datalist>`;
