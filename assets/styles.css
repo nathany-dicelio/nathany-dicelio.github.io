@@ -1724,3 +1724,6 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .md-tab th:first-child, .md-tab td:first-child { width: 1%; }
 .md-tab td input.md-desc { width: 100%; min-width: 290px; }
 .md-tab th:nth-last-child(2), .md-tab td:nth-last-child(2) { width: 1%; }
+
+/* impressão da medição e engenharia: só a folha (sem o card de aviamentos) */
+@media print { body:has(.md-folha) .no-print { display: none !important; } }

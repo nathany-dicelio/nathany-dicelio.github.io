@@ -146,7 +146,7 @@ const pref = {
 
 function msgErro(e) {
   const m = String((e && (e.message || e.error_description)) || e || '');
-  if (e && e.code === '23505') return 'Já existe uma peça com essa referência.';
+  if (e && e.code === '23505') return /pecas_ref|\bref\b/i.test(m) || m === 'duplicate' ? 'Já existe uma peça com essa referência.' : 'Esse registro já existe. Atualize a página e tente de novo.';
   if (/Invalid login credentials/i.test(m)) return 'E-mail ou senha incorretos.';
   if (/Email not confirmed/i.test(m)) return 'Confirme seu e-mail pelo link que enviamos antes de entrar.';
   if (/already registered|already been registered/i.test(m)) return 'Este e-mail já tem conta. Use "Entrar".';
@@ -256,6 +256,7 @@ function SupaAPI() {
     },
     async inserir(tab, row) { return ok(await sb.from(tab).insert(row).select().single()); },
     async atualizar(tab, id, patch) { return ok(await sb.from(tab).update(patch).eq('id', id).select().single()); },
+    async linha(tab, id) { return ok(await sb.from(tab).select('*').eq('id', id).maybeSingle()); },
     async excluir(tab, id) { ok(await sb.from(tab).delete().eq('id', id)); },
     async enviar(path, blob, upsert = false) { ok(await B().upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert, cacheControl: upsert ? '3600' : '31536000' })); return path; },
     async inserirVarios(tab, rows) {
@@ -309,6 +310,7 @@ function DemoAPI() {
       if (comAtualizado.includes(tab)) r.atualizado_em = agoraISO();
       (db[tab] || (db[tab] = [])).push(r); gravar(); return clone(r);
     },
+    async linha(tab, id) { return clone((db[tab] || []).find(x => x.id === id) || null); },
     async atualizar(tab, id, patch) {
       const r = (db[tab] || []).find(x => x.id === id);
       if (!r) throw new Error('Registro não encontrado');
@@ -678,13 +680,14 @@ async function lightbox(paths, idx = 0) {
    Pedaços de interface
    ================================================================ */
 const thumb = (path, cls = 'th', extra = '') => `<div class="${cls}"${path ? ` data-foto="${esc(path)}"` : ''}>${ic('dress')}${extra}</div>`;
+const corOk = c => (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '#8E8287');
 function pchip(id) {
   const p = pessoa(id);
-  return p ? `<span class="pchip" style="--c:${esc(p.cor)}">${esc(p.nome)}</span>` : '<span class="muted">—</span>';
+  return p ? `<span class="pchip" style="--c:${esc(corOk(p.cor))}">${esc(p.nome)}</span>` : '<span class="muted">—</span>';
 }
 function cbadge(id) {
   const c = cliente(id);
-  return c ? `<span class="cbadge" style="--c:${esc(c.cor)}" title="${esc(c.nome)}">${esc(c.sigla || c.nome)}</span>` : '';
+  return c ? `<span class="cbadge" style="--c:${esc(corOk(c.cor))}" title="${esc(c.nome)}">${esc(c.sigla || c.nome)}</span>` : '';
 }
 const tagStatus = (t, s) => (s === 'ok' ? `<span class="tag green">${TIPO[t].nome} pronto</span>`
   : s === 'andamento' ? `<span class="tag amber">${TIPO[t].nome} em andamento</span>` : '');
@@ -1060,7 +1063,12 @@ function route(rolar = true) {
   const navNome = nome === 'peca' || nome === 'busca' ? 'catalogo' : nome;
   $$('.nav a').forEach(a => a.classList.toggle('on', a.dataset.r === navNome));
   fecharMenu();
-  fn(arg);
+  try { fn(arg); }
+  catch (err) {
+    console.error(err);
+    view().innerHTML = `<div class="card">${vazio('alert', 'Não deu para abrir esta tela', esc(msgErro(err)), '<button class="btn primary" id="tela-erro">Tentar de novo</button>')}</div>`;
+    $('#tela-erro').onclick = () => location.reload();
+  }
   atualizarContadores();
   hidratarFotos(view());
   if (rolar) window.scrollTo(0, 0);
@@ -1427,7 +1435,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
             <select class="inp" data-aud-alvo>${opTecAud(tec, a ? (a.alvo === 'novo' ? -1 : +a.alvo) : (tec.length > i ? i : -1))}</select></div></div></div>`;
         }).join('');
       };
-      new MutationObserver(() => {
+      if (m.$('#aud-ped')) new MutationObserver(() => {
         fotos.novas().filter(f => ehPdfArq(f) && !lidosAud.has(f)).forEach(f => {
           lidosAud.set(f, {});
           textoPdf(f).then(t => { lidosAud.set(f, { r: lerEncaixe(t) }); desenhaAud(); }).catch(() => {});
@@ -1497,7 +1505,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
             await salvarReg('fichas', fi ? { consumo } : { peca_id: pc.id, tecnica: {}, consumo }, fi && fi.id);
             if (S.fichaAberta && S.fichaAberta.pc.id === pc.id && !S.fichaAberta.pendente) S.fichaAberta = null;
           }
-          if (antigaPeca) limparPecaOrfa(antigaPeca);
+          if (antigaPeca) await limparPecaOrfa(antigaPeca);
           m.fechar();
           toast(usar.length ? `${T.nome} ${pedido ? 'salvo' : 'cadastrado'} · consumo do Audaces na ficha.` : pedido ? 'Alterações salvas.' : `${T.nome} cadastrado.`);
           rerender();
@@ -1507,7 +1515,8 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
   });
 }
 async function limparPecaOrfa(pc) {
-  const usada = S.db.pedidos.some(p => p.peca_id === pc.id) || S.db.tarefas.some(t => t.peca_id === pc.id);
+  const usada = S.db.pedidos.some(p => p.peca_id === pc.id) || S.db.tarefas.some(t => t.peca_id === pc.id)
+    || fichaDe(pc.id) || fluxoDe(pc.id) || S.db.cortes.some(c => c.peca_id === pc.id);
   if (usada || (pc.fotos || []).length || arqCons(pc).length || pc.descricao || (pc.detalhes || []).length) return;
   try { await excluirReg('pecas', pc.id); } catch { /* deixa como está */ }
 }
@@ -3095,7 +3104,7 @@ function paginaMedicao(pc, modo = 'medicao') {
   const diaNovo = ant => {
     if (ant) {
       return { id: uid(), data: inData(new Date()), tam: ant.tam, op: ant.op, lacre: ant.lacre, eng: ant.eng, mod: ant.mod, obs_med: '', status: '', obs_eng: '', obs_mod: '', inst_montagem: '',
-        linhas: ant.linhas.filter(r => r.pom || r.desc).map(vaziaLinha) };
+        linhas: ant.linhas.some(r => r.pom || r.desc) ? ant.linhas.filter(r => r.pom || r.desc).map(vaziaLinha) : linhasIniciais(pc, ant.tam).linhas };
     }
     const tam = grade.includes(t.piloto) ? t.piloto : (grade.includes('P') ? 'P' : grade[0]);
     const ini = linhasIniciais(pc, tam);
@@ -3105,7 +3114,11 @@ function paginaMedicao(pc, modo = 'medicao') {
   // engenharia ainda vazia: começa com o que já foi digitado na medição (POMs, medidas e observações)
   const daMedicao = !ME && !salvos.length ? clone(medDias(pc, 'medicao')).map(d => ({ ...d, origem: 'da aba Medição' })) : [];
   const D = salvos.length ? salvos : daMedicao.length ? daMedicao : [diaNovo()];
-  D.forEach(d => { if (!d.id) d.id = uid(); d.linhas.forEach(r => { if (r.ajuste == null) r.ajuste = ''; }); });
+  D.forEach(d => {
+    if (!d.id) d.id = uid();
+    if (!(d.linhas || []).length) d.linhas = linhasIniciais(pc, d.tam).linhas;
+    d.linhas.forEach(r => { if (r.ajuste == null) r.ajuste = ''; });
+  });
   D.sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
   let sel = D.length - 1, temSalvo = salvos.length > 0;
   const pts = pontosGuia(pc.cliente_id);
@@ -3117,6 +3130,7 @@ function paginaMedicao(pc, modo = 'medicao') {
   const sujos = new Set();
   const salvar = (ms = 700, marcar = true) => {
     if (marcar) sujos.add(D[sel].id);
+    S.medPendente = true;
     const st = $('#salvo'); if (st) { st.className = 'salvo'; st.innerHTML = `${ic('clock')}Salvando…`; }
     clearTimeout(timer);
     timer = setTimeout(() => {
@@ -3126,10 +3140,8 @@ function paginaMedicao(pc, modo = 'medicao') {
       const dias = D.map(({ origem, ...d }) => ({ ...d, linhas: d.linhas.filter(linhaMedUsada) }));
       fila = fila.then(async () => {
         try {
-          const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
-          et[modo] = { ...(et[modo] || {}), med: { dias, em: agora, por } };
-          await salvarFluxo(pc, et);
-          temSalvo = true;
+          await salvarFluxo(pc, et => ({ ...et, [modo]: { ...(et[modo] || {}), med: { dias, em: agora, por } } }));
+          temSalvo = true; S.medPendente = false;
           if ($('#salvo')) { $('#salvo').className = 'salvo ok'; $('#salvo').innerHTML = `${ic('check')}Tudo salvo`; }
           const pe = $('#md-pe'); if (pe && D[sel].em) pe.textContent = `Salva em ${fQuando(D[sel].em)}${D[sel].por ? ` por ${D[sel].por}` : ''}`;
         } catch (err) { if ($('#salvo')) { $('#salvo').className = 'salvo erro'; $('#salvo').innerHTML = `${ic('alert')}Não salvou, tente de novo`; } toast(msgErro(err), 'erro'); }
@@ -3227,7 +3239,7 @@ function paginaMedicao(pc, modo = 'medicao') {
       const c = e.target.closest('[data-mc]');
       if (c) {
         M[c.dataset.mc] = c.value; salvar();
-        if (c.dataset.mc === 'data') render();
+        if (c.dataset.mc === 'data') { const tb = card.querySelector(`[data-md-dia="${sel}"]`); if (tb) tb.innerHTML = nomeDia(M, sel); }
         return;
       }
       const x = e.target.closest('[data-md]'); if (!x) return;
@@ -3238,6 +3250,7 @@ function paginaMedicao(pc, modo = 'medicao') {
       salvar();
     });
     card.addEventListener('change', e => {
+      if (e.target.classList.contains('md-dia-in')) { render(); return; }
       if (e.target.name === 'md-st') { M.status = e.target.value; salvar(0); return; }
       const x = e.target.closest('[data-md$="|pom"]'); if (!x) return;
       const i = +x.dataset.md.split('|')[0], r = M.linhas[i], cod = x.value.trim().toUpperCase();
@@ -3296,8 +3309,14 @@ const ocultoFluxo = pc => {
   const ult = (peds.length ? peds : [pc.criado_em]).filter(Boolean).map(x => new Date(x).getTime());
   return !ult.length || Date.now() - Math.max(...ult) > 45 * 864e5;
 };
-async function salvarFluxo(pc, etapas) {
+// mudar(etapas) recebe as etapas mais novas do banco (outra aba ou o celular pode ter gravado outra etapa) e devolve como ficam
+async function salvarFluxo(pc, mudar) {
   const fl = fluxoDe(pc.id);
+  let base = (fl && fl.etapas) || {};
+  if (fl) { try { const r = await S.api.linha('fluxos', fl.id); if (r) base = r.etapas || {}; } catch { /* usa a cópia local */ } }
+  const etapas = mudar(clone(base));
+  // peça antiga que estava escondida continua escondida quando ganha a primeira etapa
+  if (!fl && ocultoFluxo(pc) && !etapas._visivel) etapas._oculto = true;
   return fl ? salvarReg('fluxos', { etapas }, fl.id) : salvarReg('fluxos', { peca_id: pc.id, etapas });
 }
 
@@ -3827,13 +3846,12 @@ function formEtapa(pc, k) {
       // grava só as pendências desta etapa, na hora (o resto continua esperando "Salvar alterações")
       let filaPend = Promise.resolve();
       const gravarPend = () => {
-        mudouPend = true;
+        mudouPend = true; S.pendGravando = (S.pendGravando || 0) + 1;
         filaPend = filaPend.then(async () => {
           try {
-            const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
-            et[k] = { ...(et[k] || {}), pend: clone(pend) };
-            await salvarFluxo(pc, et);
+            await salvarFluxo(pc, et => ({ ...et, [k]: { ...(et[k] || {}), pend: clone(pend) } }));
           } catch (err) { toast(`A pendência não foi gravada: ${msgErro(err)}`, 'erro'); }
+          S.pendGravando--;
         });
       };
       const quem = () => nomeUsuario().split(' ')[0];
@@ -3854,10 +3872,12 @@ function formEtapa(pc, k) {
       desenhaPend();
       m.$('#et-del').onclick = async () => {
         try {
-          const fl = fluxoDe(pc.id), et = { ...((fl && fl.etapas) || {}) };
-          if (oculto) delete et._oculto; else et._oculto = true;
-          if (oculto && !fl) et._visivel = true;
-          await salvarFluxo(pc, et);
+          const fl = fluxoDe(pc.id);
+          await salvarFluxo(pc, et => {
+            if (oculto) delete et._oculto; else et._oculto = true;
+            if (oculto && !fl) et._visivel = true;
+            return et;
+          });
           m.fechar(); toast(oculto ? `${pc.ref} voltou para as etapas.` : `${pc.ref} escondido. Ele fica em “Escondidos”.`); rerender();
         } catch (err) { toast(msgErro(err), 'erro'); }
       };
@@ -3876,19 +3896,22 @@ function formEtapa(pc, k) {
           await filaPend;
           const fd = new FormData(form);
           const st = fd.get('st') || 'fazer';
-          const fl = fluxoDe(pc.id);
-          const atual = ((fl && fl.etapas) || {})[k] || {};
-          const novo = { ...atual, arquivos: arqs.concat(enviados), pend, obs: String(fd.get('obs') || '').trim() || null, resp: fd.get('resp') || null, prazo: fd.get('prazo') || null };
+          const campos = { arquivos: arqs.concat(enviados), pend, obs: String(fd.get('obs') || '').trim() || null, resp: fd.get('resp') || null, prazo: fd.get('prazo') || null };
           if (LIB) {
-            novo.lib = Object.fromEntries(['tam', 'ops', 'lacre', 'tecido', 'forro', 'por', 'data', 'eng', 'eng_data', 'restr'].map(c => [c, String(fd.get('lib_' + c) || '').trim() || null]));
-            if (novo.lib.tam) novo.lib.tam = novo.lib.tam.toUpperCase();
+            campos.lib = Object.fromEntries(['tam', 'ops', 'lacre', 'tecido', 'forro', 'por', 'data', 'eng', 'eng_data', 'restr'].map(c => [c, String(fd.get('lib_' + c) || '').trim() || null]));
+            if (campos.lib.tam) campos.lib.tam = campos.lib.tam.toUpperCase();
           }
-          const automatico = !atual.st && st === est.st;
-          if (!automatico && st !== atual.st) {
-            novo.st = st; novo.em = agoraISO();
-            novo.hist = (atual.hist || []).concat({ st, em: novo.em, por: nomeUsuario().split(' ')[0] });
-          }
-          await salvarFluxo(pc, { ...((fl && fl.etapas) || {}), [k]: novo });
+          let novo;
+          await salvarFluxo(pc, et => {
+            const atual = et[k] || {};
+            novo = { ...atual, ...campos };
+            const automatico = !atual.st && st === est.st;
+            if (!automatico && st !== atual.st) {
+              novo.st = st; novo.em = agoraISO();
+              novo.hist = (atual.hist || []).concat({ st, em: novo.em, por: nomeUsuario().split(' ')[0] });
+            }
+            return { ...et, [k]: novo };
+          });
           if (removidos.length) S.api.removerArquivos(removidos).catch(() => {});
           m.fechar();
           toast(`${nomeFluxo(k)} · ${nomeSt(novo.st || est.st)}`);
@@ -4143,7 +4166,7 @@ function porDoProduto(pc) {
 function chipPor(por) {
   const n = norm(por), pri = n.split(' ')[0];
   const p = S.db.pessoas.find(x => norm(x.nome) === n) || S.db.pessoas.find(x => norm(x.nome).split(' ')[0] === pri);
-  const cor = p ? p.cor : CORES[[...n].reduce((a, c) => a + c.charCodeAt(0), 0) % CORES.length];
+  const cor = p ? corOk(p.cor) : CORES[[...n].reduce((a, c) => a + c.charCodeAt(0), 0) % CORES.length];
   return `<span class="pchip" style="--c:${esc(cor)}">${esc(por)}</span>`;
 }
 function viewProduto(arg) {
@@ -4957,7 +4980,8 @@ function agendarPeca(E, campo, valor) {
     });
   }, 700);
 }
-window.addEventListener('beforeunload', e => { if (S.fichaAberta && S.fichaAberta.pendente) { e.preventDefault(); e.returnValue = ''; } });
+const algoSalvando = () => !!((S.fichaAberta && S.fichaAberta.pendente) || S.medPendente || S.pendGravando > 0);
+window.addEventListener('beforeunload', e => { if (algoSalvando()) { e.preventDefault(); e.returnValue = ''; } });
 
 /* ---------- relatório de encaixe do Audaces → largura e consumo do tecido ---------- */
 async function textoPdf(file) {
@@ -5299,8 +5323,8 @@ function demoFicha(pc) {
   return {
     id: uid(), peca_id: pc.id, criado_em: agoraISO(), atualizado_em: agoraISO(),
     tecnica: {
-      colecao: 'VERÃO 27', pedido: '123323', codigo2: '2026-2-12936', mod_aprovada: '2026-10-01', etiqueta: 'T11- ATITUDES (CLOCK HOUSE)',
-      compradora: 'BRUNA / LUIZA', modelista: 'MARINA SOARES DE OLIVEIRA', lacre: '408338', rota: 'OPERAÇÃO LASTEX', resp: 'STEPHANY PEREIRA DO NASCIMENTO',
+      colecao: 'VERÃO 27', pedido: '100200', codigo2: '2026-1-00001', mod_aprovada: '2026-10-01', etiqueta: 'MARCA EXEMPLO',
+      compradora: 'ANA / JÚLIA', modelista: 'MODELISTA EXEMPLO', lacre: '100001', rota: 'OPERAÇÃO LASTEX', resp: 'RESPONSÁVEL EXEMPLO',
       grade: ['PP', 'P', 'M', 'G', 'GG'], piloto: 'P',
       obs_modelagem: 'DATA 05/10 APROVADA COM RESTRIÇÃO COMO TAMANHO P\n1- SEGUIR TABELA DE MEDIDAS\n2- ATENÇÃO AOS ACABAMENTOS E TOLERÂNCIAS\n3- DEIXAR COSTURA DO BUSTO RETA\n4- ATENÇÃO ÀS MEDIDAS DE ELÁSTICO E LASTEX',
       caixas: {
@@ -5384,14 +5408,13 @@ async function checarVersao() {
   try {
     const html = await (await fetch(`${location.pathname}?versao=${Date.now()}`, { cache: 'no-store' })).text();
     const v = (/assets\/app\.js\?v=([\w-]+)/.exec(html) || [])[1];
-    if (!v || v === VERSAO) return;
+    if (!v || v <= VERSAO) return;
     avisouVersao = true;
     const el = document.createElement('div');
     el.className = 'nova-versao';
     el.innerHTML = `${ic('info')}<span>Tem uma versão nova do sistema.</span><button type="button" class="btn sm primary">Atualizar agora</button>`;
     el.querySelector('button').onclick = () => {
-      const st = $('.salvo');
-      if (st && !st.classList.contains('ok')) return toast('Espere terminar de salvar e clique de novo.', 'erro');
+      if (algoSalvando()) return toast('Espere terminar de salvar e clique de novo.', 'erro');
       const u = new URL(location.href); u.searchParams.set('v', v); location.replace(u.href);
     };
     document.body.append(el);
