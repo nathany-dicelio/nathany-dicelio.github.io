@@ -2492,7 +2492,8 @@ async function exportarExcel() {
   })]);
   abas.push(['Materiais', S.db.materiais.map(m => ({ Tipo: { tecido: 'Tecido', aviamento: 'Aviamento', etiqueta: 'Etiqueta' }[m.tipo] || m.tipo, 'Código': m.codigo || '', Nome: m.nome || '',
     Cliente: cli(valMat(m, 'cliente_id')), Tamanho: valMat(m, 'tamanho') || '', Gramatura: valMat(m, 'gramatura') || '', Largura: valMat(m, 'largura') || '', 'Composição': valMat(m, 'composicao') || '', UN: valMat(m, 'un') || '',
-    'Aplicação': valMat(m, 'aplicacao') || '', Fornecedor: valMat(m, 'fornecedor') || '', Marca: valMat(m, 'marca') || '', Cores: (m.cores || []).map(c => c.nome).join(', ') }))]);
+    'Aplicação': valMat(m, 'aplicacao') || '', Fornecedor: valMat(m, 'fornecedor') || '', Marca: valMat(m, 'marca') || '', Cores: (m.cores || []).map(c => c.nome).join(', '),
+    Estoque: (infoEstoque(m) || {}).txt || '', 'Chega em': (estoqueDe(m) || {}).chega || '', 'Obs. estoque': (estoqueDe(m) || {}).obs || '' }))]);
   abas.push(['Programação de corte', S.db.cortes.map(c => {
     const d = c.dados || {};
     return { REF: ref(c.peca_id), Cliente: refCli(c.peca_id), OP: c.op || '', 'Data do corte': dia(c.data_corte), 'Previsto': dia(d.previsto_corte), 'Total da OP': d.total_quant_op || '', 'Qtd. de corte': d.qtd_corte || '', Oficina: d.oficina || '',
@@ -3932,10 +3933,12 @@ function irFiltro(arg) {
 
 function demoMateriais() {
   const m = (tipo, codigo, nome, dados, cores = []) => ({ id: uid(), tipo, codigo, nome, dados, cores, criado_em: agoraISO(), atualizado_em: agoraISO() });
+  const est = (st, dias = 0, obs = null) => ({ st, chega: st === 'chega' ? inData(new Date(Date.now() + dias * 864e5)) : null, obs, em: new Date(Date.now() - 2 * 864e5).toISOString(), por: 'Lu' });
   return [
-    m('tecido', '15.07.0395', 'TRICOLINE WORK CITY', { gramatura: '0', largura: '1,47', composicao: '100% algodão', fornecedor: 'Santanense', marca: 'Kabriolli' }, [{ nome: 'OFF WHITE', hex: '#f3eee2' }, { nome: 'AZUL', hex: '#2f63c9' }]),
-    m('tecido', '15.06.0240', 'VISCOSE MOSCOVA', { gramatura: '139', largura: '1,47', composicao: '100% viscose', fornecedor: 'Rosset' }, [{ nome: 'Brie - OFF', hex: '#efe6d2' }]),
-    m('aviamento', '20.02.0011', 'ELASTEX', { un: 'MT', aplicacao: '0 - Geral', fornecedor: 'Zanotti' }, [{ nome: '100 - Branco', hex: '#ffffff' }]),
+    m('tecido', '15.07.0395', 'TRICOLINE WORK CITY', { gramatura: '0', largura: '1,47', composicao: '100% algodão', fornecedor: 'Santanense', marca: 'Kabriolli', estoque: est('tem', 0, '320 m no estoque') }, [{ nome: 'OFF WHITE', hex: '#f3eee2' }, { nome: 'AZUL', hex: '#2f63c9' }]),
+    m('tecido', '15.06.0240', 'VISCOSE MOSCOVA', { gramatura: '139', largura: '1,47', composicao: '100% viscose', fornecedor: 'Rosset', estoque: est('chega', 6, 'pedido 4471 com a Rosset') }, [{ nome: 'Brie - OFF', hex: '#efe6d2' }]),
+    m('tecido', '14.06.0059', 'MALHA FORRO ARIZONA (ADAR)', { gramatura: '0,098', largura: '1,55', composicao: '100% poliéster', fornecedor: 'Adar', estoque: est('chega', -3) }, [{ nome: 'OFF WHITE', hex: '#f3eee2' }]),
+    m('aviamento', '20.02.0011', 'ELASTEX', { un: 'MT', aplicacao: '0 - Geral', fornecedor: 'Zanotti', estoque: est('nao') }, [{ nome: '100 - Branco', hex: '#ffffff' }]),
     m('etiqueta', '20.03.0498', 'ETIQ BLUE STEEL URBAN BOTTON', { tipo: 'Marca / tamanho', un: 'UN' }, [{ nome: '241 - Preto', hex: '#1f1f1f' }]),
   ];
 }
@@ -3981,6 +3984,108 @@ function acharMaterial(tipo, codigo, nome) {
   return (c && l.find(m => norm(m.codigo) === c)) || (n && l.find(m => norm(m.nome) === n)) || null;
 }
 const fotosMat = m => (valMat(m, 'fotos') || []).filter(p => !ehPdf(p));
+
+/* estoque: situação geral de cada material (dados.estoque), marcada por quem cuida do estoque na tela Materiais */
+const ESTOQUE = { tem: ['Em estoque', 'green'], chega: ['Vai chegar', 'amber'], nao: ['Não tem', 'red'] };
+const estoqueDe = m => { const e = m && (m.dados || {}).estoque; return e && ESTOQUE[e.st] ? e : null; };
+// texto e cor da etiqueta; "chega" com a data já passada vira atrasado
+function infoEstoque(m) {
+  const e = estoqueDe(m);
+  if (!e) return null;
+  if (e.st !== 'chega') return { txt: ESTOQUE[e.st][0], cor: ESTOQUE[e.st][1], e };
+  const atras = !!e.chega && e.chega < inData(new Date());
+  return { txt: e.chega ? `Chega ${fDia(dataDe(e.chega))}${atras ? ' · atrasado' : ''}` : 'Vai chegar', cor: atras ? 'red' : 'amber', atras, e };
+}
+function tagEstoque(m, cls = '', semTxt = 'Sem situação') {
+  const i = infoEstoque(m);
+  if (!i) return semTxt ? `<span class="tag gray sem ${cls}">${semTxt}</span>` : '';
+  return `<span class="tag ${i.cor} ${cls}"${i.e.obs ? ` title="${esc(i.e.obs)}"` : ''}>${esc(i.txt)}</span>`;
+}
+// índice: id do material → OPs e produtos que o usam (fichas de consumo ligadas pelo código ou nome, OPs da peça)
+function usosPorMaterial() {
+  const idx = new Map();
+  S.db.fichas.forEach(f => {
+    const pc = peca(f.peca_id); if (!pc) return;
+    const ops = opsDaPeca(pc);
+    Object.entries(MAT_FICHA).forEach(([lista, cfg]) => {
+      (((f.consumo || {})[lista]) || []).forEach(r => {
+        const m = acharMaterial(cfg.tipo, r.codigo, r[cfg.nome]); if (!m) return;
+        if (!idx.has(m.id)) idx.set(m.id, []);
+        const l = idx.get(m.id);
+        (ops.length ? ops : ['']).forEach(op => { if (!l.some(u => u.op === op && u.pc === pc)) l.push({ op, pc, nome: r[cfg.nome] || m.nome, cor: r.cor || '' }); });
+      });
+    });
+  });
+  idx.forEach(l => l.sort((a, b) => String(a.op).localeCompare(String(b.op), 'pt-BR', { numeric: true }) || String(a.pc.ref).localeCompare(String(b.pc.ref))));
+  return idx;
+}
+const usosDoMaterial = m => usosPorMaterial().get(m.id) || [];
+// todos os materiais da ficha de consumo de uma peça, com o cadastro de cada um (ou null se não estiver cadastrado)
+function materiaisDaPeca(pc) {
+  const f = fichaDe(pc.id); if (!f) return [];
+  return Object.entries(MAT_FICHA).flatMap(([lista, cfg]) => (((f.consumo || {})[lista]) || []).filter(r => r.codigo || r[cfg.nome])
+    .map(r => ({ tipo: cfg.tipo, codigo: r.codigo || '', nome: r[cfg.nome] || '', cor: r.cor || '', m: acharMaterial(cfg.tipo, r.codigo, r[cfg.nome]) })));
+}
+// tabela Data | OP | Produto | material: onde o material é usado
+function usosHtml(m) {
+  const us = usosDoMaterial(m), i = infoEstoque(m);
+  if (!us.length) return '<span class="muted small">Nenhuma ficha de consumo usa este material ainda.</span>';
+  const data = i && i.e.st === 'chega' && i.e.chega ? `<span${i.atras ? ' class="tag red sm"' : ''}>${fData(dataDe(i.e.chega))}</span>` : tagEstoque(m, 'sm');
+  return `<div class="tbl-wrap"><table class="tbl mat-usos"><thead><tr><th>Data</th><th>OP</th><th>Produto</th><th>${TIPOS_MAT[m.tipo].nome}</th></tr></thead>
+    <tbody>${us.map(u => `<tr><td data-l="Data">${data}</td><td data-l="OP"><b>${esc(u.op || '—')}</b></td>
+      <td data-l="Produto"><a href="#/produto/${u.pc.id}">${esc(u.pc.ref)}</a> ${cbadge(u.pc.cliente_id)}${u.pc.descricao ? `<small class="muted"> · ${esc(u.pc.descricao)}</small>` : ''}</td>
+      <td data-l="${TIPOS_MAT[m.tipo].nome}">${esc(u.nome)}${u.cor ? `<span class="muted"> · ${esc(u.cor)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+// campos de situação (usados no cadastro do material e no atalho da lista)
+function camposEstoqueHtml(e) {
+  e = e || {};
+  return `<div class="chips est-chips" id="est-st">${Object.entries(ESTOQUE).map(([k, [l]]) => `<label class="chip${e.st === k ? ' on' : ''}"><input type="radio" name="st" value="${k}"${e.st === k ? ' checked' : ''}>${l}</label>`).join('')}</div>
+    <label class="fld${e.st === 'chega' ? '' : ' hidden'}" id="est-dia"><span>Chega em</span><input type="date" name="chega" value="${esc(e.chega || '')}"></label>
+    <label class="fld"><span>Observação do estoque</span><input name="est_obs" value="${esc(e.obs || '')}" placeholder="quantidade, fornecedor, pedido…"></label>
+    ${e.em ? `<div class="small muted">Marcado por ${esc(e.por || '')} em ${esc(fQuando(e.em))}.</div>` : ''}`;
+}
+function ligarEstoque(md) {
+  md.$('#est-st').addEventListener('change', () => {
+    md.$$('#est-st .chip').forEach(c => c.classList.toggle('on', c.querySelector('input').checked));
+    md.$('#est-dia').classList.toggle('hidden', (md.$('input[name=st]:checked') || {}).value !== 'chega');
+  });
+}
+// lê os campos; devolve null sem situação, mantém quem marcou se nada mudou, ou avisa o que falta
+function lerEstoque(fd, antes) {
+  const st = String(fd.get('st') || ''); if (!st) return null;
+  const chega = st === 'chega' ? String(fd.get('chega') || '') : '', obs = String(fd.get('est_obs') || '').trim();
+  if (st === 'chega' && !chega) throw new Error('Informe o dia em que chega.');
+  if (antes && antes.st === st && (antes.chega || '') === chega && (antes.obs || '') === obs) return antes;
+  return { st, chega: chega || null, obs: obs || null, em: agoraISO(), por: nomeUsuario().split(' ')[0] };
+}
+// atalho da lista: marcar a situação sem abrir o cadastro inteiro
+function formEstoque(m, depois) {
+  const e = estoqueDe(m);
+  modal({
+    titulo: `Estoque: ${m.nome}`, tamanho: 'sm',
+    corpo: `<form class="form" id="fest" autocomplete="off" novalidate>${camposEstoqueHtml(e)}</form>`,
+    rodape: `${e ? `<button type="button" class="btn esq" id="est-limpar">Tirar situação</button>` : ''}<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fest" class="btn primary">Salvar</button>`,
+    aoAbrir: md => {
+      ligarEstoque(md);
+      const gravar = async est => {
+        const btn = md.$('.btn.primary'); ocupado(btn, true);
+        try {
+          const dados = { ...(m.dados || {}) }; if (est) dados.estoque = est; else delete dados.estoque;
+          await salvarReg('materiais', { dados }, m.id);
+          md.fechar(); toast(est ? `${m.nome}: ${infoEstoque({ dados }).txt}.` : 'Situação tirada.'); depois && depois();
+        } catch (err) { ocupado(btn, false); toast(msgErro(err), 'erro'); }
+      };
+      md.$('#fest').addEventListener('submit', ev => {
+        ev.preventDefault();
+        let est;
+        try { est = lerEstoque(new FormData(ev.target), e); } catch (err) { toast(err.message, 'erro'); return; }
+        if (!est) { toast('Escolha a situação.', 'erro'); return; }
+        gravar(est);
+      });
+      const lim = md.$('#est-limpar'); if (lim) lim.onclick = () => gravar(null);
+    },
+  });
+}
 function coresSalvas() {
   const cfg = S.db.config.find(x => x.chave === 'cores'), fora = new Set(((cfg && cfg.valor.removidas) || []).map(norm));
   const lista = [...CORES_SUGERIDAS.map(([nome, hex]) => ({ nome, hex })), ...((cfg && cfg.valor.lista) || []), ...S.db.materiais.flatMap(m => m.cores || [])];
@@ -4002,18 +4107,38 @@ const corSw = c => `<span class="cor-sw" style="--c:${esc(c.hex || '#ccc')}" tit
 function viewMateriais(arg) {
   const tipo = Object.keys(TIPOS_MAT).find(k => TIPOS_MAT[k].rota === arg) || 'tecido', T = TIPOS_MAT[tipo];
   const f = S.f.mat || (S.f.mat = { q: '' });
-  setPage('Materiais', 'Tecidos, aviamentos e etiquetas · o que estiver aqui aparece como sugestão na ficha de consumo',
+  setPage('Materiais', 'Tecidos, aviamentos e etiquetas com a situação do estoque · o que estiver aqui aparece como sugestão na ficha de consumo',
     `<button class="btn primary" id="mat-novo">${ic('plus')}<span class="tx">Novo ${T.nome.toLowerCase()}</span></button>`);
   view().innerHTML = `<div class="card">
     <div class="chips chips-row mat-abas">${Object.entries(TIPOS_MAT).map(([k, t]) => `<a class="chip${k === tipo ? ' on' : ''}" href="#/materiais/${t.rota}">${t.plural}<span class="n">${matsDo(k).length}</span></a>`).join('')}</div>
-    <div class="toolbar"><div class="busca">${ic('search')}<input class="inp" id="mq" placeholder="Buscar ${T.plural.toLowerCase()} por nome, código, fornecedor…" value="${esc(f.q)}"></div></div>
+    <div class="toolbar"><div class="busca">${ic('search')}<input class="inp" id="mq" placeholder="Buscar ${T.plural.toLowerCase()} por nome, código, fornecedor ou OP…" value="${esc(f.q)}"></div></div>
+    <div class="chips chips-row" id="mest"></div>
     ${tipo === 'etiqueta' ? '<div class="chips chips-row" id="mcli"></div>' : ''}
     <div class="tbl-wrap" id="ml"></div>
   </div>`;
+  // situação de cada material da OP pesquisada, dos três tipos de uma vez
+  const painelOP = q => {
+    const n = q.replace(/\s+/g, ''); if (n.length < 3) return '';
+    const pcs = S.db.pecas.filter(pc => opsDaPeca(pc).some(o => norm(o).startsWith(n)) || norm(pc.ref).replace(/\s+/g, '') === n).slice(0, 4);
+    return pcs.map(pc => {
+      const ms = materiaisDaPeca(pc), ok = ms.filter(x => x.m && estoqueDe(x.m) && estoqueDe(x.m).st === 'tem').length;
+      const resumo = !ms.length ? 'ficha de consumo sem materiais' : ok === ms.length ? 'tudo em estoque' : `${ok} de ${plural(ms.length, 'material', 'materiais')} em estoque`;
+      return `<div class="mat-op"><div class="mat-op-h"><b>OP ${esc(opsDaPeca(pc).join(', ') || '—')}</b><a href="#/produto/${pc.id}">${esc(pc.ref)}</a>${cbadge(pc.cliente_id)}${pc.descricao ? `<span class="muted">${esc(pc.descricao)}</span>` : ''}<span class="r small${ms.length && ok === ms.length ? ' ok' : ' muted'}">${resumo}</span></div>
+        ${ms.length ? `<table class="tbl mat-op-t"><thead><tr><th>Tipo</th><th>Código</th><th>Material</th><th>Cor</th><th>Situação</th></tr></thead><tbody>${ms.map(x => `<tr${x.m ? ` data-mat="${x.m.id}" data-tipo="${x.m.tipo}"` : ''}>
+          <td data-l="Tipo">${TIPOS_MAT[x.tipo].nome}</td><td data-l="Código" class="cod">${esc(x.codigo) || '<span class="muted">—</span>'}</td><td data-l="Material" class="mat-nome">${esc(x.nome)}</td><td data-l="Cor">${esc(x.cor) || '<span class="muted">—</span>'}</td>
+          <td data-l="Situação">${x.m ? `<button type="button" class="est-btn" data-est="${x.m.id}" title="Marcar a situação do estoque">${tagEstoque(x.m)}</button>` : '<span class="tag gray sem" title="Não está no cadastro de materiais">Não cadastrado</span>'}</td></tr>`).join('')}</tbody></table>` : ''}</div>`;
+    }).join('');
+  };
   const desenhar = () => {
-    const q = norm(f.q);
+    const q = norm(f.q), usos = usosPorMaterial();
     const nomeCli = m => ((cliente(valMat(m, 'cliente_id')) || {}).nome || '');
-    const busca = matsDo(tipo).filter(m => !q || norm([m.codigo, m.nome, nomeCli(m), ...Object.entries(m.dados || {}).filter(([k]) => k !== 'fotos').map(([, v]) => v), ...(m.cores || []).map(c => c.nome)].join(' ')).includes(q));
+    const busca = matsDo(tipo).filter(m => !q || norm([m.codigo, m.nome, nomeCli(m), ...Object.entries(m.dados || {}).filter(([k]) => k !== 'fotos' && k !== 'estoque').map(([, v]) => v), ...(m.cores || []).map(c => c.nome),
+      ...(usos.get(m.id) || []).flatMap(u => [u.op, u.pc.ref])].join(' ')).includes(q));
+    const sit = m => (estoqueDe(m) || {}).st || '-';
+    const nEst = k => busca.filter(m => sit(m) === k).length;
+    $('#mest').innerHTML = `<button class="chip${!f.est ? ' on' : ''}" data-mest="">Todos<span class="n">${busca.length}</span></button>`
+      + Object.entries(ESTOQUE).map(([k, [l]]) => `<button class="chip${f.est === k ? ' on' : ''}" data-mest="${k}">${l}<span class="n">${nEst(k)}</span></button>`).join('')
+      + `<button class="chip${f.est === '-' ? ' on' : ''}" data-mest="-">Sem situação<span class="n">${nEst('-')}</span></button>`;
     if (tipo === 'etiqueta') {
       const n = id => busca.filter(m => (valMat(m, 'cliente_id') || '-') === id).length;
       const cls = clientesOrd().filter(c => n(c.id) || f.cli === c.id);
@@ -4022,24 +4147,30 @@ function viewMateriais(arg) {
         + (n('-') || f.cli === '-' ? `<button class="chip${f.cli === '-' ? ' on' : ''}" data-mcli="-">Sem cliente<span class="n">${n('-')}</span></button>` : '')
         + (cls.length ? '' : '<span class="small muted" style="align-self:center">Coloque o cliente em cada etiqueta para separar por marca.</span>');
     }
-    const lista = busca.filter(m => tipo !== 'etiqueta' || !f.cli || (valMat(m, 'cliente_id') || '-') === f.cli)
+    const lista = busca.filter(m => (tipo !== 'etiqueta' || !f.cli || (valMat(m, 'cliente_id') || '-') === f.cli) && (!f.est || sit(m) === f.est))
       .sort((a, b) => nomeCli(a).localeCompare(nomeCli(b), 'pt-BR') || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
-    $('#ml').innerHTML = lista.length ? `<table class="tbl mat-tbl"><thead><tr><th class="mat-ft"></th>${T.campos.map(([, l]) => `<th>${l}</th>`).join('')}<th>Cores disponíveis</th></tr></thead>
+    const nOps = m => new Set((usos.get(m.id) || []).map(u => u.op).filter(Boolean)).size;
+    $('#ml').innerHTML = painelOP(q) + (lista.length ? `<table class="tbl mat-tbl"><thead><tr><th class="mat-ft"></th>${T.campos.map(([, l]) => `<th>${l}</th>`).join('')}<th>Situação</th><th>Cores disponíveis</th></tr></thead>
       <tbody>${lista.map(m => `<tr data-mat="${m.id}"><td class="mat-ft">${fotosMat(m).length
         ? `<button type="button" class="th" data-mat-fotos="${m.id}" data-foto="${esc(fotosMat(m)[0])}" title="Ver fotos">${ic('image')}${fotosMat(m).length > 1 ? `<span class="nf">${fotosMat(m).length}</span>` : ''}</button>`
         : `<div class="th vazio-ft">${ic('image')}</div>`}</td>${T.campos.map(([k, l]) => `<td data-l="${l}"${k === 'nome' ? ' class="mat-nome"' : ''}>${k === 'cliente_id' ? (cbadge(valMat(m, k)) || '<span class="muted">—</span>') : (esc(valMat(m, k)) || '<span class="muted">—</span>')}</td>`).join('')}
+        <td data-l="Situação"><button type="button" class="est-btn" data-est="${m.id}" title="Marcar a situação do estoque">${tagEstoque(m)}${nOps(m) ? `<small class="muted">${plural(nOps(m), 'OP')}</small>` : ''}</button></td>
         <td data-l="Cores"><div class="cores">${(m.cores || []).map(c => `<span class="cor-it">${corSw(c)}${esc(c.nome)}</span>`).join('') || '<span class="muted">—</span>'}</div></td></tr>`).join('')}</tbody></table>`
-      : vazio(T.icone, matsDo(tipo).length ? 'Nada encontrado' : `Nenhum ${T.nome.toLowerCase()} cadastrado ainda`, '', `<button class="btn primary" data-mat-novo>${ic('plus')}Novo ${T.nome.toLowerCase()}</button>`);
+      : vazio(T.icone, matsDo(tipo).length ? 'Nada encontrado' : `Nenhum ${T.nome.toLowerCase()} cadastrado ainda`, '', `<button class="btn primary" data-mat-novo>${ic('plus')}Novo ${T.nome.toLowerCase()}</button>`));
     hidratarFotos($('#ml'));
   };
   $('#mq').addEventListener('input', e => { f.q = e.target.value; desenhar(); });
   const mc = $('#mcli'); if (mc) mc.addEventListener('click', e => { const b = e.target.closest('[data-mcli]'); if (b) { f.cli = b.dataset.mcli; desenhar(); } });
+  $('#mest').addEventListener('click', e => { const b = e.target.closest('[data-mest]'); if (b) { f.est = b.dataset.mest; desenhar(); } });
   $('#mat-novo').onclick = () => formMaterial(tipo);
   $('#ml').addEventListener('click', e => {
     if (e.target.closest('[data-mat-novo]')) return formMaterial(tipo);
+    if (e.target.closest('a')) return;
     const fb = e.target.closest('[data-mat-fotos]');
     if (fb) { const mm = byId('materiais', fb.dataset.matFotos); return lightbox(fotosMat(mm)); }
-    const tr = e.target.closest('[data-mat]'); if (tr) formMaterial(tipo, byId('materiais', tr.dataset.mat));
+    const eb = e.target.closest('[data-est]');
+    if (eb) return formEstoque(byId('materiais', eb.dataset.est), desenhar);
+    const tr = e.target.closest('[data-mat]'); if (tr) formMaterial(tr.dataset.tipo || tipo, byId('materiais', tr.dataset.mat));
   });
   desenhar();
 }
@@ -4054,6 +4185,8 @@ function formMaterial(tipo, m = null) {
         ? `<label class="fld"><span>${l}</span><select name="cliente_id">${opClientes(m ? valMat(m, 'cliente_id') : (S.f.mat && S.f.mat.cli && S.f.mat.cli !== '-' ? S.f.mat.cli : ''), '—')}</select></label>`
         : `<label class="fld${k === 'nome' && tipo !== 'aviamento' ? ' span2' : ''}"><span>${l}${k === 'nome' ? ' *' : ''}</span><input name="${k}" value="${esc(m ? valMat(m, k) : '')}"${k === 'nome' ? ' autofocus' : ''}${k === 'un' ? ' list="dl-un-mat"' : ''}></label>`)).join('')}</div>
       <label class="fld"><span>Observação</span><input name="obs" value="${esc(m ? valMat(m, 'obs') : '')}"></label>
+      <div class="fld"><span class="lbl">Estoque <span class="hint">· tem, quando chega ou não tem; vale para todas as OPs que usam este ${T.nome.toLowerCase()}</span></span>${camposEstoqueHtml(estoqueDe(m))}</div>
+      ${m ? `<div class="fld"><span class="lbl">Onde é usado <span class="hint">· OPs e produtos cuja ficha de consumo tem este ${T.nome.toLowerCase()}</span></span><div id="mat-usos">${usosHtml(m)}</div></div>` : ''}
       <div class="fld"><span class="lbl">Fotos <span class="hint">· ${tipo === 'tecido' ? 'da estampa / do tecido, ajuda a achar na hora de procurar' : `da ${T.nome.toLowerCase()}`}</span></span><div class="fotos-edit" id="mat-fotos"></div></div>
       <div class="fld"><span class="lbl">Cores disponíveis <span class="hint">· aparecem como opção de cor na ficha</span></span><div class="cores-ed" id="cores"></div>
         <div class="cores-sug" id="cores-sug"></div></div>
@@ -4089,6 +4222,8 @@ function formMaterial(tipo, m = null) {
         if (!cores.some(c => norm(c.nome) === norm(nome))) { cores.push({ nome, hex }); desenhaCores(); }
       });
       desenhaCores();
+      ligarEstoque(md);
+      const usos = md.$('#mat-usos'); if (usos) usos.addEventListener('click', e => { if (e.target.closest('a')) md.fechar(); });
       md.$('#fmat').addEventListener('submit', async e => {
         e.preventDefault();
         const fd = new FormData(e.target), nome = String(fd.get('nome') || '').trim();
@@ -4096,6 +4231,9 @@ function formMaterial(tipo, m = null) {
         const dados = {};
         T.campos.forEach(([k]) => { if (k !== 'codigo' && k !== 'nome') { const v = String(fd.get(k) || '').trim(); if (v) dados[k] = v; } });
         const obs = String(fd.get('obs') || '').trim(); if (obs) dados.obs = obs;
+        let estoque;
+        try { estoque = lerEstoque(fd, estoqueDe(m)); } catch (err) { toast(err.message, 'erro'); return; }
+        if (estoque) dados.estoque = estoque;
         const btn = md.$('.btn.primary'); ocupado(btn, true);
         try {
           const rem = edFotos.removidas();
@@ -4880,6 +5018,11 @@ function folhaTecnicaHtml(E) {
   <datalist id="dl-avi">${avis.map(a => `<option value="${esc(a)}">`).join('')}</datalist>`;
 }
 
+// situação do estoque da linha da ficha (só leitura, marcada na tela Materiais); vazio se não está no cadastro
+function estLinha(lista, r) {
+  const cfg = MAT_FICHA[lista], m = acharMaterial(cfg.tipo, r.codigo, r[cfg.nome]);
+  return m ? tagEstoque(m, 'sm', '') : '';
+}
 // tecidos, aviamentos e etiquetas: os mesmos campos na ficha de consumo e na página do produto
 function secoesMateriaisHtml(E, quais = ['tecidos', 'aviamentos', 'etiquetas']) {
   const k = E.F.consumo;
@@ -4887,7 +5030,7 @@ function secoesMateriaisHtml(E, quais = ['tecidos', 'aviamentos', 'etiquetas']) 
   const sec = {};
   sec.tecidos = `  <section class="fs">
     <div class="fs-h"><h3>Tecidos</h3><div class="r small muted">${plural(tec.length, 'tecido')}</div></div>
-    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Tecido</th><th class="n">Gramatura</th><th class="n">Largura</th><th class="n">Consumo</th><th>Composição</th><th>Cor</th><th class="no-print"></th></tr></thead>
+    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Tecido</th><th class="n">Gramatura</th><th class="n">Largura</th><th class="n">Consumo</th><th>Composição</th><th>Cor</th><th class="no-print est" title="Situação do estoque, marcada na tela Materiais">Estoque</th><th class="no-print"></th></tr></thead>
     <tbody>${tec.map((r, i) => `<tr>
       <td><input class="cod" data-k="consumo.tecidos.${i}.codigo" value="${esc(r.codigo || '')}" list="dl-mt-tecido-c" placeholder="15.07.0395"></td>
       <td><input data-k="consumo.tecidos.${i}.tecido" value="${esc(r.tecido || '')}" list="dl-mt-tecido-n"></td>
@@ -4896,6 +5039,7 @@ function secoesMateriaisHtml(E, quais = ['tecidos', 'aviamentos', 'etiquetas']) 
       <td class="n pil"><input class="num" data-k="consumo.tecidos.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
       <td><input data-k="consumo.tecidos.${i}.composicao" value="${esc(r.composicao || '')}"></td>
       <td><input data-k="consumo.tecidos.${i}.cor" value="${esc(r.cor || '')}" list="dlc-tecidos-${i}"></td>
+      <td class="no-print est">${estLinha('tecidos', r)}</td>
       <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.tecidos.${i}" title="Tirar tecido">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - tec.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.tecidos">${ic('plus')}Adicionar tecido</button>
       <label class="btn sm">${ic('file')}Ler PDF do Audaces<input type="file" accept="application/pdf,.pdf" multiple hidden data-audaces></label>
@@ -4903,7 +5047,7 @@ function secoesMateriaisHtml(E, quais = ['tecidos', 'aviamentos', 'etiquetas']) 
   </section>`;
   sec.aviamentos = `  <section class="fs">
     <div class="fs-h"><h3>Aviamentos</h3><div class="r small muted">${plural(avi.length, 'aviamento')}</div></div>
-    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Material / insumo</th><th>Tamanho</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print"></th></tr></thead>
+    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Material / insumo</th><th>Tamanho</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print est" title="Situação do estoque, marcada na tela Materiais">Estoque</th><th class="no-print"></th></tr></thead>
     <tbody>${avi.map((r, i) => `<tr>
       <td><input class="cod" data-k="consumo.aviamentos.${i}.codigo" value="${esc(r.codigo || '')}" list="dl-mt-aviamento-c" placeholder="20.02.0001"></td>
       <td><input data-k="consumo.aviamentos.${i}.material" value="${esc(r.material || '')}" list="dl-mt-aviamento-n"></td>
@@ -4912,13 +5056,14 @@ function secoesMateriaisHtml(E, quais = ['tecidos', 'aviamentos', 'etiquetas']) 
       <td><input data-k="consumo.aviamentos.${i}.un" value="${esc(r.un || '')}" list="dl-un" style="max-width:70px"></td>
       <td><input data-k="consumo.aviamentos.${i}.cor" value="${esc(r.cor || '')}" list="dlc-aviamentos-${i}"></td>
       <td class="n pil"><input class="num" data-k="consumo.aviamentos.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
+      <td class="no-print est">${estLinha('aviamentos', r)}</td>
       <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.aviamentos.${i}" title="Tirar aviamento">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - avi.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.aviamentos">${ic('plus')}Adicionar aviamento</button>
       ${quais.length === 3 ? '<span class="small muted">Os aviamentos daqui aparecem como sugestão em “Consumos de aviamentos”, mais acima.</span>' : ''}</div>
   </section>`;
   sec.etiquetas = `  <section class="fs">
     <div class="fs-h"><h3>Etiquetas</h3><div class="r small muted">${plural(etq.length, 'etiqueta')}</div></div>
-    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Tamanho</th><th>Etiqueta</th><th>Tipo</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print"></th></tr></thead>
+    <div class="tbl-wrap"><table class="ft-tab"><thead><tr><th>Código</th><th>Tamanho</th><th>Etiqueta</th><th>Tipo</th><th>Aplicação</th><th>UN</th><th>Cor</th><th class="n">Consumo</th><th class="no-print est" title="Situação do estoque, marcada na tela Materiais">Estoque</th><th class="no-print"></th></tr></thead>
     <tbody>${etq.map((r, i) => `<tr>
       <td><input class="cod" data-k="consumo.etiquetas.${i}.codigo" value="${esc(r.codigo || '')}" list="dl-mt-etiqueta-c" placeholder="20.03.0818"></td>
       <td><input data-k="consumo.etiquetas.${i}.tamanho" value="${esc(r.tamanho || '')}" style="max-width:110px"></td>
@@ -4928,6 +5073,7 @@ function secoesMateriaisHtml(E, quais = ['tecidos', 'aviamentos', 'etiquetas']) 
       <td><input data-k="consumo.etiquetas.${i}.un" value="${esc(r.un || '')}" list="dl-un" style="max-width:70px"></td>
       <td><input data-k="consumo.etiquetas.${i}.cor" value="${esc(r.cor || '')}" list="dlc-etiquetas-${i}"></td>
       <td class="n pil"><input class="num" data-k="consumo.etiquetas.${i}.consumo" value="${esc(r.consumo ?? '')}" inputmode="decimal"></td>
+      <td class="no-print est">${estLinha('etiquetas', r)}</td>
       <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="consumo.etiquetas.${i}" title="Tirar etiqueta">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 6 - etq.length) }, () => `<tr class="so-print"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="consumo.etiquetas">${ic('plus')}Adicionar etiqueta</button></div>
   </section>`;
