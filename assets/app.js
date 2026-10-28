@@ -139,9 +139,9 @@ function tamanhoArq(b) {
 }
 
 const pref = {
-  _d: (() => { try { return JSON.parse(localStorage.getItem('nd.pref')) || {}; } catch (e) { return {}; } })(),
+  _d: (() => { try { return JSON.parse(localStorage.getItem('nd.pref')) || {}; } catch { return {}; } })(),
   get(k, def) { return this._d[k] ?? def; },
-  set(k, v) { this._d[k] = v; try { localStorage.setItem('nd.pref', JSON.stringify(this._d)); } catch (e) { /* sem armazenamento */ } },
+  set(k, v) { this._d[k] = v; try { localStorage.setItem('nd.pref', JSON.stringify(this._d)); } catch { /* sem armazenamento */ } },
 };
 
 function msgErro(e) {
@@ -213,7 +213,7 @@ function ocupado(btn, sim, texto = 'Salvando…') {
 async function comprimir(file, max = 1600, q = 0.85) {
   if (!file.type.startsWith('image/') || /gif|svg/.test(file.type)) return file;
   let bmp = null;
-  try { bmp = await createImageBitmap(file); } catch (e) { return file; }
+  try { bmp = await createImageBitmap(file); } catch { return file; }
   const s = Math.min(1, max / Math.max(bmp.width, bmp.height));
   if (s === 1 && file.size < 900 * 1024) return file;
   const c = document.createElement('canvas');
@@ -275,18 +275,23 @@ function SupaAPI() {
       const d = ok(await B().list(pasta, { limit: 1000 }));
       const m = {}; d.forEach(x => { if (x.created_at) m[`${pasta}/${x.name}`] = x.created_at; }); return m;
     },
+    // arquivos de uma pasta do bucket (nome, tamanho e data)
+    async listarPasta(pasta) {
+      const d = ok(await B().list(pasta, { limit: 1000, sortBy: { column: 'name', order: 'desc' } }));
+      return d.filter(x => x.id).map(x => ({ path: `${pasta}/${x.name}`, nome: x.name, tamanho: +((x.metadata || {}).size || 0), em: x.created_at }));
+    },
   };
 }
 
 function DemoAPI() {
   const K = 'nd.demo.v2', KA = 'nd.demo.arquivos.v2';
-  const ler = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+  const ler = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   let db = ler(K), arqs = ler(KA) || {};
   if (!db) { const s = demoSeed(); db = s.db; arqs = s.arquivos; gravar(); gravarArqs(); }
-  function gravar() { try { localStorage.setItem(K, JSON.stringify(db)); } catch (e) { /* cheio */ } }
+  function gravar() { try { localStorage.setItem(K, JSON.stringify(db)); } catch { /* cheio */ } }
   function gravarArqs() {
     try { localStorage.setItem(KA, JSON.stringify(arqs)); }
-    catch (e) { throw new Error('Sem espaço no navegador para mais arquivos na demonstração.'); }
+    catch { throw new Error('Sem espaço no navegador para mais arquivos na demonstração.'); }
   }
   const comAtualizado = ['pecas', 'pedidos', 'tarefas', 'ponto', 'config', 'fichas', 'fluxos', 'materiais', 'cortes'];
   const blobUrl = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
@@ -330,6 +335,7 @@ function DemoAPI() {
     async removerArquivos(paths) { paths.forEach(p => delete arqs[p]); gravarArqs(); },
     async uso() { return { banco: 17.2e6, arquivos: 216e6 }; },
     async datasArquivos() { return {}; },
+    async listarPasta() { return []; },
   };
 }
 
@@ -593,7 +599,7 @@ const noCatalogo = pc => S.db.pedidos.some(p => p.peca_id === pc.id && p.tipo ==
 S.arqDatas = {};
 async function carregarDatasCons(pc) {
   if (!pc || S.arqDatas[pc.id] || !arqCons(pc).length) return false;
-  try { S.arqDatas[pc.id] = await S.api.datasArquivos(`pecas/${pc.id}`); } catch (e) { S.arqDatas[pc.id] = {}; }
+  try { S.arqDatas[pc.id] = await S.api.datasArquivos(`pecas/${pc.id}`); } catch { S.arqDatas[pc.id] = {}; }
   return true;
 }
 function gruposCons(pc) {
@@ -769,7 +775,7 @@ function editorFotos(box, inicial = []) {
 const temaAtual = () => document.documentElement.getAttribute('data-theme') || 'light';
 function aplicarTema(t) {
   document.documentElement.setAttribute('data-theme', t);
-  try { localStorage.setItem('nd.tema', t); } catch (e) { /* sem armazenamento */ }
+  try { localStorage.setItem('nd.tema', t); } catch { /* sem armazenamento */ }
   const m = $('meta[name=theme-color]'); if (m) m.content = t === 'dark' ? '#141012' : '#781026';
 }
 const temaBotao = () => `<button type="button" class="tema" data-tema title="Alternar tema claro / noturno" aria-label="Alternar tema">${ic('moon', 'i lua')}${ic('sun', 'i sol')}</button>`;
@@ -1049,7 +1055,7 @@ function route(rolar = true) {
   const fn = ROTAS[nome];
   if (!fn) { location.replace('#/inicio'); return; }
   let arg = resto.join('/');
-  try { arg = decodeURIComponent(arg); } catch (e) { /* mantém */ }
+  try { arg = decodeURIComponent(arg); } catch { /* mantém */ }
   S.rota = { nome, arg };
   const navNome = nome === 'peca' || nome === 'busca' ? 'catalogo' : nome;
   $$('.nav a').forEach(a => a.classList.toggle('on', a.dataset.r === navNome));
@@ -1503,7 +1509,7 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
 async function limparPecaOrfa(pc) {
   const usada = S.db.pedidos.some(p => p.peca_id === pc.id) || S.db.tarefas.some(t => t.peca_id === pc.id);
   if (usada || (pc.fotos || []).length || arqCons(pc).length || pc.descricao || (pc.detalhes || []).length) return;
-  try { await excluirReg('pecas', pc.id); } catch (e) { /* deixa como está */ }
+  try { await excluirReg('pecas', pc.id); } catch { /* deixa como está */ }
 }
 
 /* ================================================================
@@ -2084,7 +2090,7 @@ function formImportarGuia() {
         [...e.target.files].forEach(f => { mapa[(f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name] = f; });
         if (!mapa['guia.json']) { res.innerHTML = `<div class="aviso erro">${ic('alert')}<span>Essa pasta não tem o arquivo guia.json.</span></div>`; btn.disabled = true; return; }
         try { dados = JSON.parse(await mapa['guia.json'].text()); arquivos = mapa; }
-        catch (err) { res.innerHTML = `<div class="aviso erro">${ic('alert')}<span>Não consegui ler o guia.json.</span></div>`; return; }
+        catch { res.innerHTML = `<div class="aviso erro">${ic('alert')}<span>Não consegui ler o guia.json.</span></div>`; return; }
         res.innerHTML = `<ul class="imp-lista">${dados.manuais.map(mn => { const cl = acharClienteGuia(mn.cliente);
           return `<li>${cl ? ic('check') : ic('alert')}<b>${esc(mn.cliente)}</b> · ${dados.pontos.filter(p => p.manual === mn.manual).length} pontos${cl ? '' : ' · <span style="color:var(--red)">cliente não cadastrado</span>'}</li>`; }).join('')}</ul><div class="prog imp-prog hidden"><i style="width:0"></i></div><div class="small muted" id="gst"></div>`;
         btn.disabled = false;
@@ -2170,7 +2176,7 @@ function formImportarPlanilha() {
         [...e.target.files].forEach(f => { mapa[(f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name] = f; });
         if (!mapa['dados.json']) { res.innerHTML = `<div class="aviso erro">${ic('alert')}<span>Essa pasta não tem o arquivo dados.json.</span></div>`; btn.disabled = true; return; }
         let dados;
-        try { dados = JSON.parse(await mapa['dados.json'].text()); } catch (err) { res.innerHTML = `<div class="aviso erro">${ic('alert')}<span>Não consegui ler o dados.json.</span></div>`; return; }
+        try { dados = JSON.parse(await mapa['dados.json'].text()); } catch { res.innerHTML = `<div class="aviso erro">${ic('alert')}<span>Não consegui ler o dados.json.</span></div>`; return; }
         arquivos = mapa; plano = planoImportacao(dados.pedidos || []);
         const n = t => plano.novos.filter(p => p.tipo === t).length;
         res.innerHTML = `<ul class="imp-lista">
@@ -2342,6 +2348,8 @@ function viewAjustes() {
         <form class="aj-row" id="add-cli" style="border-top:1px dashed var(--line)"><input type="color" name="cor" value="${CORES[(cls.length + 3) % CORES.length]}"><div class="dupla"><input class="inp" name="nome" placeholder="Novo cliente" maxlength="40"><input class="inp" name="sigla" placeholder="Sigla" maxlength="8"></div><button class="btn sm primary" type="submit">${ic('plus')}</button></form>
       </div></div>
     ${S.api.demo ? '' : `<div class="card"><div class="card-h"><div><h3>Armazenamento</h3><div class="sub">Plano grátis do Supabase · avisa no Início quando passar de 80%</div></div></div><div class="card-b">${barrasUso()}</div></div>`}
+    <div class="card"><div class="card-h"><div><h3>Backup</h3><div class="sub">${S.api.demo ? 'Cópia diária dos dados' : `Uma cópia de todas as tabelas por dia, ao abrir o sistema · guarda os últimos ${BACKUP_DIAS} dias`}</div></div></div>
+      <div class="card-b" id="bk-box">${S.api.demo ? '<div class="muted small">Na demonstração não há backup: os dados ficam só neste navegador.</div>' : '<div class="muted small">Procurando…</div>'}</div></div>
     <div class="card"><div class="card-h"><h3>Conta</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:12px">
       <div class="muted small">Conectada como <b style="color:var(--ink)">${esc(S.user.email || '')}</b>${S.api.demo ? ' (demonstração — os dados ficam só neste navegador)' : ''}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -2401,6 +2409,48 @@ function viewAjustes() {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = `atelie-nathany-${inData(agoraISO())}.json`;
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  if (!S.api.demo) mostrarBackups();
+}
+
+/* ---------- backup diário: o plano grátis do Supabase não guarda cópias, então o site manda uma por dia para o bucket ---------- */
+const BACKUP_PASTA = 'backups', BACKUP_DIAS = 30;
+const ehBackup = n => /^\d{4}-\d{2}-\d{2}\.json\.gz$/.test(n);
+const fKB = b => (b < 1e6 ? `${Math.max(1, Math.round(b / 1e3))} KB` : fMB(b));
+async function gzip(texto) {
+  const st = new Blob([texto]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Blob([await new Response(st).arrayBuffer()], { type: 'application/gzip' });
+}
+// ao abrir logado, uma vez por dia: JSON de todas as tabelas comprimido em backups/AAAA-MM-DD.json.gz; apaga os mais antigos que 30 dias
+async function backupDiario() {
+  if (S.api.demo || !window.CompressionStream) return;
+  const hoje = inData(agoraISO()), nome = `${hoje}.json.gz`;
+  let feito = ''; try { feito = localStorage.getItem('nd.backup') || ''; } catch { /* sem armazenamento */ }
+  if (feito === hoje) return;
+  const lista = (await S.api.listarPasta(BACKUP_PASTA)).filter(b => ehBackup(b.nome)).sort((a, b) => b.nome.localeCompare(a.nome));
+  if (!lista.some(b => b.nome === nome)) {
+    await S.api.enviar(`${BACKUP_PASTA}/${nome}`, await gzip(JSON.stringify({ exportado_em: agoraISO(), ...S.db })));
+    const velhos = lista.filter(b => b.nome < nome).slice(BACKUP_DIAS - 1);
+    if (velhos.length) await S.api.removerArquivos(velhos.map(b => b.path));
+    S.backups = null;
+  }
+  try { localStorage.setItem('nd.backup', hoje); } catch { /* sem armazenamento */ }
+}
+// quadro da tela de ajustes: data do último backup e a lista para baixar
+async function mostrarBackups() {
+  if (S.backupIndo) await S.backupIndo;
+  try { if (!S.backups) S.backups = (await S.api.listarPasta(BACKUP_PASTA)).filter(b => ehBackup(b.nome)).sort((a, b) => b.nome.localeCompare(a.nome)); }
+  catch (e) { S.backups = null; const box = $('#bk-box'); if (box) box.innerHTML = `<div class="muted small">Não consegui ver os backups: ${esc(msgErro(e))}</div>`; return; }
+  const box = $('#bk-box'); if (!box) return; // saiu da tela enquanto carregava
+  const [ult] = S.backups;
+  box.innerHTML = `${S.backupErro ? `<div class="aviso erro" style="margin-bottom:12px">${ic('alert')}<span>O backup de hoje não foi feito: ${esc(S.backupErro)}</span></div>` : ''}
+    ${!ult ? '<div class="muted small">Nenhum backup ainda. O primeiro é feito ao abrir o sistema.</div>'
+    : `<div class="small" style="margin-bottom:10px">Último backup: <b>${fData(ult.em)} às ${fHora(ult.em)}</b> · ${fKB(ult.tamanho)}</div>
+      <div class="bk-lista">${S.backups.map(b => `<a href="#" class="bk-item" data-path="${esc(b.path)}" data-nome="${esc(b.nome)}" title="Baixar ${esc(b.nome)}">${ic('download')}<span>${fData(dataDe(b.nome.slice(0, 10)))}</span><span class="muted">${fKB(b.tamanho)}</span></a>`).join('')}</div>`}`;
+  box.onclick = async e => {
+    const a = e.target.closest('[data-path]'); if (!a) return;
+    e.preventDefault();
+    try { location.href = await S.api.urlArquivo(a.dataset.path, a.dataset.nome); } catch (err) { toast(msgErro(err), 'erro'); }
   };
 }
 
@@ -3161,7 +3211,7 @@ function paginaMedicao(pc, modo = 'medicao') {
       if (b) {
         if (+b.dataset.mdDia !== sel) { sel = +b.dataset.mdDia; render(); return; }
         const di = card.querySelector('.md-dia-in');
-        try { di.showPicker(); } catch (err) { di.focus(); }
+        try { di.showPicker(); } catch { di.focus(); }
         return;
       }
       if (e.target.closest('#md-novo')) {
@@ -4416,7 +4466,6 @@ function semanaISO(dia) {
   const w1 = new Date(d.getFullYear(), 0, 4);
   return 1 + Math.round(((d - w1) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7);
 }
-const fDiaIso = dia => (dia ? dia.split('-').reverse().slice(0, 2).join('/') : '');
 
 function viewCorte() {
   const f = S.f.corte || (S.f.corte = { mes: inData(agoraISO()).slice(0, 7) });
@@ -4641,7 +4690,7 @@ const SRI = {
   'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js': 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw',
   'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js': 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e',
   'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js': 'sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H',
-  'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js': 'sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk',
+  'https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js': 'sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3',
 };
 const carregarScript = url => _scripts[url] || (_scripts[url] = new Promise((res, rej) => {
   const s = document.createElement('script'); s.src = url; s.onload = res;
@@ -4702,7 +4751,6 @@ function folhaFicha(tipo, pecaId) {
     : (S.fichaAberta = { pc, tipo, F: { tecnica: clone((fi && fi.tecnica) || {}), consumo: clone((fi && fi.consumo) || {}) }, fila: Promise.resolve() });
   E.pc = pc; E.tipo = tipo; E.redesenhar = null;
   setPage(`${NOME_FICHA[tipo]} · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
-  const outro = tipo === 'tecnica' ? 'consumo' : 'tecnica';
   view().innerHTML = `<div class="folha-barra no-print">
       <a class="link-btn" href="#/${ROTA_FICHA[tipo]}">${ic('chevL')}Outra peça</a>
       <span class="salvo ok" id="salvo">${ic('check')}Tudo salvo</span>
@@ -4965,7 +5013,7 @@ async function lerAudaces(E, files) {
   const lidos = [];
   for (const f of files) {
     try { lidos.push({ nome: f.name, r: lerEncaixe(await textoPdf(f)) }); }
-    catch (err) { lidos.push({ nome: f.name, r: null }); }
+    catch { lidos.push({ nome: f.name, r: null }); }
   }
   fimSalvar(E);
   const tec = E.F.consumo.tecidos || [];
@@ -5161,7 +5209,7 @@ function imprimirFicha(E) {
 function cssImpressao() {
   let css = '';
   for (const sh of document.styleSheets) {
-    let regras; try { regras = sh.cssRules; } catch (e) { continue; }
+    let regras; try { regras = sh.cssRules; } catch { continue; }
     for (const r of regras) if (r.media && [...r.media].includes('print')) css += [...r.cssRules].map(x => x.cssText).join('\n');
   }
   return css.replace(/@page[^}]*\}/g, '');
@@ -5170,7 +5218,7 @@ async function baixarFichaImagem(E, destino = 'baixar', idBtn = '#f-img') {
   const btn = $(idBtn); ocupado(btn, true, 'Gerando…');
   try {
     await Promise.all([carregarScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
-      carregarScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')]);
+      carregarScript('https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js')]);
     prepararImpressao();
     const folha = $('#folha'), LARG = 733; // largura útil da A4 (194 mm) em px
     $$('img', folha).forEach(i => { i.loading = 'eager'; });
@@ -5217,7 +5265,7 @@ async function baixarPdfFolha(sel, nome, idBtn) {
   const btn = $(idBtn); ocupado(btn, true, 'Gerando…');
   try {
     await Promise.all([carregarScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
-      carregarScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')]);
+      carregarScript('https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js')]);
     const LARG = 733;
     const canvas = await window.html2canvas($(sel), {
       useCORS: true, scale: ehIOS() ? 2.5 : 3, backgroundColor: '#ffffff', logging: false, windowWidth: 1280,
@@ -5301,6 +5349,7 @@ async function iniciar(sess) {
   }
   S.iniciando = false;
   S.api.uso().then(u => { S.uso = u; if (S.rota.nome === 'inicio' || S.rota.nome === 'ajustes') rerender(); }).catch(() => {});
+  S.backupErro = ''; S.backupIndo = backupDiario().catch(e => { S.backupErro = msgErro(e); }).then(() => { S.backupIndo = null; });
   renderShell();
   window.onhashchange = () => route(true);
   route(true);
@@ -5315,7 +5364,7 @@ async function boot() {
     else if (ev === 'SIGNED_IN' && sess && !S.user && !S.iniciando) iniciar(sess);
   });
   let sess = null;
-  try { sess = await S.api.sessao(); } catch (e) { /* sem sessão */ }
+  try { sess = await S.api.sessao(); } catch { /* sem sessão */ }
   if (sess) iniciar(sess); else renderAuth();
 }
 
@@ -5323,7 +5372,7 @@ async function boot() {
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible' || !S.user || !$('.shell') || S.api.demo) return;
   if (Date.now() - S.carregadoEm < 2 * 60e3 || $('.modal-bg') || (S.fichaAberta && S.fichaAberta.pendente)) return;
-  try { await carregarTudo(); if (!$('.modal-bg')) rerender(); } catch (e) { /* tenta depois */ }
+  try { await carregarTudo(); if (!$('.modal-bg')) rerender(); } catch { /* tenta depois */ }
 });
 
 // versão nova no ar: o navegador guarda a página antiga por alguns minutos, então compara com a publicada e oferece atualizar
@@ -5346,7 +5395,7 @@ async function checarVersao() {
       const u = new URL(location.href); u.searchParams.set('v', v); location.replace(u.href);
     };
     document.body.append(el);
-  } catch (e) { /* sem internet: tenta de novo depois */ }
+  } catch { /* sem internet: tenta de novo depois */ }
 }
 setInterval(checarVersao, 5 * 60e3);
 document.addEventListener('visibilitychange', checarVersao);

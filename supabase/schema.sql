@@ -115,6 +115,8 @@ on conflict (id) do nothing;
 drop policy if exists "arquivos_logado" on storage.objects;
 create policy "arquivos_logado" on storage.objects for all to authenticated
   using (bucket_id = 'arquivos') with check (bucket_id = 'arquivos');
+-- Backup diário (2026-10-28): o site guarda uma cópia das tabelas por dia em backups/AAAA-MM-DD.json.gz, neste mesmo bucket,
+-- e apaga as com mais de 30 dias. A policy acima (for all) já deixa quem está logado listar, enviar e apagar: nada a rodar.
 
 -- ---------- Dados iniciais ----------
 insert into public.clientes (nome, sigla, cor, ordem)

@@ -1449,6 +1449,11 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
 .uso-bar { height: 10px; border-radius: 6px; background: var(--line-2); overflow: hidden; }
 .uso-bar i { display: block; height: 100%; background: var(--green); border-radius: 6px; }
 .uso-bar.alto i { background: var(--red); }
+.bk-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; max-height: 230px; overflow: auto; }
+.bk-item { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line-2); border-radius: 8px; font-size: 13px; color: var(--ink); text-decoration: none; }
+.bk-item:hover { border-color: var(--brand); color: var(--brand); }
+.bk-item svg { width: 14px; height: 14px; flex: none; }
+.bk-item .muted { margin-left: auto; font-size: 12px; }
 .aviso-uso { margin-bottom: 16px; }
 .aviso-uso a { color: inherit; font-weight: 700; }
 
