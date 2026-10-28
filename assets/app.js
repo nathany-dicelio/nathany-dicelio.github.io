@@ -270,7 +270,7 @@ function SupaAPI() {
       const m = {}; d.forEach(x => { if (x.signedUrl) m[x.path] = x.signedUrl; }); return m;
     },
     async urlArquivo(path, nome) { return ok(await B().createSignedUrl(path, 600, nome ? { download: nome } : undefined)).signedUrl; },
-    async removerArquivos(paths) { if (paths.length) ok(await B().remove(paths)); },
+    async removerArquivos(paths) { for (let i = 0; i < paths.length; i += 100) ok(await B().remove(paths.slice(i, i + 100))); },
     async uso() { return ok(await sb.rpc('uso_armazenamento')); },
     async datasArquivos(pasta) {
       const d = ok(await B().list(pasta, { limit: 1000 }));
@@ -280,6 +280,15 @@ function SupaAPI() {
     async listarPasta(pasta) {
       const d = ok(await B().list(pasta, { limit: 1000, sortBy: { column: 'name', order: 'desc' } }));
       return d.filter(x => x.id).map(x => ({ path: `${pasta}/${x.name}`, nome: x.name, tamanho: +((x.metadata || {}).size || 0), em: x.created_at }));
+    },
+    // caminhos de todos os arquivos de uma pasta do bucket, entrando nas subpastas (as subpastas vêm sem id)
+    async listarArquivos(pasta) {
+      let out = [];
+      for (const x of ok(await B().list(pasta, { limit: 1000 }))) {
+        if (x.id) out.push(`${pasta}/${x.name}`);
+        else out = out.concat(await this.listarArquivos(`${pasta}/${x.name}`));
+      }
+      return out;
     },
   };
 }
@@ -338,6 +347,7 @@ function DemoAPI() {
     async uso() { return { banco: 17.2e6, arquivos: 216e6 }; },
     async datasArquivos() { return {}; },
     async listarPasta() { return []; },
+    async listarArquivos(pasta) { return Object.keys(arqs).filter(p => p.startsWith(`${pasta}/`)); },
   };
 }
 
@@ -1490,21 +1500,12 @@ function formPedido(tipo, pedido = null, pecaPre = null) {
           const antigaPeca = pedido && pedido.peca_id !== pc.id ? peca(pedido.peca_id) : null;
           await salvarReg('pedidos', row, pedido && pedido.id);
           if (form.colecao) {
-            const col = String(fd.get('colecao') || '').trim(), fi = fichaDe(pc.id);
-            if (col !== colecaoDe(pc)) {
-              await salvarReg('fichas', fi ? { tecnica: { ...fi.tecnica, colecao: col } } : { peca_id: pc.id, tecnica: { colecao: col }, consumo: {} }, fi && fi.id);
-              if (S.fichaAberta && S.fichaAberta.pc.id === pc.id && !S.fichaAberta.pendente) S.fichaAberta = null;
-            }
+            const col = String(fd.get('colecao') || '').trim();
+            if (col !== colecaoDe(pc)) await gravarNaFicha(pc, ['tecnica.colecao'], F => { F.tecnica.colecao = col; });
           }
           const usar = Array.from(m.$$('[data-aud-f]')).filter(x => x.querySelector('[data-aud-on]').checked)
             .map(x => ({ r: (lidosAud.get(fotos.novas().find(f => f.name === x.dataset.audF)) || {}).r, alvo: x.querySelector('[data-aud-alvo]').value })).filter(x => x.r);
-          if (usar.length) {
-            const fi = fichaDe(pc.id), consumo = clone((fi && fi.consumo) || {});
-            consumo.tecidos = consumo.tecidos || [];
-            usar.forEach(x => aplicarEncaixe(consumo.tecidos, x.r, x.alvo));
-            await salvarReg('fichas', fi ? { consumo } : { peca_id: pc.id, tecnica: {}, consumo }, fi && fi.id);
-            if (S.fichaAberta && S.fichaAberta.pc.id === pc.id && !S.fichaAberta.pendente) S.fichaAberta = null;
-          }
+          if (usar.length) await gravarNaFicha(pc, ['consumo.tecidos'], F => { usar.forEach(x => aplicarEncaixe(F.consumo.tecidos || (F.consumo.tecidos = []), x.r, x.alvo)); });
           if (antigaPeca) await limparPecaOrfa(antigaPeca);
           m.fechar();
           toast(usar.length ? `${T.nome} ${pedido ? 'salvo' : 'cadastrado'} · consumo do Audaces na ficha.` : pedido ? 'Alterações salvas.' : `${T.nome} cadastrado.`);
@@ -1518,7 +1519,15 @@ async function limparPecaOrfa(pc) {
   const usada = S.db.pedidos.some(p => p.peca_id === pc.id) || S.db.tarefas.some(t => t.peca_id === pc.id)
     || fichaDe(pc.id) || fluxoDe(pc.id) || S.db.cortes.some(c => c.peca_id === pc.id);
   if (usada || (pc.fotos || []).length || arqCons(pc).length || pc.descricao || (pc.detalhes || []).length) return;
-  try { await excluirReg('pecas', pc.id); } catch { /* deixa como está */ }
+  try { await excluirReg('pecas', pc.id); apagarArquivosPeca(pc).catch(() => {}); } catch { /* deixa como está */ }
+}
+// peça excluída: apaga tudo o que ela tem no bucket (fotos, arquivos do consumo, das etapas e imagens da ficha), só dentro de pecas/<id>/
+async function apagarArquivosPeca(pc) {
+  const pasta = `pecas/${pc.id}/`;
+  let paths = (pc.fotos || []).concat(arqCons(pc));
+  try { paths = paths.concat(await S.api.listarArquivos(`pecas/${pc.id}`)); } catch { /* fica só com os que a peça lista */ }
+  paths = [...new Set(paths)].filter(p => p.startsWith(pasta));
+  if (paths.length) await S.api.removerArquivos(paths);
 }
 
 /* ================================================================
@@ -1900,8 +1909,7 @@ function formPeca(pc) {
         if (!await confirmar(`Excluir a peça <b>${esc(pc.ref)}</b>${n ? `, os ${plural(n, 'pedido')} dela` : ''} e todas as fotos? Isso não pode ser desfeito.`)) return;
         try {
           await excluirReg('pecas', pc.id);
-          const todos = (pc.fotos || []).concat(arqCons(pc));
-          if (todos.length) S.api.removerArquivos(todos).catch(() => {});
+          apagarArquivosPeca(pc).catch(() => {});
           m.fechar(); toast('Peça excluída.'); location.hash = '#/catalogo';
         } catch (err) { toast(msgErro(err), 'erro'); }
       };
@@ -4283,9 +4291,10 @@ function completarComMaterial(E, k) {
   const r = (E.F.consumo[lista] || [])[+i]; if (!r) return false;
   const m = acharMaterial(cfg.tipo, campo === 'codigo' ? r.codigo : '', campo === cfg.nome ? r[cfg.nome] : '');
   if (!m) return false;
-  r.codigo = m.codigo || r.codigo || ''; r[cfg.nome] = m.nome;
-  cfg.copia.forEach(c => { const v = valMat(m, c); if (v) r[c] = v; });
-  if (!r.cor && (m.cores || []).length === 1) r.cor = m.cores[0].nome;
+  const pos = c => E.mudou.add(`consumo.${lista}.${i}.${c}`);
+  r.codigo = m.codigo || r.codigo || ''; r[cfg.nome] = m.nome; pos('codigo'); pos(cfg.nome);
+  cfg.copia.forEach(c => { const v = valMat(m, c); if (v) { r[c] = v; pos(c); } });
+  if (!r.cor && (m.cores || []).length === 1) { r.cor = m.cores[0].nome; pos('cor'); }
   return true;
 }
 
@@ -4431,12 +4440,13 @@ function formNovoProduto() {
   });
 }
 
-// a ficha da peça para editar fora da ficha técnica (produto, engenharia): continua a que está salvando, se houver
-function fichaAbertaDe(pc) {
+// a cópia da ficha que a tela edita (ficha técnica, produto, engenharia): continua a que está salvando, se houver.
+// mudou = caminhos (data-k) alterados desde a última gravação; a lista inteira quando entra ou sai linha
+function fichaAbertaDe(pc, tipo = 'tecnica') {
   const fi = fichaDe(pc.id);
   const E = S.fichaAberta && S.fichaAberta.pc.id === pc.id && S.fichaAberta.pendente
     ? S.fichaAberta
-    : (S.fichaAberta = { pc, tipo: 'tecnica', F: { tecnica: clone((fi && fi.tecnica) || {}), consumo: clone((fi && fi.consumo) || {}) }, fila: Promise.resolve() });
+    : (S.fichaAberta = { pc, tipo, F: { tecnica: clone((fi && fi.tecnica) || {}), consumo: clone((fi && fi.consumo) || {}) }, fila: Promise.resolve(), mudou: new Set() });
   E.pc = pc;
   return E;
 }
@@ -4450,12 +4460,12 @@ function ligarMateriais(E) {
     const add = e.target.closest('[data-add]'), rm = e.target.closest('[data-rm]');
     if (add) {
       const k2 = add.dataset.add, lista = getPath(E.F, k2) || [];
-      lista.push(MODELOS_LINHA[k2]()); setPath(E.F, k2, lista); agendarSalvar(E); redesenhar();
+      lista.push(MODELOS_LINHA[k2]()); setPath(E.F, k2, lista); mudouFicha(E, k2); redesenhar();
       const ult = $('#prod-mat').querySelector(`[data-k^="${k2}.${lista.length - 1}."]`); if (ult) ult.focus();
     }
-    if (rm) { const ks = rm.dataset.rm.split('.'), i = +ks.pop(), lista = getPath(E.F, ks.join('.')) || []; lista.splice(i, 1); agendarSalvar(E); redesenhar(); }
+    if (rm) { const ks = rm.dataset.rm.split('.'), i = +ks.pop(), k2 = ks.join('.'), lista = getPath(E.F, k2) || []; lista.splice(i, 1); mudouFicha(E, k2); redesenhar(); }
   });
-  if (!box.closest('#prod-root')) box.addEventListener('input', e => { const x = e.target; if (x.dataset.k) { setPath(E.F, x.dataset.k, x.value); agendarSalvar(E); } });
+  if (!box.closest('#prod-root')) box.addEventListener('input', e => { const x = e.target; if (x.dataset.k) { setPath(E.F, x.dataset.k, x.value); mudouFicha(E, x.dataset.k); } });
   box.addEventListener('change', e => {
     const x = e.target;
     if (x.dataset.audaces !== undefined) { const fs = [...x.files]; x.value = ''; if (fs.length) lerAudaces(E, fs); return; }
@@ -4554,14 +4564,14 @@ function paginaProduto(pc) {
   root.addEventListener('input', e => {
     const x = e.target;
     if (x.tagName === 'TEXTAREA') autoAltura(x);
-    if (x.dataset.k) { setPath(E.F, x.dataset.k, x.value); agendarSalvar(E); }
+    if (x.dataset.k) { setPath(E.F, x.dataset.k, x.value); mudouFicha(E, x.dataset.k); }
     else if (x.dataset.peca && x.tagName === 'INPUT') agendarPeca(E, x.dataset.peca, x.value.trim() || null);
   });
   root.addEventListener('change', e => {
     const x = e.target;
     if (x.dataset.peca && x.tagName === 'SELECT') { if (x.value !== '__outra') agendarPeca(E, x.dataset.peca, x.value || null); }
-    if (x.dataset.k && x.tagName === 'SELECT') { setPath(E.F, x.dataset.k, x.value); agendarSalvar(E); }
-    if (x.dataset.grade !== undefined) { E.F.tecnica.grade = x.value.split(/[,/;\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean); agendarSalvar(E, 0); }
+    if (x.dataset.k && x.tagName === 'SELECT') { setPath(E.F, x.dataset.k, x.value); mudouFicha(E, x.dataset.k); }
+    if (x.dataset.grade !== undefined) { E.F.tecnica.grade = x.value.split(/[,/;\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean); mudouFicha(E, 'tecnica.grade', 0); }
   });
   $$('textarea', root).forEach(autoAltura);
   hidratarFotos(root);
@@ -4906,11 +4916,8 @@ function folhaFicha(tipo, pecaId) {
   const pc = peca(pecaId);
   if (!pc) { setPage(NOME_FICHA[tipo]); view().innerHTML = `<div class="card">${vazio('dress', 'Essa peça não existe mais', '', `<a class="btn" href="#/${ROTA_FICHA[tipo]}">Voltar</a>`)}</div>`; return; }
   tipo = 'tecnica';
-  const fi = fichaDe(pc.id);
-  const E = S.fichaAberta && S.fichaAberta.pc.id === pc.id && S.fichaAberta.pendente
-    ? S.fichaAberta
-    : (S.fichaAberta = { pc, tipo, F: { tecnica: clone((fi && fi.tecnica) || {}), consumo: clone((fi && fi.consumo) || {}) }, fila: Promise.resolve() });
-  E.pc = pc; E.tipo = tipo; E.redesenhar = null;
+  const E = fichaAbertaDe(pc, tipo);
+  E.tipo = tipo; E.redesenhar = null;
   setPage(`${NOME_FICHA[tipo]} · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
   view().innerHTML = `<div class="folha-barra no-print">
       <a class="link-btn" href="#/${ROTA_FICHA[tipo]}">${ic('chevL')}Outra peça</a>
@@ -5106,12 +5113,49 @@ function agendarSalvar(E, ms = 700) {
   clearTimeout(E.timer);
   E.timer = setTimeout(() => { E.agFicha = false; E.fila = E.fila.then(() => salvarFicha(E)); }, ms);
 }
+// anota o caminho que a tela mudou (data-k, ou a lista inteira quando entra ou sai linha) e agenda a gravação
+function mudouFicha(E, k, ms) { E.mudou.add(k); agendarSalvar(E, ms); }
+const copiarPath = (de, para, k) => { const v = getPath(de, k); setPath(para, k, v === undefined ? undefined : clone(v)); };
+// mudar(F) recebe a ficha mais nova do banco (outra aba ou o celular pode ter gravado) e mexe só no que precisa
+async function gravarFicha(pc, mudar, tentou = false) {
+  const fi = fichaDe(pc.id);
+  let F = { tecnica: (fi && fi.tecnica) || {}, consumo: (fi && fi.consumo) || {} };
+  if (fi) { try { const r = await S.api.linha('fichas', fi.id); if (r) F = { tecnica: r.tecnica || {}, consumo: r.consumo || {} }; } catch { /* usa a cópia local */ } }
+  F = clone(F);
+  mudar(F);
+  if (fi) return salvarReg('fichas', F, fi.id);
+  try { return await salvarReg('fichas', { peca_id: pc.id, ...F }); }
+  catch (e) {
+    // outra aba criou a ficha desta peça neste meio-tempo: busca a dela e grava por cima
+    if (tentou || !e || e.code !== '23505') throw e;
+    S.db.fichas = await S.api.listar('fichas');
+    return gravarFicha(pc, mudar, true);
+  }
+}
+// grava os caminhos alterados desde a última gravação por cima da versão mais nova; o que foi digitado enquanto salvava fica para a próxima
 async function salvarFicha(E) {
-  const f = fichaDe(E.pc.id);
+  const mudou = E.mudou, antes = E.F;
+  E.mudou = new Set();
+  if (!mudou.size) { fimSalvar(E); return; }
   try {
-    await salvarReg('fichas', f ? { tecnica: E.F.tecnica, consumo: E.F.consumo } : { peca_id: E.pc.id, tecnica: E.F.tecnica, consumo: E.F.consumo }, f && f.id);
+    const r = await gravarFicha(E.pc, F => mudou.forEach(k => copiarPath(antes, F, k)));
+    if (E.F === antes) {
+      E.F = { tecnica: clone(r.tecnica || {}), consumo: clone(r.consumo || {}) };
+      E.mudou.forEach(k => copiarPath(antes, E.F, k));
+    }
     fimSalvar(E);
-  } catch (e) { statusSalvo('Não salvou, tente de novo', 'erro'); toast(msgErro(e), 'erro'); }
+  } catch (e) { mudou.forEach(k => E.mudou.add(k)); statusSalvo('Não salvou, tente de novo', 'erro'); toast(msgErro(e), 'erro'); }
+}
+// mudança de fora da tela (pedido com Audaces, coleção): se a ficha está aberta e salvando, entra nela e vai junto; senão grava direto
+async function gravarNaFicha(pc, caminhos, mudar) {
+  const E = S.fichaAberta && S.fichaAberta.pc.id === pc.id && S.fichaAberta.pendente ? S.fichaAberta : null;
+  if (E) {
+    mudar(E.F); caminhos.forEach(k => E.mudou.add(k));
+    await (E.fila = E.fila.then(() => salvarFicha(E)));
+    return;
+  }
+  await gravarFicha(pc, mudar);
+  if (S.fichaAberta && S.fichaAberta.pc.id === pc.id) S.fichaAberta = null;
 }
 function agendarPeca(E, campo, valor) {
   E.pendente = true; E.agPeca = true; statusSalvo('Salvando…');
@@ -5209,7 +5253,7 @@ async function lerAudaces(E, files) {
       ok.onclick = () => {
         const lista = E.F.consumo.tecidos || (E.F.consumo.tecidos = []);
         Array.from(m.$$('[data-aud]')).forEach(c => aplicarEncaixe(lista, lidos[+c.dataset.aud].r, c.querySelector('[data-alvo]').value));
-        agendarSalvar(E, 0); (E.redesenhar || desenharFolha)(E); m.fechar(); toast('Consumo preenchido pelo Audaces.');
+        mudouFicha(E, 'consumo.tecidos', 0); (E.redesenhar || desenharFolha)(E); m.fechar(); toast('Consumo preenchido pelo Audaces.');
       };
     },
   });
@@ -5224,7 +5268,7 @@ function ligarFolha(E) {
     const sel = t.dataset.k ? `[data-k="${t.dataset.k}"]` : t.dataset.peca ? `[data-peca="${t.dataset.peca}"]` : null;
     if (sel) el.querySelectorAll(sel).forEach(o => { if (o !== t) o.value = t.value; });
     if (t.dataset.peca && t.tagName === 'INPUT') el.querySelectorAll(`[data-banda="${t.dataset.peca}"]`).forEach(x => { x.textContent = t.value.trim() || '—'; });
-    if (t.dataset.k) { setPath(E.F, t.dataset.k, t.value); agendarSalvar(E); }
+    if (t.dataset.k) { setPath(E.F, t.dataset.k, t.value); mudouFicha(E, t.dataset.k); }
     else if (t.dataset.peca && t.tagName === 'INPUT') agendarPeca(E, t.dataset.peca, t.value.trim() || null);
   });
   el.addEventListener('change', async e => {
@@ -5238,18 +5282,18 @@ function ligarFolha(E) {
     if (t.dataset.pom !== undefined) {
       const poms = pomsDoCliente(E.pc.cliente_id), i = t.dataset.pom, cod = t.value.trim().toUpperCase();
       const r = E.F.tecnica.medidas[i];
-      if (poms && poms[cod] && !r.desc) { r.desc = poms[cod].toUpperCase(); const d = el.querySelector(`[data-k="tecnica.medidas.${i}.desc"]`); if (d) d.value = r.desc; agendarSalvar(E); }
+      if (poms && poms[cod] && !r.desc) { r.desc = poms[cod].toUpperCase(); const d = el.querySelector(`[data-k="tecnica.medidas.${i}.desc"]`); if (d) d.value = r.desc; mudouFicha(E, `tecnica.medidas.${i}.desc`); }
     }
     if (t.dataset.k === 'tecnica.piloto') desenharFolha(E);
     if (t.dataset.grade !== undefined) {
       E.F.tecnica.grade = t.value.split(/[,/;\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
-      agendarSalvar(E, 0); desenharFolha(E);
+      mudouFicha(E, 'tecnica.grade', 0); desenharFolha(E);
     }
     if (t.dataset.audaces !== undefined) { const fs = [...t.files]; t.value = ''; if (fs.length) lerAudaces(E, fs); return; }
     if (t.dataset.slotUp) {
       const file = t.files[0]; if (!file) return;
       statusSalvo('Enviando imagem…');
-      try { const [p] = await enviarFotos(E.pc.id, [file]); setPath(E.F, t.dataset.slotUp, p); agendarSalvar(E, 0); desenharFolha(E); }
+      try { const [p] = await enviarFotos(E.pc.id, [file]); setPath(E.F, t.dataset.slotUp, p); mudouFicha(E, t.dataset.slotUp, 0); desenharFolha(E); }
       catch (err) { statusSalvo('Imagem não enviada', 'erro'); toast(msgErro(err), 'erro'); }
     }
   });
@@ -5258,7 +5302,7 @@ function ligarFolha(E) {
     if (lt) {
       const [k, d] = lt.dataset.letra.split('|'), key = `tecnica.caixas.${k}.letra`;
       const novo = Math.min(14, Math.max(5, (getPath(E.F, key) || LETRA_ETQ) + Number(d)));
-      setPath(E.F, key, novo); agendarSalvar(E);
+      setPath(E.F, key, novo); mudouFicha(E, key);
       lt.parentElement.querySelector('b').textContent = novo;
       const ta = lt.closest('.cx').querySelector('textarea'); ta.dataset.letra = novo; ta.style.fontSize = `${(novo * 1.333).toFixed(1)}px`; autoAltura(ta);
       return;
@@ -5267,15 +5311,15 @@ function ligarFolha(E) {
     const sx = e.target.closest('[data-slot-x]'), esc0 = e.target.closest('[data-escolher]');
     if (add) {
       const k = add.dataset.add, lista = getPath(E.F, k) || [];
-      lista.push(MODELOS_LINHA[k]()); setPath(E.F, k, lista); agendarSalvar(E); desenharFolha(E);
+      lista.push(MODELOS_LINHA[k]()); setPath(E.F, k, lista); mudouFicha(E, k); desenharFolha(E);
       const ult = el.querySelector(`[data-k^="${k}.${lista.length - 1}."]`); if (ult) ult.focus();
       return;
     }
     if (rm) {
-      const ks = rm.dataset.rm.split('.'), i = +ks.pop(), lista = getPath(E.F, ks.join('.')) || [];
-      lista.splice(i, 1); agendarSalvar(E); desenharFolha(E); return;
+      const ks = rm.dataset.rm.split('.'), i = +ks.pop(), k = ks.join('.'), lista = getPath(E.F, k) || [];
+      lista.splice(i, 1); mudouFicha(E, k); desenharFolha(E); return;
     }
-    if (sx) { setPath(E.F, sx.dataset.slotX, null); agendarSalvar(E); desenharFolha(E); return; }
+    if (sx) { setPath(E.F, sx.dataset.slotX, null); mudouFicha(E, sx.dataset.slotX); desenharFolha(E); return; }
     if (esc0) { escolherDesenho(E); return; }
     if (lb) lightbox([lb.dataset.lb]);
   });
@@ -5291,7 +5335,7 @@ function ligarFolha(E) {
       const k = vazios.includes(E2.slotAlvo) ? E2.slotAlvo : vazios.includes('tecnica.img_tabela') ? 'tecnica.img_tabela' : vazios.includes('tecnica.img_cotas') ? 'tecnica.img_cotas' : null;
       if (!k) { toast('Tire uma imagem antes de colar outra (no X da imagem)', 'erro'); return; }
       statusSalvo('Enviando imagem…');
-      try { const [p] = await enviarFotos(E2.pc.id, [new File([file], `colada-${Date.now()}.png`, { type: file.type })]); setPath(E2.F, k, p); agendarSalvar(E2, 0); desenharFolha(E2); toast('Imagem colada'); }
+      try { const [p] = await enviarFotos(E2.pc.id, [new File([file], `colada-${Date.now()}.png`, { type: file.type })]); setPath(E2.F, k, p); mudouFicha(E2, k, 0); desenharFolha(E2); toast('Imagem colada'); }
       catch (err) { statusSalvo('Imagem não enviada', 'erro'); toast(msgErro(err), 'erro'); }
     });
   }
@@ -5328,7 +5372,7 @@ function escolherDesenho(E) {
           sel = sel.concat(novas); desenha();
         } catch (err) { toast(msgErro(err), 'erro'); }
       });
-      m.$('#esc-ok').onclick = () => { E.F.tecnica.desenho = sel; agendarSalvar(E, 0); m.fechar(); desenharFolha(E); };
+      m.$('#esc-ok').onclick = () => { E.F.tecnica.desenho = sel; mudouFicha(E, 'tecnica.desenho', 0); m.fechar(); desenharFolha(E); };
       desenha();
     },
   });
