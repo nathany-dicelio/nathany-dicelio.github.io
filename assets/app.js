@@ -904,13 +904,14 @@ function renderShell() {
         <a href="#/medidas" data-r="medidas">${ic('ruler')}Medidas</a>
         <div class="grp">Configurar</div>
         <a href="#/ajustes" data-r="ajustes">${ic('sliders')}Pessoas e clientes</a>
+        <a href="#/conta" data-r="conta">${ic('key')}Conta e dados</a>
       </nav>
       <div class="foot">
         ${S.api.demo ? '<div class="demo-flag">Modo demonstração · dados de exemplo</div>' : ''}
         <button type="button" class="instalar${promptInstalar ? '' : ' hidden'}" id="btn-instalar">${ic('monitor')}<span>Instalar aplicativo</span></button>
         <div class="user">
           <div class="avatar">${esc(iniciais(nomeUsuario()))}</div>
-          <div><div class="nm">${esc(nomeUsuario())}</div><div class="em">${esc(S.user.email || '')}</div></div>
+          <a class="user-l" href="#/conta" title="Conta e dados"><div class="nm">${esc(nomeUsuario())}</div><div class="em">${esc(S.user.email || '')}</div></a>
           <button type="button" class="icon-btn" id="btn-sair" title="${S.api.demo ? 'Reiniciar demonstração' : 'Sair'}">${ic('logout')}</button>
         </div>
       </div>
@@ -1048,6 +1049,7 @@ const ROTAS = {
   catalogo: viewCatalogo,
   medidas: viewMedidas,
   ajustes: viewAjustes,
+  conta: viewConta,
   ponto: viewPonto,
   etapas: a => viewEtapas(a),
   'etapas-baila': viewEtapasBaila,
@@ -1138,7 +1140,7 @@ function viewInicio() {
       <div class="muted small" style="flex:1">Resumo ${nomePer}</div>
       <div class="chips" id="per">${[['mes', 'Este mês'], ['ano', 'Este ano'], ['tudo', 'Tudo']].map(([v, t]) => `<button class="chip${per === v ? ' on' : ''}" data-per="${v}">${t}</button>`).join('')}</div>
     </div>
-    ${usoAlto() && usoAlto().length ? `<div class="aviso erro aviso-uso">${ic('alert')}<span><b>O armazenamento está passando de 80%.</b> ${usoAlto().map(k => `${k === 'arquivos' ? 'Fotos e arquivos' : 'Banco de dados'}: ${fMB(S.uso[k])} de ${fMB(LIMITE_USO[k])}`).join(' · ')}. Avise o Henrique para liberar espaço ou mudar de plano. <a href="#/ajustes">Ver detalhes</a></span></div>` : ''}
+    ${usoAlto() && usoAlto().length ? `<div class="aviso erro aviso-uso">${ic('alert')}<span><b>O armazenamento está passando de 80%.</b> ${usoAlto().map(k => `${k === 'arquivos' ? 'Fotos e arquivos' : 'Banco de dados'}: ${fMB(S.uso[k])} de ${fMB(LIMITE_USO[k])}`).join(' · ')}. Avise o Henrique para liberar espaço ou mudar de plano. <a href="#/conta">Ver detalhes</a></span></div>` : ''}
     ${(venc => (venc.length ? `<div class="aviso erro aviso-venc">${ic('clock')}<span><b>${plural(venc.length, 'etapa com prazo vencido', 'etapas com prazo vencido')}</b>
       <ul>${venc.slice(0, 5).map(x => `<li><a href="#/${ehBaila(x.pc) ? 'etapas-baila' : 'etapas'}/${x.pc.id}/${x.k}"><b>${esc(x.pc.ref)}</b> · ${esc(nomeFluxo(x.k))} · venceu ${fData(dataDe(x.e.prazo))}${respDaEtapa(x.e, x.k).length ? ` · ${esc(nomesResp(respDaEtapa(x.e, x.k)).join(', '))}` : ''}</a></li>`).join('')}</ul>
       ${venc.length > 5 ? `<a href="#/etapas">Ver as outras ${venc.length - 5} nas etapas</a>` : ''}</span></div>` : ''))(etapasVencidas())}
@@ -1296,7 +1298,7 @@ function linhaPedido(p) {
   return `<tr>
     <td data-l="Pedido"><div class="when"><b>${fDia(p.pedido_em)}</b><small>${fHora(p.pedido_em)}</small></div></td>
     <td class="c-ref"><div class="ref">${(() => {
-      const cons = p.tipo === 'consumo', cp = cons ? (arqsDoPedido(p).filter(x => !ehPdf(x))[0] || imgsCons(pc)[0]) : capa(pc);
+      const cons = p.tipo === 'consumo', cp = cons ? (arqsDoPedido(p).filter(x => !ehPdf(x))[0] || imgsCons(pc)[0] || capa(pc)) : capa(pc);
       const ped = cons && arqsDoPedido(p).some(x => !ehPdf(x)) ? ` data-ped="${p.id}"` : '';
       return cp ? `<button type="button" class="th zoom" data-acao="fotos" data-id="${pc.id}"${cons ? ' data-cons="1"' : ''}${ped} data-foto="${esc(cp)}" title="Ver arquivos">${ic('dress')}</button>` : thumb(null);
     })()}
@@ -2364,17 +2366,6 @@ function viewAjustes() {
       </div>`).join('')}
         <form class="aj-row" id="add-cli" style="border-top:1px dashed var(--line)"><input type="color" name="cor" value="${CORES[(cls.length + 3) % CORES.length]}"><div class="dupla"><input class="inp" name="nome" placeholder="Novo cliente" maxlength="40"><input class="inp" name="sigla" placeholder="Sigla" maxlength="8"></div><button class="btn sm primary" type="submit">${ic('plus')}</button></form>
       </div></div>
-    ${S.api.demo ? '' : `<div class="card"><div class="card-h"><div><h3>Armazenamento</h3><div class="sub">Plano grátis do Supabase · avisa no Início quando passar de 80%</div></div></div><div class="card-b">${barrasUso()}</div></div>`}
-    <div class="card"><div class="card-h"><div><h3>Backup</h3><div class="sub">${S.api.demo ? 'Cópia diária dos dados' : `Uma cópia de todas as tabelas por dia, ao abrir o sistema · guarda os últimos ${BACKUP_DIAS} dias`}</div></div></div>
-      <div class="card-b" id="bk-box">${S.api.demo ? '<div class="muted small">Na demonstração não há backup: os dados ficam só neste navegador.</div>' : '<div class="muted small">Procurando…</div>'}</div></div>
-    <div class="card"><div class="card-h"><h3>Conta</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:12px">
-      <div class="muted small">Conectada como <b style="color:var(--ink)">${esc(S.user.email || '')}</b>${S.api.demo ? ' (demonstração — os dados ficam só neste navegador)' : ''}</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        ${S.api.demo ? '' : `<button class="btn sm" id="senha">${ic('key')}Trocar senha</button>`}
-        <button class="btn sm primary" id="excel">${ic('download')}Baixar tudo em Excel</button>
-        <button class="btn sm" id="backup">${ic('download')}Baixar cópia dos dados</button>
-        <button class="btn sm" id="imp-planilha">${ic('file')}Importar planilha antiga</button>
-      </div></div></div>
   </div>`;
   const ligarLista = (box, tab, uso) => {
     box.addEventListener('change', async e => {
@@ -2414,6 +2405,24 @@ function viewAjustes() {
     if (!nome) return;
     try { await salvarReg('clientes', { nome, sigla: String(fd.get('sigla')).trim() || null, cor: fd.get('cor'), ordem: S.db.clientes.length + 1 }); toast('Cliente adicionado.'); rerender(); } catch (err) { toast(msgErro(err), 'erro'); }
   });
+}
+
+// conta, backup e armazenamento: o que é do sistema, fora das listas de pessoas e clientes
+function viewConta() {
+  setPage('Conta e dados', 'Backup diário, espaço usado, planilhas e senha');
+  view().innerHTML = `<div class="aj-grid">
+    <div class="card"><div class="card-h"><div><h3>Backup</h3><div class="sub">${S.api.demo ? 'Cópia diária dos dados' : `Uma cópia de todas as tabelas por dia, ao abrir o sistema · guarda os últimos ${BACKUP_DIAS} dias`}</div></div></div>
+      <div class="card-b" id="bk-box">${S.api.demo ? '<div class="muted small">Na demonstração não há backup: os dados ficam só neste navegador.</div>' : '<div class="muted small">Procurando…</div>'}</div></div>
+    ${S.api.demo ? '' : `<div class="card"><div class="card-h"><div><h3>Armazenamento</h3><div class="sub">Plano grátis do Supabase · avisa no Início quando passar de 80%</div></div></div><div class="card-b">${barrasUso()}</div></div>`}
+    <div class="card"><div class="card-h"><h3>Conta</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:12px">
+      <div class="muted small">Conectada como <b style="color:var(--ink)">${esc(S.user.email || '')}</b>${S.api.demo ? ' (demonstração — os dados ficam só neste navegador)' : ''}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${S.api.demo ? '' : `<button class="btn sm" id="senha">${ic('key')}Trocar senha</button>`}
+        <button class="btn sm primary" id="excel">${ic('download')}Baixar tudo em Excel</button>
+        <button class="btn sm" id="backup">${ic('download')}Baixar cópia dos dados</button>
+        <button class="btn sm" id="imp-planilha">${ic('file')}Importar planilha antiga</button>
+      </div></div></div>
+  </div>`;
   const bs = $('#senha'); if (bs) bs.onclick = pedirNovaSenha;
   $('#imp-planilha').onclick = () => formImportarPlanilha();
   $('#excel').onclick = async () => {
@@ -3166,7 +3175,7 @@ function paginaMedicao(pc, modo = 'medicao') {
     const campo = (rot, k, extra = '', cls = '') => `<label class="fld ${cls}"><span>${rot}</span><input data-mc="${k}" value="${esc(M[k] || '')}" ${extra}></label>`;
     view().innerHTML = `<div class="folha-barra no-print">
       <a class="link-btn" href="#/${modo}">${ic('chevL')}Outra peça</a>
-      <span class="salvo ok" id="salvo">${ic('check')}${temSalvo ? 'Tudo salvo' : 'Ainda não salva'}</span>
+      <span class="salvo${temSalvo ? ' ok' : ''}" id="salvo">${ic(temSalvo ? 'check' : 'clock')}${temSalvo ? 'Tudo salvo' : 'Ainda não salva'}</span>
       <div class="r">
         <a class="btn sm" href="#/produto/${pc.id}">${ic('dress')}<span class="tx">Produto</span></a>
         <a class="btn sm" href="#/${ME ? 'engenharia' : 'medicao'}/${pc.id}">${ic('ruler')}<span class="tx">${ME ? 'Engenharia' : 'Medição'}</span></a>
@@ -3516,8 +3525,9 @@ function viewEtapas(arg, baila = false) {
       .sort((a, b) => String(recenteFluxo(b)).localeCompare(String(recenteFluxo(a))));
     const box = $('#et-lista');
     if (!lista.length) {
-      box.innerHTML = vazio('flow', S.db.pecas.length ? 'Nada encontrado com esses filtros' : 'Nenhuma peça cadastrada ainda',
-        S.db.pecas.length ? '' : 'As peças de Desenho e Mini consumo aparecem aqui sozinhas.', `<button class="btn primary" data-et-add>${ic('plus')}Novo modelo</button>`);
+      const semModelo = !base.length && S.rota.nome === 'etapas-baila';
+      box.innerHTML = vazio('flow', semModelo ? 'Nenhum modelo da Baila ainda' : S.db.pecas.length ? 'Nada encontrado com esses filtros' : 'Nenhuma peça cadastrada ainda',
+        semModelo ? 'Os modelos com cliente Baila entram aqui sozinhos.' : S.db.pecas.length ? '' : 'As peças de Desenho e Mini consumo aparecem aqui sozinhas.', `<button class="btn primary" data-et-add>${ic('plus')}Novo modelo</button>`);
       return;
     }
     box.innerHTML = modo === 'quadro' ? quadroFluxo(lista, f.st) : linhaFluxo(lista);
@@ -5565,7 +5575,7 @@ async function iniciar(sess) {
   S.api.uso().then(u => { S.uso = u; if (S.rota.nome === 'inicio' || S.rota.nome === 'ajustes') rerender(); }).catch(() => {});
   S.backupErro = ''; S.backupIndo = backupDiario().catch(e => { S.backupErro = msgErro(e); }).then(() => { S.backupIndo = null; });
   renderShell();
-  window.onhashchange = () => route(true);
+  window.onhashchange = () => { $$('.modal-bg').forEach(b => b.remove()); route(true); };
   route(true);
 }
 

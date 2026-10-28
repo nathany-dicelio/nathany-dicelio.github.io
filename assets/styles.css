@@ -10,14 +10,14 @@
   --gold-bg: #F7EFE3;
   --ink: #2A1B20;
   --ink-2: #5E4C52;
-  --mute: #9A8A8F;
+  --mute: #857478;
   --line: #ECE3DF;
   --line-2: #F5EFEC;
   --bg: #F8F4F0;
   --card: #FFFFFF;
   --surface-2: #FCFAF8;
   --row-hover: #FDF7F7;
-  --placeholder: #B5A9AC;
+  --placeholder: #9E9195;
   --border-hover: #D9CBC7;
   --red: #C93545;    --red-bg: #FCECEE;
   --amber: #B57A06;  --amber-bg: #FFF4DA;
@@ -52,7 +52,7 @@
   --card: #1D1618;
   --surface-2: #211A1C;
   --row-hover: #251C1F;
-  --placeholder: #6E615E;
+  --placeholder: #857874;
   --border-hover: #4A3A3E;
   --red: #F07A86;    --red-bg: #3A1F24;
   --amber: #E9B44C;  --amber-bg: #372B14;
@@ -408,7 +408,8 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .fim b { color: var(--green); font-weight: 600; font-size: 13px; display: block; white-space: nowrap; }
 .fim small { color: var(--mute); font-size: 12px; }
 .vazio { padding: 54px 20px; text-align: center; color: var(--mute); }
-.vazio svg { width: 40px; height: 40px; color: var(--brand-100); margin-bottom: 8px; stroke-width: 1.4; }
+.vazio > svg { width: 40px; height: 40px; color: color-mix(in srgb, var(--brand) 35%, transparent); margin-bottom: 8px; stroke-width: 1.4; }
+.vazio .btn svg { width: 18px; height: 18px; margin: 0; }
 .vazio b { display: block; color: var(--ink-2); font-size: 15px; margin-bottom: 4px; }
 .carregando { padding: 60px; display: grid; place-items: center; }
 
@@ -1751,3 +1752,24 @@ button.fx-b:hover { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0, 0, 0, .
   .mat-op { margin: 12px 12px 0; }
   .mat-op-h .r { margin-left: 0; }
 }
+
+/* nome no rodapé da barra lateral leva para Conta e dados */
+.side .user .user-l { min-width: 0; flex: 1; color: inherit; text-decoration: none; border-radius: 8px; }
+.side .user .user-l:hover .nm { color: var(--brand); }
+
+/* revisão visual: janelas no celular, abas, filtros, rótulos e a página do produto */
+.modal { min-width: 0; }
+@media (max-width: 640px) {
+  .modal-f { flex-wrap: wrap; }
+  .modal-f .btn { flex: 1 1 auto; }
+  .toolbar .busca { flex-basis: 100%; }
+  .toolbar select.inp { flex: 1 1 45%; }
+}
+a.chip { text-decoration: none; }
+.pf > span, .et-info small, .et-det small, .info small { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.prod-ref { border: 0; background: var(--brand-50); }
+.prod-mat .fs-h { background: var(--surface-2); }
+.prod-mat .fs-h h3 { font: 700 15px var(--sans); color: var(--ink); }
+input[type=date] { color: var(--ink); }
+input[type=date]::-webkit-calendar-picker-indicator { opacity: .45; cursor: pointer; }
+:root[data-theme="dark"] input[type=date]::-webkit-calendar-picker-indicator { filter: invert(1); }
