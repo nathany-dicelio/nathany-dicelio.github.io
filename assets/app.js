@@ -3210,7 +3210,7 @@ function paginaMedicao(pc, modo = 'medicao') {
           <label class="fld"><span>Instrução de montagem</span><textarea data-mc="inst_montagem" rows="2" placeholder="Como montar a peça">${esc(M.inst_montagem || '')}</textarea></label>
         </div>
       </div>`}
-      <div class="md-cab">${campo('Engenharia', 'eng', 'list="dl-pes-md"')}${campo('Modelagem', 'mod', 'list="dl-pes-md"')}</div>
+      <div class="md-cab">${[['Engenharia', 'eng'], ['Modelagem', 'mod']].map(([rot, k]) => `<label class="fld"><span>${rot}</span>${pesWrap(`<input data-mc="${k}" value="${esc(M[k] || '')}" list="dl-pes-md" autocomplete="off">`, M[k] || '')}</label>`).join('')}</div>
       <div class="md-pe"><span class="small muted" id="md-pe">${M.em ? `Salva em ${fQuando(M.em)}${M.por ? ` por ${esc(M.por)}` : ''}` : ''}</span>
         ${D.length > 1 ? `<button type="button" class="link-btn danger" id="md-del">${ic('trash')}Apagar esta medição</button>` : ''}</div>
     </div>
@@ -4315,11 +4315,13 @@ function completarComMaterial(E, k) {
 const STATUS_PROD = ['Desenvolvimento', 'Pós-Feira', 'Aguardando aprovação', 'Aprovado', 'Vendido', 'Em produção', 'Entregue', 'Cancelado'];
 // "por": quem cuida do produto (Responsável) ou quem pediu o primeiro desenho
 function porDoProduto(pc) {
-  const t = ((fichaDe(pc.id) || {}).tecnica) || {};
-  if (t.resp) return t.resp;
   const p = S.db.pedidos.filter(x => x.peca_id === pc.id).sort((a, b) => new Date(a.pedido_em) - new Date(b.pedido_em))[0];
-  return p ? ((pessoa(p.de_id) || {}).nome || '') : '';
+  const de = p ? ((pessoa(p.de_id) || {}).nome || '') : '';
+  return de || (((fichaDe(pc.id) || {}).tecnica) || {}).resp || '';
 }
+// campo de pessoa: o nome aparece no círculo com a cor do cadastro; ao clicar vira o campo com a lista de pessoas
+const pesWrap = (input, v) => `<span class="pes-f${v ? ' tem' : ''}">${input}<span class="pes-chip">${v ? chipPor(v) : ''}</span></span>`;
+const dlPessoas = id => `<datalist id="${id}">${pessoasOrd().filter(p => p.ativo !== false).map(p => `<option value="${esc(p.nome)}">`).join('')}</datalist>`;
 // chip da pessoa: a cor do cadastro (pelo nome todo ou só o primeiro nome); quem não está cadastrado ganha uma cor fixa
 function chipPor(por) {
   const n = norm(por), pri = n.split(' ')[0];
@@ -4362,14 +4364,14 @@ function viewProduto(arg) {
     lista.forEach(pc => { const d = inData(pc.criado_em); porDia[d] = (porDia[d] || 0) + 1; });
     let ultimo = '';
     const temSt = lista.some(pc => (((fichaDe(pc.id) || {}).tecnica) || {}).status), nCol = temSt ? 6 : 5;
-    $('#pl').innerHTML = `<table class="tbl tbl-ped tbl-prod"><thead><tr><th>Criado</th><th>Referência</th><th>Por</th>${temSt ? '<th>Status</th>' : ''}<th>Etapa</th><th></th></tr></thead><tbody>${lista.slice(0, f.lim).map(pc => {
+    $('#pl').innerHTML = `<table class="tbl tbl-ped tbl-prod"><thead><tr><th>Criado</th><th>Referência</th><th>De</th>${temSt ? '<th>Status</th>' : ''}<th>Etapa</th><th></th></tr></thead><tbody>${lista.slice(0, f.lim).map(pc => {
       const d = inData(pc.criado_em), d0 = new Date(pc.criado_em), t = ((fichaDe(pc.id) || {}).tecnica) || {}, ops = opsDaPeca(pc), sf = situacaoFluxo(pc), por = porDoProduto(pc);
       const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="${nCol}"><b>${fDia(pc.criado_em)}</b><span>${DIAS[d0.getDay()]}${mesmoDia(d0, new Date()) ? ' · hoje' : ''}</span>${porDia[d] > 1 ? `<span class="dia-n">${plural(porDia[d], 'produto')}</span>` : ''}</td></tr>` : '';
       ultimo = d;
       return `${sep}<tr class="lin-prod" data-href="#/produto/${pc.id}">
         <td class="quando"><b>${fDia(pc.criado_em)}</b><small>${fHora(pc.criado_em)}</small></td>
         <td class="c-ref"><div class="ref-cel">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${ops.length ? `<span>OP ${esc(ops.join(', '))}</span>` : ''}</small>${pc.descricao ? `<small class="desc">${esc(pc.descricao)}</small>` : ''}</div></div></td>
-        <td data-l="Por">${por ? chipPor(por) : '<span class="pchip nada">—</span>'}</td>
+        <td data-l="De">${por ? chipPor(por) : '<span class="pchip nada">—</span>'}</td>
         ${temSt ? `<td data-l="Status">${t.status ? `<span class="tag ${t.status === 'Cancelado' ? 'gray' : t.status === 'Vendido' || t.status === 'Entregue' ? 'green' : 'brand'} sem">${esc(t.status)}</span>` : '<span class="muted">—</span>'}</td>` : ''}
         <td class="small" data-l="Etapa">${sf.atual ? esc(nomeFluxo(sf.atual)) : sf.fl ? '<span class="c-green">Concluído</span>' : '<span class="muted">—</span>'}</td>
         <td class="x">${ic('chevR')}</td></tr>`;
@@ -4399,13 +4401,13 @@ function formNovoProduto() {
       <div class="grid3">
         <label class="fld"><span>Status</span><select name="status">${opcoes(STATUS_PROD.map(s => [s, s]), 'Desenvolvimento')}</select></label>
         <label class="fld"><span>Coleção</span><input name="colecao" placeholder="Ex.: Inverno 27"></label>
-        <label class="fld"><span>Responsável</span><input name="resp" placeholder="Nome da pessoa"></label>
-        <label class="fld"><span>Modelista</span><input name="modelista" placeholder="Nome da modelista"></label>
-        <label class="fld"><span>Piloteira</span><input name="piloteira" placeholder="Nome da piloteira"></label>
+        <label class="fld"><span>Responsável</span>${pesWrap('<input name="resp" placeholder="Nome da pessoa" list="dl-pes-np" autocomplete="off">', '')}</label>
+        <label class="fld"><span>Modelista</span>${pesWrap('<input name="modelista" placeholder="Nome da modelista" list="dl-pes-np" autocomplete="off">', '')}</label>
+        <label class="fld"><span>Piloteira</span>${pesWrap('<input name="piloteira" placeholder="Nome da piloteira" list="dl-pes-np" autocomplete="off">', '')}</label>
       </div>
       <div class="fld"><span class="lbl">Fotos e PDFs <span class="hint">· você também poderá adicionar mais depois</span></span><div class="fotos-edit" id="fnp-arqs"></div></div>
       <div class="aviso">${ic('info')}<span>Depois de criar, a página completa do produto será aberta para preencher grade, datas, materiais e as outras informações.</span></div>
-    </form>`,
+    </form>${dlPessoas('dl-pes-np')}`,
     rodape: `<button type="button" class="btn" data-cancelar>Cancelar</button><button type="submit" form="fnp" class="btn primary">${ic('plus')}Criar produto</button>`,
     aoAbrir: m => {
       const form = m.$('#fnp');
@@ -4491,6 +4493,7 @@ function paginaProduto(pc) {
   setPage(`Produto · ${pc.ref}`, [cliente(pc.cliente_id) && cliente(pc.cliente_id).nome, pc.descricao].filter(Boolean).join(' · '));
   const campo = (rot, html, cls = '') => `<label class="pf ${cls}"><span>${rot}</span>${html}</label>`;
   const inK = (key, extra = '') => `<input data-k="${key}" value="${esc(getPath(E.F, key) ?? '')}" autocomplete="off" ${extra}>`;
+  const inPes = key => pesWrap(inK(key, 'list="dl-pes-prod" placeholder="Escolher"'), getPath(E.F, key) ?? '');
   const inP = (c, extra = '') => `<input data-peca="${c}" value="${esc(pc[c] ?? '')}" autocomplete="off" ${extra}>`;
   view().innerHTML = `<div id="prod-root"><div class="folha-barra no-print">
       <a class="link-btn" href="#/produto">${ic('chevL')}Outro produto</a>
@@ -4516,15 +4519,15 @@ function paginaProduto(pc) {
         <div class="prod-grid">
           ${campo('Status', `<select data-k="tecnica.status">${opcoes(STATUS_PROD.map(s => [s, s]), t.status || '', '—')}</select>`)}
           ${campo('OP', inP('op', `inputmode="numeric" placeholder="${esc(ops.join(', '))}"`))}
-          ${campo('Responsável', inK('tecnica.resp'))}
-          ${campo('Modelista', inK('tecnica.modelista'))}
-          ${campo('Piloteira', inK('tecnica.piloteira'))}
+          ${campo('Responsável', inPes('tecnica.resp'))}
+          ${campo('Modelista', inPes('tecnica.modelista'))}
+          ${campo('Piloteira', inPes('tecnica.piloteira'))}
           ${campo('Cliente', `<select data-peca="cliente_id">${opClientes(pc.cliente_id || '', '—')}</select>`)}
-          ${campo('Comprador', inK('tecnica.compradora'))}
+          ${campo('Comprador', inPes('tecnica.compradora'))}
           ${campo('Cadastro', `<input value="${esc(fData(cadastroProduto(pc)))}" disabled title="Dia em que o produto foi criado">`)}
           ${campo('Entrega', inK('tecnica.data_entrega', 'type="date"'))}
           ${campo('Código 2', inK('tecnica.codigo2'))}
-        </div>
+        </div>${dlPessoas('dl-pes-prod')}
       </div>
     </div>
     <div class="card prod-card">
@@ -4598,7 +4601,8 @@ function paginaProduto(pc) {
   $('#prod-print').onclick = async () => { await montarFolha(); window.print(); };
   $('#prod-pdf').onclick = async () => { await montarFolha(); baixarPdfFolha('#prod-folha', `produto-${nomeSeguro(pc.ref)}`, '#prod-pdf'); };
 }
-const cadastroProduto = pc => (fichaDe(pc.id) || {}).criado_em || pc.criado_em;
+// o mais antigo entre a peça e a ficha: a ficha nasce na primeira edição e não pode mudar o dia do cadastro
+const cadastroProduto = pc => [(fichaDe(pc.id) || {}).criado_em, pc.criado_em].filter(Boolean).sort((a, b) => new Date(a) - new Date(b))[0];
 // folha A4 do produto: o topo, as informações e os materiais
 function folhaProdutoHtml(pc, E) {
   const t = E.F.tecnica || {}, k = E.F.consumo || {}, cli = cliente(pc.cliente_id), ops = opsDaPeca(pc);
@@ -5000,7 +5004,7 @@ function folhaTecnicaHtml(E) {
   return `<div class="pg1">${tituloFolha(E, 'Ficha técnica do produto')}
   <div class="ft-grid">
     ${fcCliente(E).replace('class="fc"', 'class="fc na-faixa"')}${fcPeca(E, 'OP', 'op', 'na-faixa')}${fcPeca(E, 'Descrição', 'descricao', 'span2 na-faixa')}
-    ${fcInput(E, 'Modelista', 'tecnica.modelista')}${fcInput(E, 'Responsável', 'tecnica.resp')}${fcInput(E, 'Compradora', 'tecnica.compradora')}
+    ${fcInput(E, 'Modelista', 'tecnica.modelista', 'list="dl-pes-ft"')}${fcInput(E, 'Responsável', 'tecnica.resp', 'list="dl-pes-ft"')}${fcInput(E, 'Compradora', 'tecnica.compradora', 'list="dl-pes-ft"')}${dlPessoas('dl-pes-ft')}
     <label class="fc"><span>Tamanho base</span><select data-k="tecnica.piloto">${opcoes(grade.map(g => [g, g]), piloto)}</select></label>
     ${fcInput(E, 'Coleção', 'tecnica.colecao')}${fcInput(E, 'Etiqueta', 'tecnica.etiqueta')}${fcInput(E, 'Lacre', 'tecnica.lacre')}
     <label class="fc"><span>Grade</span><input data-grade value="${esc(grade.join(', '))}" placeholder="PP, P, M, G, GG" autocomplete="off"></label>
@@ -5578,6 +5582,8 @@ async function iniciar(sess) {
   S.backupErro = ''; S.backupIndo = backupDiario().catch(e => { S.backupErro = msgErro(e); }).then(() => { S.backupIndo = null; });
   renderShell();
   window.onhashchange = () => { $$('.modal-bg').forEach(b => b.remove()); route(true); };
+  // campo de pessoa: o círculo acompanha o que foi digitado ou escolhido
+  document.addEventListener('input', e => { const w = e.target.closest && e.target.closest('.pes-f'); if (!w) return; const v = e.target.value.trim(); w.classList.toggle('tem', !!v); w.querySelector('.pes-chip').innerHTML = v ? chipPor(v) : ''; }, true);
   // linha do tempo das etapas: o degradê da direita some quando chega ao fim
   document.addEventListener('scroll', e => { const w = e.target; if (w.classList && w.classList.contains('fx-wrap')) w.classList.toggle('no-fim', w.scrollLeft + w.clientWidth >= w.scrollWidth - 4); }, true);
   route(true);

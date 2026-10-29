@@ -1861,3 +1861,12 @@ a.tag { text-decoration: none; }
 .cat-grid > * { min-width: 0; }
 .pc .bd { min-width: 0; }
 .pc .bd .st .tag { max-width: 100%; white-space: normal; height: auto; min-height: 22px; line-height: 1.25; padding-top: 3px; padding-bottom: 3px; }
+
+/* campo de pessoa: mostra o nome no círculo da cor da pessoa; ao clicar, vira o campo com a lista */
+.pes-f { position: relative; display: block; min-width: 0; }
+.pes-f .pes-chip { position: absolute; left: 10px; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; display: none; min-width: 0; }
+.pes-f .pes-chip .pchip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.pes-f.tem:not(:focus-within) .pes-chip { display: flex; }
+.pes-f.tem:not(:focus-within) input { color: transparent; }
+.pes-f input::-webkit-calendar-picker-indicator { opacity: .4; }
+.pf > span.pes-f, .fld > span.pes-f { font-size: 14px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink); margin: 0; padding: 0; }
