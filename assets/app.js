@@ -2483,7 +2483,7 @@ async function mostrarBackups() {
 
 /* ---------- tudo em uma planilha do Excel, uma aba para cada parte do sistema ---------- */
 async function exportarExcel() {
-  await carregarScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+  await carregarScript('assets/vendor/xlsx-0.18.5.full.min.js');
   const cli = id => (cliente(id) || {}).nome || '', pes = id => (pessoa(id) || {}).nome || '';
   const ref = id => (peca(id) || {}).ref || '', refCli = id => cli((peca(id) || {}).cliente_id);
   const dia = v => (v ? fData(String(v).length === 10 ? dataDe(v) : v) : ''), quando = v => (v ? `${fData(v)} ${fHora(v)}` : '');
@@ -4870,10 +4870,10 @@ function setPath(o, path, val) {
 const _scripts = {};
 // hash de cada biblioteca externa: se o arquivo do CDN mudar, o navegador não carrega
 const SRI = {
-  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js': 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw',
-  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js': 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e',
-  'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js': 'sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H',
-  'https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js': 'sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3',
+  'assets/vendor/xlsx-0.18.5.full.min.js': 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw',
+  'assets/vendor/pdf-3.11.174.min.js': 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e',
+  'assets/vendor/html2canvas-1.4.1.min.js': 'sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H',
+  'assets/vendor/jspdf-4.2.1.umd.min.js': 'sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3',
 };
 const carregarScript = url => _scripts[url] || (_scripts[url] = new Promise((res, rej) => {
   const s = document.createElement('script'); s.src = url; s.onload = res;
@@ -5188,8 +5188,8 @@ window.addEventListener('beforeunload', e => { if (algoSalvando()) { e.preventDe
 /* ---------- relatório de encaixe do Audaces → largura e consumo do tecido ---------- */
 async function textoPdf(file) {
   if (!window.pdfjsLib) {
-    await carregarScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    await carregarScript('assets/vendor/pdf-3.11.174.min.js');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'assets/vendor/pdf.worker-3.11.174.min.js';
   }
   const doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
   let txt = '';
@@ -5443,8 +5443,8 @@ function cssImpressao() {
 async function baixarFichaImagem(E, destino = 'baixar', idBtn = '#f-img') {
   const btn = $(idBtn); ocupado(btn, true, 'Gerando…');
   try {
-    await Promise.all([carregarScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
-      carregarScript('https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js')]);
+    await Promise.all([carregarScript('assets/vendor/html2canvas-1.4.1.min.js'),
+      carregarScript('assets/vendor/jspdf-4.2.1.umd.min.js')]);
     prepararImpressao();
     const folha = $('#folha'), LARG = 733; // largura útil da A4 (194 mm) em px
     $$('img', folha).forEach(i => { i.loading = 'eager'; });
@@ -5490,8 +5490,8 @@ async function baixarFichaImagem(E, destino = 'baixar', idBtn = '#f-img') {
 async function baixarPdfFolha(sel, nome, idBtn) {
   const btn = $(idBtn); ocupado(btn, true, 'Gerando…');
   try {
-    await Promise.all([carregarScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
-      carregarScript('https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js')]);
+    await Promise.all([carregarScript('assets/vendor/html2canvas-1.4.1.min.js'),
+      carregarScript('assets/vendor/jspdf-4.2.1.umd.min.js')]);
     const LARG = 733;
     const canvas = await window.html2canvas($(sel), {
       useCORS: true, scale: ehIOS() ? 2.5 : 3, backgroundColor: '#ffffff', logging: false, windowWidth: 1280,
