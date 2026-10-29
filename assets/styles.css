@@ -1822,7 +1822,9 @@ a.tag { text-decoration: none; }
 :root[data-theme="dark"] { --brand: #C04A63; }
 .fx-b.pular { color: var(--blue); border-color: var(--blue); }
 .gp-fav { color: var(--mute); }
-.th { color: color-mix(in srgb, var(--brand) 35%, transparent); }
+/* cor fixa: o html2canvas do "Baixar PDF" não entende color-mix() e a miniatura entra nas folhas */
+.th { color: #D9A9B4; }
+:root[data-theme="dark"] .th { color: #7A4452; }
 /* início */
 .bars .seg.z { height: 2px !important; background: var(--line); }
 @media (max-width: 1400px) { .hoje.compacto .batidas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
