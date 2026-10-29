@@ -4312,6 +4312,8 @@ function completarComMaterial(E, k) {
 /* ================================================================
    PRODUTO — tudo de uma referência numa página
    ================================================================ */
+// peça piloto: os tamanhos da grade e, depois, as letras e a numeração de sempre
+const TAM_PILOTO = ['PP', 'P', 'M', 'G', 'GG', '34', '36', '38', '40', '42', '44', '46', '48'];
 const STATUS_PROD = ['Desenvolvimento', 'Pós-Feira', 'Aguardando aprovação', 'Aprovado', 'Vendido', 'Em produção', 'Entregue', 'Cancelado'];
 // "por": quem cuida do produto (Responsável) ou quem pediu o primeiro desenho
 function porDoProduto(pc) {
@@ -4537,13 +4539,13 @@ function paginaProduto(pc) {
         ${campo('Marca / etiqueta', inK('tecnica.etiqueta'))}
         ${campo('Sala', selSala(pc.sala || '').replace('data-sala>', 'data-sala data-peca="sala">'))}
         ${campo('Preço', inK('tecnica.preco', 'inputmode="decimal" placeholder="R$"'))}
-        ${campo('Peça piloto (tamanho)', `<select data-k="tecnica.piloto">${opcoes(grade.map(g => [g, g]), grade.includes(t.piloto) ? t.piloto : '', '—')}</select>`)}
+        ${campo('Peça piloto (tamanho)', `<select data-k="tecnica.piloto">${opcoes([...new Set([...grade, ...TAM_PILOTO, ...(t.piloto ? [t.piloto] : [])])].map(g => [g, g]), t.piloto || '', '—')}</select>`)}
         ${campo('Grade', `<input data-grade value="${esc(grade.join(', '))}" placeholder="PP, P, M, G, GG" autocomplete="off">`)}
         ${campo('Quantidade', inK('tecnica.quantidade', 'inputmode="numeric"'))}
         ${campo('Coleção', inK('tecnica.colecao'))}
         ${campo('Aprovado dia', inK('tecnica.mod_aprovada', 'type="date"'))}
         ${campo('Data de envio', inK('tecnica.data_envio', 'type="date"'))}
-        ${campo('Cor do produto', inK('consumo.cor'))}
+        ${campo('Cor do produto', `${inK('consumo.cor', 'list="dl-cor-prod" placeholder="Código da cor"')}<datalist id="dl-cor-prod"></datalist>`)}
         ${campo('Pedido', inK('tecnica.pedido'))}
         ${campo('Lacre', inK('tecnica.lacre'))}
         ${campo('Obs.', `<textarea data-k="tecnica.obs_produto" rows="2">${esc(t.obs_produto || '')}</textarea>`, 'span4')}
@@ -5008,7 +5010,7 @@ function folhaTecnicaHtml(E) {
     <label class="fc"><span>Tamanho base</span><select data-k="tecnica.piloto">${opcoes(grade.map(g => [g, g]), piloto)}</select></label>
     ${fcInput(E, 'Coleção', 'tecnica.colecao')}${fcInput(E, 'Etiqueta', 'tecnica.etiqueta')}${fcInput(E, 'Lacre', 'tecnica.lacre')}
     <label class="fc"><span>Grade</span><input data-grade value="${esc(grade.join(', '))}" placeholder="PP, P, M, G, GG" autocomplete="off"></label>
-    ${fcInput(E, 'Pedido', 'tecnica.pedido')}${fcInput(E, 'Código', 'tecnica.codigo2')}${fcInput(E, 'Cor', 'consumo.cor')}${fcInput(E, 'Mod. aprovada', 'tecnica.mod_aprovada', 'type="date"')}
+    ${fcInput(E, 'Pedido', 'tecnica.pedido')}${fcInput(E, 'Código', 'tecnica.codigo2')}${fcInput(E, 'Cor', 'consumo.cor', 'list="dl-cor-ft"')}<datalist id="dl-cor-ft"></datalist>${fcInput(E, 'Mod. aprovada', 'tecnica.mod_aprovada', 'type="date"')}
   </div>
   <section class="fs fs-des">
     <div class="fs-h"><h3>Desenho técnico</h3><div class="r no-print"><button type="button" class="btn sm" data-escolher>${ic('image')}Escolher imagens</button></div></div>
@@ -5111,7 +5113,7 @@ function folhaConsumoHtml(E) {
   return `${tituloFolha(E, 'Ficha de consumo')}
   <div class="ft-grid">
     ${fcCliente(E).replace('class="fc"', 'class="fc na-faixa"')}${fcPeca(E, 'OP', 'op', 'na-faixa')}${fcPeca(E, 'Descrição', 'descricao', 'span2 na-faixa')}
-    ${fcInput(E, 'Cor do produto', 'consumo.cor', '', 'span2')}
+    ${fcInput(E, 'Cor do produto', 'consumo.cor', 'list="dl-cor-fc"', 'span2')}<datalist id="dl-cor-fc"></datalist>
     <label class="fc span2"><span>Grade (da ficha técnica)</span><input value="${esc(grade.join(' / '))}" readonly tabindex="-1"></label>
   </div>
   ${secoesMateriaisHtml(E)}`;
@@ -5584,6 +5586,15 @@ async function iniciar(sess) {
   window.onhashchange = () => { $$('.modal-bg').forEach(b => b.remove()); route(true); };
   // campo de pessoa: o círculo acompanha o que foi digitado ou escolhido
   document.addEventListener('input', e => { const w = e.target.closest && e.target.closest('.pes-f'); if (!w) return; const v = e.target.value.trim(); w.classList.toggle('tem', !!v); w.querySelector('.pes-chip').innerHTML = v ? chipPor(v) : ''; }, true);
+  // cor do produto: sugere os códigos de cor já postos nos tecidos, aviamentos e etiquetas da mesma ficha
+  document.addEventListener('focusin', e => {
+    const i = e.target;
+    if (!i.matches || !i.matches('input[data-k="consumo.cor"]') || !i.list) return;
+    const vs = new Set();
+    $$('input[data-k^="consumo."][data-k$=".cor"]').forEach(x => { if (x.dataset.k !== 'consumo.cor' && x.value.trim()) vs.add(x.value.trim()); });
+    $$('datalist[id^="dlc-"] option').forEach(o => { if (o.value) vs.add(o.value); });
+    i.list.innerHTML = [...vs].map(v => `<option value="${esc(v)}">`).join('');
+  }, true);
   // linha do tempo das etapas: o degradê da direita some quando chega ao fim
   document.addEventListener('scroll', e => { const w = e.target; if (w.classList && w.classList.contains('fx-wrap')) w.classList.toggle('no-fim', w.scrollLeft + w.clientWidth >= w.scrollWidth - 4); }, true);
   route(true);
