@@ -4311,7 +4311,7 @@ function completarComMaterial(E, k) {
 /* ================================================================
    PRODUTO — tudo de uma referência numa página
    ================================================================ */
-const STATUS_PROD = ['Desenvolvimento', 'Aguardando aprovação', 'Aprovado', 'Vendido', 'Em produção', 'Entregue', 'Cancelado'];
+const STATUS_PROD = ['Desenvolvimento', 'Pós-Feira', 'Aguardando aprovação', 'Aprovado', 'Vendido', 'Em produção', 'Entregue', 'Cancelado'];
 // "por": quem cuida do produto (Responsável) ou quem pediu o primeiro desenho
 function porDoProduto(pc) {
   const t = ((fichaDe(pc.id) || {}).tecnica) || {};
