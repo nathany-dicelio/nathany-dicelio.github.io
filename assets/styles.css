@@ -1857,3 +1857,7 @@ a.tag { text-decoration: none; }
   .tbl-ped td.full[data-l="Finalizado"] { grid-column: span 2; }
   .topbar h1 { font-size: 22px; }
 }
+/* catálogo no celular: a etiqueta de situação quebra linha em vez de empurrar o card */
+.cat-grid > * { min-width: 0; }
+.pc .bd { min-width: 0; }
+.pc .bd .st .tag { max-width: 100%; white-space: normal; height: auto; min-height: 22px; line-height: 1.25; padding-top: 3px; padding-bottom: 3px; }

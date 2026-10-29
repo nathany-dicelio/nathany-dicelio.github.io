@@ -1909,7 +1909,7 @@ function formPeca(pc) {
       });
       m.$('#del-peca').onclick = async () => {
         const n = S.db.pedidos.filter(p => p.peca_id === pc.id).length;
-        if (!await confirmar(`Excluir a peça <b>${esc(pc.ref)}</b>${n ? `, os ${plural(n, 'pedido')} dela` : ''} e todas as fotos? Isso não pode ser desfeito.`)) return;
+        if (!await confirmar(`Excluir a peça <b>${esc(pc.ref)}</b>${n ? (n > 1 ? `, os ${plural(n, 'pedido')} dela` : ', o pedido dela') : ''} e todas as fotos? Isso não pode ser desfeito.`)) return;
         try {
           await excluirReg('pecas', pc.id);
           apagarArquivosPeca(pc).catch(() => {});
