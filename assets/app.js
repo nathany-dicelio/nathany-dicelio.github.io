@@ -694,7 +694,7 @@ const thumb = (path, cls = 'th', extra = '') => `<div class="${cls}"${path ? ` d
 const corOk = c => (/^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '#8E8287');
 function pchip(id) {
   const p = pessoa(id);
-  return p ? `<span class="pchip" style="--c:${esc(corOk(p.cor))}">${esc(p.nome)}</span>` : '<span class="muted">—</span>';
+  return p ? `<span class="pchip" style="--c:${esc(corOk(p.cor))}">${esc(p.nome)}</span>` : '<span class="pchip nada">—</span>';
 }
 function cbadge(id) {
   const c = cliente(id);
@@ -1180,11 +1180,11 @@ function viewInicio() {
       <div>
         <div class="card hoje compacto">${htmlHoje()}<a class="hoje-pe" href="#/ponto">${ic('clock')}<span>Banco de horas <b class="${classeSaldo(resumoPonto().banco)}">${fmtSaldo(resumoPonto().banco)}</b></span><span class="link-btn">Meu ponto ${ic('chevR')}</span></a></div>
         <div class="card">
-          <div class="card-h"><h3>Em andamento</h3><div class="r"><span class="tag gray sem">${andamento.length ? peds.filter(p => !p.finalizado_em).length : 0}</span></div></div>
+          <div class="card-h"><h3>Em andamento</h3><div class="r"><span class="tag gray sem xs">${andamento.length ? peds.filter(p => !p.finalizado_em).length : 0}</span></div></div>
           <div class="card-b" style="padding-top:6px"><div class="lista">${andamento.length ? andamento.map(p => {
             const pc = peca(p.peca_id) || {}; const tot = ETAPAS[p.tipo].length; const n = ETAPAS[p.tipo].filter(([k]) => (p.etapas || {})[k]).length;
             return `<a class="it" href="#/peca/${pc.id}"><div class="datebox"><b>${new Date(p.pedido_em).getDate()}</b><small>${MESES[new Date(p.pedido_em).getMonth()]}</small></div>
-              <div class="t"><b>${esc(pc.ref || '—')} <span class="tag ${p.tipo === 'desenho' ? 'brand' : 'amber'} sem" style="height:20px;font-size:11px;margin-left:4px">${TIPO[p.tipo].nome}</span></b><small>${n} de ${tot} etapas${p.para_id ? ' · para ' + esc((pessoa(p.para_id) || {}).nome || '') : ''}</small></div>
+              <div class="t"><b>${esc(pc.ref || '—')} <span class="tag ${p.tipo === 'desenho' ? 'brand' : 'amber'} sem xs" style="margin-left:4px">${TIPO[p.tipo].nome}</span></b><small>${n} de ${tot} etapas${p.para_id ? ' · para ' + esc((pessoa(p.para_id) || {}).nome || '') : ''}</small></div>
               <div class="prog"><i style="width:${n / tot * 100}%"></i></div></a>`;
           }).join('') : vazio('check', 'Tudo em dia', 'Nenhum desenho ou consumo pendente.')}</div></div>
         </div>
@@ -1303,9 +1303,9 @@ function linhaPedido(p) {
       const ped = cons && arqsDoPedido(p).some(x => !ehPdf(x)) ? ` data-ped="${p.id}"` : '';
       return cp ? `<button type="button" class="th zoom" data-acao="fotos" data-id="${pc.id}"${cons ? ' data-cons="1"' : ''}${ped} data-foto="${esc(cp)}" title="Ver arquivos">${ic('dress')}</button>` : thumb(null);
     })()}
-      <div style="min-width:0"><a href="#/peca/${pc.id}">${esc(pc.ref || '—')}</a><div class="meta">${cbadge(pc.cliente_id)}${op ? `<span>OP ${esc(op)}</span>` : ''}${p.tipo === 'consumo' && pc.sala ? `<span class="sala">${esc(pc.sala)}</span>` : ''}${(p.tipo === 'consumo' ? pdfsCons(pc) : pdfs(pc)).length ? `<span class="tag brand sem" style="height:18px;font-size:10.5px">PDF</span>` : ''}</div>
-      ${pc.descricao ? `<div class="small" style="color:var(--ink);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(pc.descricao)}">${esc(pc.descricao)}</div>` : ''}
-      ${p.obs ? `<div class="small" style="color:var(--ink-2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px" title="${esc(p.obs)}">${ic('note', 'i obs-ic')} ${esc(p.obs)}</div>` : ''}
+      <div style="min-width:0"><a href="#/peca/${pc.id}">${esc(pc.ref || '—')}</a><div class="meta">${cbadge(pc.cliente_id)}${op ? `<span>OP ${esc(op)}</span>` : ''}${p.tipo === 'consumo' && pc.sala ? `<span class="sala">${esc(pc.sala)}</span>` : ''}${(p.tipo === 'consumo' ? pdfsCons(pc) : pdfs(pc)).length ? `<span class="tag brand sem xs">PDF</span>` : ''}</div>
+      ${pc.descricao ? `<div class="small ped-txt" style="color:var(--ink)" title="${esc(pc.descricao)}">${esc(pc.descricao)}</div>` : ''}
+      ${p.obs ? `<div class="small ped-txt" style="color:var(--ink-2)" title="${esc(p.obs)}">${ic('note', 'i obs-ic')} ${esc(p.obs)}</div>` : ''}
       ${avisosDe(p).length ? `<div class="avisos-tags">${avisosDe(p).map(a => `<span class="tag red sem">${esc(a)}</span>`).join('')}</div>` : ''}</div></div></td>
     <td data-l="De">${pchip(p.de_id)}</td>
     <td data-l="Para">${pchip(p.para_id)}</td>
@@ -1578,7 +1578,7 @@ function viewFazer() {
       const st = estadoPrazo(t), pc = peca(t.peca_id);
       return `<tr>
         <td data-l="Pedido"><div class="when"><b>${fDia(t.pedido_em)}</b><small>${fHora(t.pedido_em)}</small></div></td>
-        <td class="c-ref"><div class="tarefa-txt">${esc(t.tarefa)}${pc ? ` <a href="#/peca/${pc.id}" class="tag brand sem" style="text-decoration:none;height:20px;font-size:11px">${esc(pc.ref)}</a>` : ''}${t.obs ? `<small>${esc(t.obs)}</small>` : ''}</div></td>
+        <td class="c-ref"><div class="tarefa-txt">${esc(t.tarefa)}${pc ? ` <a href="#/peca/${pc.id}" class="tag brand sem xs">${esc(pc.ref)}</a>` : ''}${t.obs ? `<small>${esc(t.obs)}</small>` : ''}</div></td>
         <td data-l="Por">${pchip(t.por_id)}</td>
         <td data-l="Prazo">${t.entregue_em ? (t.prazo ? `<span class="muted small">${fQuando(t.prazo)}</span>` : '<span class="muted">—</span>') : `<span class="tag ${st.cor}">${esc(st.texto)}</span>`}</td>
         <td class="full" data-l="Entrega">${t.entregue_em ? `<div class="entregue"><b>${fQuando(t.entregue_em)}</b>${t.entregue_para_id ? `<span>para ${pchip(t.entregue_para_id)}</span>` : ''}</div>`
@@ -1762,7 +1762,7 @@ function viewPeca(id) {
   if (!pc) { setPage('Peça não encontrada'); view().innerHTML = `<div class="card">${vazio('dress', 'Essa peça não existe mais', '', '<a class="btn" href="#/catalogo">Voltar ao catálogo</a>')}</div>`; return; }
   const c = cliente(pc.cliente_id), ops = opsDaPeca(pc), st = statusPeca(pc.id);
   setPage(pc.ref, [c ? c.nome : 'Sem cliente', ops.length ? `OP ${ops.join(', ')}` : ''].filter(Boolean).join(' · '),
-    `<button class="btn" data-novo="consumo" data-peca="${pc.id}">${ic('scissors')}<span class="tx">Consumo</span></button><button class="btn primary" data-novo="desenho" data-peca="${pc.id}" style="margin-left:8px">${ic('plus')}<span class="tx">Desenho</span></button>`);
+    `<button class="btn" data-novo="consumo" data-peca="${pc.id}">${ic('scissors')}<span class="tx">Consumo</span></button><button class="btn primary" data-novo="desenho" data-peca="${pc.id}">${ic('plus')}<span class="tx">Desenho</span></button>`);
   const fotos = imagens(pc), docs = pdfs(pc);
   let sel = 0;
   const peds = S.db.pedidos.filter(p => p.peca_id === pc.id).map(p => ({ k: 'p', d: p.pedido_em, p }));
@@ -1860,7 +1860,7 @@ function itemHistTarefa(t) {
   const st = estadoPrazo(t);
   return `<div class="tl"><div class="pt${t.entregue_em ? ' ok' : ''}">${ic(t.entregue_em ? 'check' : 'list')}</div><div class="bx">
     <div class="hd"><b>${esc(t.tarefa)}</b>${pchip(t.por_id)}<span style="margin-left:auto;display:flex"><button class="icon-btn" data-acao="editar-tarefa" data-id="${t.id}" title="Editar">${ic('edit')}</button></span></div>
-    <div class="ds">Tarefa pedida ${fQuando(t.pedido_em)} · <span class="tag ${st.cor}" style="height:20px;font-size:11px">${esc(st.texto)}</span>${t.entregue_para_id ? ` para ${esc((pessoa(t.entregue_para_id) || {}).nome || '')}` : ''}</div></div></div>`;
+    <div class="ds">Tarefa pedida ${fQuando(t.pedido_em)} · <span class="tag ${st.cor} xs">${esc(st.texto)}</span>${t.entregue_para_id ? ` para ${esc((pessoa(t.entregue_para_id) || {}).nome || '')}` : ''}</div></div></div>`;
 }
 function formPeca(pc) {
   let fotos;
@@ -2365,7 +2365,7 @@ function viewAjustes() {
         <div class="dupla"><input class="inp" value="${esc(c.nome)}" data-campo="nome" maxlength="40"><input class="inp" value="${esc(c.sigla || '')}" data-campo="sigla" placeholder="Sigla" maxlength="8"></div>
         <button class="icon-btn danger" data-del title="Excluir">${ic('trash')}</button>
       </div>`).join('')}
-        <form class="aj-row" id="add-cli" style="border-top:1px dashed var(--line)"><input type="color" name="cor" value="${CORES[(cls.length + 3) % CORES.length]}"><div class="dupla"><input class="inp" name="nome" placeholder="Novo cliente" maxlength="40"><input class="inp" name="sigla" placeholder="Sigla" maxlength="8"></div><button class="btn sm primary" type="submit">${ic('plus')}</button></form>
+        <form class="aj-row" id="add-cli" style="border-top:1px dashed var(--line)"><input type="color" name="cor" value="${CORES[(cls.length + 3) % CORES.length]}"><div class="dupla"><input class="inp" name="nome" placeholder="Novo cliente" maxlength="40"><input class="inp" name="sigla" placeholder="Sigla" maxlength="8"></div><button class="btn sm primary" type="submit">${ic('plus')}Adicionar</button></form>
       </div></div>
   </div>`;
   const ligarLista = (box, tab, uso) => {
@@ -2715,7 +2715,7 @@ function viewPonto() {
   const f = S.f.ponto || (S.f.ponto = { ano: n.getFullYear(), mes: n.getMonth() });
   const R = resumoPonto();
   setPage('Meu ponto', 'Seus horários e o banco de horas',
-    `<button class="btn" id="jornada">${ic('sliders')}<span class="tx">Minha jornada</span></button><button class="btn primary" id="assinar" style="margin-left:8px">${ic('check')}<span class="tx">Assinar ponto</span></button>`);
+    `<button class="btn" id="jornada">${ic('sliders')}<span class="tx">Minha jornada</span></button><button class="btn primary" id="assinar">${ic('check')}<span class="tx">Assinar ponto</span></button>`);
 
   const hoje = hojeStr();
   const ult = new Date(f.ano, f.mes + 1, 0).getDate();
@@ -2736,7 +2736,7 @@ function viewPonto() {
     }
     linhas.push(linhaPonto(dia, r, c, hoje));
   }
-  const mesNome = `${capital(MESES_LONGO[f.mes])} ${f.ano}`;
+  const mesNome = `${capital(MESES_LONGO[f.mes])} de ${f.ano}`;
   const ehAtual = f.ano === n.getFullYear() && f.mes === n.getMonth();
   const grupos = [];
   [1, 2, 3, 4, 5, 6, 0].forEach(d => {
@@ -2758,7 +2758,7 @@ function viewPonto() {
     </div>
     <div class="card">
       <div class="card-h ponto-h">
-        <div class="mes-nav"><button class="icon-btn" data-mes="-1" aria-label="Mês anterior">${ic('chevL')}</button><b>${mesNome}</b><button class="icon-btn" data-mes="1" aria-label="Próximo mês"${ehAtual ? ' disabled' : ''}>${ic('chevR')}</button>${ehAtual ? '' : '<button class="chip" data-mes="0">Mês atual</button>'}</div>
+        <div class="mes-nav"><button class="icon-btn" data-mes="-1" aria-label="Mês anterior">${ic('chevL')}</button><b>${mesNome}</b><button class="icon-btn" data-mes="1" aria-label="Próximo mês"${ehAtual ? ' disabled' : ''}>${ic('chevR')}</button>${ehAtual ? '' : '<button type="button" class="btn sm" data-mes="0">Hoje</button>'}</div>
         <div class="r"><span class="muted small">Saldo do mês</span>${saldoChip(somaMes)}${atrasosMes ? `<span class="tag red">${plural(atrasosMes, 'atraso')} · ${fmtDur(minAtrasoMes)}</span>` : ''}
           <button class="btn sm" id="csv" title="Baixar o mês em planilha (abre no Excel)">${ic('download')}<span class="tx">Planilha</span></button></div>
       </div>
@@ -3203,7 +3203,7 @@ function paginaMedicao(pc, modo = 'medicao') {
         <span class="small muted">${pts.length ? `Digite o código do POM e a descrição vem do guia da ${esc((cliente(pc.cliente_id) || {}).nome || '')}.` : ''}</span></div>
       ${ME ? `<label class="fld"><span>Anotações da medição</span><textarea data-mc="obs_med" rows="3" placeholder="Anotações da medição">${esc(M.obs_med || '')}</textarea></label>` : `<div class="md-obs">
         <div class="fld"><span class="lbl">Observações engenharia</span>
-          <div class="pick">${ST_ENG.filter(([k]) => k).map(([k, l]) => `<label><input type="radio" name="md-st" value="${k}"${M.status === k ? ' checked' : ''}><span class="pk" style="--c:${k === 'sem' ? '#17925A' : k === 'com' ? '#C98A06' : '#C93545'}">${l}</span></label>`).join('')}</div>
+          <div class="pick">${ST_ENG.filter(([k]) => k).map(([k, l]) => `<label><input type="radio" name="md-st" value="${k}"${M.status === k ? ' checked' : ''}><span class="pk" style="--c:${k === 'sem' ? 'var(--green)' : k === 'com' ? 'var(--amber)' : 'var(--red)'}">${l}</span></label>`).join('')}</div>
           <textarea data-mc="obs_eng" rows="2" placeholder="Anotações da engenharia">${esc(M.obs_eng || '')}</textarea></div>
         <div class="md-dir">
           <label class="fld"><span>Observações modelagem</span><textarea data-mc="obs_mod" rows="2" placeholder="Anotações da modelagem">${esc(M.obs_mod || '')}</textarea></label>
@@ -4129,8 +4129,8 @@ function viewMateriais(arg) {
   setPage('Materiais', 'Tecidos, aviamentos e etiquetas com a situação do estoque · o que estiver aqui aparece como sugestão na ficha de consumo',
     `<button class="btn primary" id="mat-novo">${ic('plus')}<span class="tx">Novo ${T.nome.toLowerCase()}</span></button>`);
   view().innerHTML = `<div class="card">
-    <div class="chips chips-row mat-abas">${Object.entries(TIPOS_MAT).map(([k, t]) => `<a class="chip${k === tipo ? ' on' : ''}" href="#/materiais/${t.rota}">${t.plural}<span class="n">${matsDo(k).length}</span></a>`).join('')}</div>
     <div class="toolbar"><div class="busca">${ic('search')}<input class="inp" id="mq" placeholder="Buscar ${T.plural.toLowerCase()} por nome, código, fornecedor ou OP…" value="${esc(f.q)}"></div></div>
+    <div class="chips chips-row mat-abas">${Object.entries(TIPOS_MAT).map(([k, t]) => `<a class="chip${k === tipo ? ' on' : ''}" href="#/materiais/${t.rota}">${t.plural}<span class="n">${matsDo(k).length}</span></a>`).join('')}</div>
     <div class="chips chips-row" id="mest"></div>
     ${tipo === 'etiqueta' ? '<div class="chips chips-row" id="mcli"></div>' : ''}
     <div class="tbl-wrap" id="ml"></div>
@@ -4169,7 +4169,7 @@ function viewMateriais(arg) {
     const lista = busca.filter(m => (tipo !== 'etiqueta' || !f.cli || (valMat(m, 'cliente_id') || '-') === f.cli) && (!f.est || sit(m) === f.est))
       .sort((a, b) => nomeCli(a).localeCompare(nomeCli(b), 'pt-BR') || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
     const nOps = m => new Set((usos.get(m.id) || []).map(u => u.op).filter(Boolean)).size;
-    $('#ml').innerHTML = painelOP(q) + (lista.length ? `<table class="tbl mat-tbl"><thead><tr><th class="mat-ft"></th>${T.campos.map(([, l]) => `<th>${l}</th>`).join('')}<th>Situação</th><th>Cores disponíveis</th></tr></thead>
+    $('#ml').innerHTML = painelOP(q) + (lista.length ? `<table class="tbl mat-tbl${lista.some(m => fotosMat(m).length) ? '' : ' sem-ft'}"><thead><tr><th class="mat-ft"></th>${T.campos.map(([, l]) => `<th>${l}</th>`).join('')}<th>Situação</th><th>Cores disponíveis</th></tr></thead>
       <tbody>${lista.map(m => `<tr data-mat="${m.id}"><td class="mat-ft">${fotosMat(m).length
         ? `<button type="button" class="th" data-mat-fotos="${m.id}" data-foto="${esc(fotosMat(m)[0])}" title="Ver fotos">${ic('image')}${fotosMat(m).length > 1 ? `<span class="nf">${fotosMat(m).length}</span>` : ''}</button>`
         : `<div class="th vazio-ft">${ic('image')}</div>`}</td>${T.campos.map(([k, l]) => `<td data-l="${l}"${k === 'nome' ? ' class="mat-nome"' : ''}>${k === 'cliente_id' ? (cbadge(valMat(m, k)) || '<span class="muted">—</span>') : (esc(valMat(m, k)) || '<span class="muted">—</span>')}</td>`).join('')}
@@ -4361,15 +4361,16 @@ function viewProduto(arg) {
     const porDia = {};
     lista.forEach(pc => { const d = inData(pc.criado_em); porDia[d] = (porDia[d] || 0) + 1; });
     let ultimo = '';
-    $('#pl').innerHTML = `<table class="tbl tbl-ped tbl-prod"><thead><tr><th>Criado</th><th>Referência</th><th>Por</th><th>Status</th><th>Etapa</th><th></th></tr></thead><tbody>${lista.slice(0, f.lim).map(pc => {
+    const temSt = lista.some(pc => (((fichaDe(pc.id) || {}).tecnica) || {}).status), nCol = temSt ? 6 : 5;
+    $('#pl').innerHTML = `<table class="tbl tbl-ped tbl-prod"><thead><tr><th>Criado</th><th>Referência</th><th>Por</th>${temSt ? '<th>Status</th>' : ''}<th>Etapa</th><th></th></tr></thead><tbody>${lista.slice(0, f.lim).map(pc => {
       const d = inData(pc.criado_em), d0 = new Date(pc.criado_em), t = ((fichaDe(pc.id) || {}).tecnica) || {}, ops = opsDaPeca(pc), sf = situacaoFluxo(pc), por = porDoProduto(pc);
-      const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="6"><b>${fDia(pc.criado_em)}</b><span>${DIAS[d0.getDay()]}${mesmoDia(d0, new Date()) ? ' · hoje' : ''}</span>${porDia[d] > 1 ? `<span class="dia-n">${plural(porDia[d], 'produto')}</span>` : ''}</td></tr>` : '';
+      const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="${nCol}"><b>${fDia(pc.criado_em)}</b><span>${DIAS[d0.getDay()]}${mesmoDia(d0, new Date()) ? ' · hoje' : ''}</span>${porDia[d] > 1 ? `<span class="dia-n">${plural(porDia[d], 'produto')}</span>` : ''}</td></tr>` : '';
       ultimo = d;
       return `${sep}<tr class="lin-prod" data-href="#/produto/${pc.id}">
         <td class="quando"><b>${fDia(pc.criado_em)}</b><small>${fHora(pc.criado_em)}</small></td>
         <td class="c-ref"><div class="ref-cel">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${ops.length ? `<span>OP ${esc(ops.join(', '))}</span>` : ''}</small>${pc.descricao ? `<small class="desc">${esc(pc.descricao)}</small>` : ''}</div></div></td>
-        <td data-l="Por">${por ? chipPor(por) : '<span class="muted">—</span>'}</td>
-        <td data-l="Status">${t.status ? `<span class="tag ${t.status === 'Cancelado' ? 'gray' : t.status === 'Vendido' || t.status === 'Entregue' ? 'green' : 'brand'} sem">${esc(t.status)}</span>` : '<span class="muted">—</span>'}</td>
+        <td data-l="Por">${por ? chipPor(por) : '<span class="pchip nada">—</span>'}</td>
+        ${temSt ? `<td data-l="Status">${t.status ? `<span class="tag ${t.status === 'Cancelado' ? 'gray' : t.status === 'Vendido' || t.status === 'Entregue' ? 'green' : 'brand'} sem">${esc(t.status)}</span>` : '<span class="muted">—</span>'}</td>` : ''}
         <td class="small" data-l="Etapa">${sf.atual ? esc(nomeFluxo(sf.atual)) : sf.fl ? '<span class="c-green">Concluído</span>' : '<span class="muted">—</span>'}</td>
         <td class="x">${ic('chevR')}</td></tr>`;
     }).join('')}</tbody></table>${lista.length > f.lim ? `<div style="text-align:center;padding:14px"><button class="btn" id="pl-mais">Mostrar mais ${Math.min(150, lista.length - f.lim)}</button></div>` : ''}`;
