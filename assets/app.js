@@ -63,6 +63,7 @@ const ICONS = {
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   alert: '<circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  printer: '<path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
   file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
   chevL: '<path d="m15 18-6-6 6-6"/>',
@@ -1256,7 +1257,7 @@ function viewPedidos(tipo) {
         let ultimo = '';
         return lista.map(p => {
           const d = inData(p.pedido_em), dt0 = new Date(p.pedido_em);
-          const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="${nCols}"><b>${fDia(p.pedido_em)}</b><span>${DIAS[dt0.getDay()]}${mesmoDia(dt0, new Date()) ? ' · hoje' : ''}</span><span class="dia-n">${plural(porDia[d], 'pedido')}</span></td></tr>` : '';
+          const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="${nCols}"><b>${fDia(p.pedido_em)}</b><span>${DIAS[dt0.getDay()]}${mesmoDia(dt0, new Date()) ? ' · hoje' : ''}</span>${porDia[d] > 1 ? `<span class="dia-n">${plural(porDia[d], 'pedido')}</span>` : ''}</td></tr>` : '';
           ultimo = d;
           return sep + linhaPedido(p);
         }).join('');
@@ -3179,7 +3180,7 @@ function paginaMedicao(pc, modo = 'medicao') {
       <div class="r">
         <a class="btn sm" href="#/produto/${pc.id}">${ic('dress')}<span class="tx">Produto</span></a>
         <a class="btn sm" href="#/${ME ? 'engenharia' : 'medicao'}/${pc.id}">${ic('ruler')}<span class="tx">${ME ? 'Engenharia' : 'Medição'}</span></a>
-        <button type="button" class="btn sm" id="md-print">${ic('download')}<span class="tx">Imprimir</span></button>
+        <button type="button" class="btn sm" id="md-print">${ic('printer')}<span class="tx">Imprimir</span></button>
         <button type="button" class="btn sm primary" id="md-pdf">${ic('download')}<span class="tx">Baixar PDF</span></button>
       </div>
     </div>
@@ -4340,7 +4341,7 @@ function viewProduto(arg) {
       <select class="inp" data-f="sala">${opcoes(salasLista().filter(x => S.db.pecas.some(p => p.sala === x)).map(x => [x, x]), f.sala, 'Todas as salas')}</select>
       <select class="inp" data-f="per">${opcoes(PERIODOS, f.per)}</select>
     </div>
-    <div class="small muted" id="pi" style="margin-top:10px"></div>
+    <div class="small muted" id="pi" style="margin:12px 18px 0"></div>
     <div class="tbl-wrap" id="pl" style="margin-top:8px"></div>
   </div>`;
   const desenhar = () => {
@@ -4362,14 +4363,14 @@ function viewProduto(arg) {
     let ultimo = '';
     $('#pl').innerHTML = `<table class="tbl tbl-ped tbl-prod"><thead><tr><th>Criado</th><th>Referência</th><th>Por</th><th>Status</th><th>Etapa</th><th></th></tr></thead><tbody>${lista.slice(0, f.lim).map(pc => {
       const d = inData(pc.criado_em), d0 = new Date(pc.criado_em), t = ((fichaDe(pc.id) || {}).tecnica) || {}, ops = opsDaPeca(pc), sf = situacaoFluxo(pc), por = porDoProduto(pc);
-      const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="6"><b>${fDia(pc.criado_em)}</b><span>${DIAS[d0.getDay()]}${mesmoDia(d0, new Date()) ? ' · hoje' : ''}</span><span class="dia-n">${plural(porDia[d], 'produto')}</span></td></tr>` : '';
+      const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="6"><b>${fDia(pc.criado_em)}</b><span>${DIAS[d0.getDay()]}${mesmoDia(d0, new Date()) ? ' · hoje' : ''}</span>${porDia[d] > 1 ? `<span class="dia-n">${plural(porDia[d], 'produto')}</span>` : ''}</td></tr>` : '';
       ultimo = d;
       return `${sep}<tr class="lin-prod" data-href="#/produto/${pc.id}">
         <td class="quando"><b>${fDia(pc.criado_em)}</b><small>${fHora(pc.criado_em)}</small></td>
-        <td><div class="ref-cel">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${ops.length ? `<span>OP ${esc(ops.join(', '))}</span>` : ''}</small>${pc.descricao ? `<small class="desc">${esc(pc.descricao)}</small>` : ''}</div></div></td>
-        <td>${por ? chipPor(por) : '<span class="muted">—</span>'}</td>
-        <td>${t.status ? `<span class="tag ${t.status === 'Cancelado' ? 'gray' : t.status === 'Vendido' || t.status === 'Entregue' ? 'green' : 'brand'} sem">${esc(t.status)}</span>` : '<span class="muted">—</span>'}</td>
-        <td class="small">${sf.atual ? esc(nomeFluxo(sf.atual)) : sf.fl ? '<span class="c-green">Concluído</span>' : '<span class="muted">—</span>'}</td>
+        <td class="c-ref"><div class="ref-cel">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${ops.length ? `<span>OP ${esc(ops.join(', '))}</span>` : ''}</small>${pc.descricao ? `<small class="desc">${esc(pc.descricao)}</small>` : ''}</div></div></td>
+        <td data-l="Por">${por ? chipPor(por) : '<span class="muted">—</span>'}</td>
+        <td data-l="Status">${t.status ? `<span class="tag ${t.status === 'Cancelado' ? 'gray' : t.status === 'Vendido' || t.status === 'Entregue' ? 'green' : 'brand'} sem">${esc(t.status)}</span>` : '<span class="muted">—</span>'}</td>
+        <td class="small" data-l="Etapa">${sf.atual ? esc(nomeFluxo(sf.atual)) : sf.fl ? '<span class="c-green">Concluído</span>' : '<span class="muted">—</span>'}</td>
         <td class="x">${ic('chevR')}</td></tr>`;
     }).join('')}</tbody></table>${lista.length > f.lim ? `<div style="text-align:center;padding:14px"><button class="btn" id="pl-mais">Mostrar mais ${Math.min(150, lista.length - f.lim)}</button></div>` : ''}`;
     hidratarFotos($('#pl'));
@@ -4497,7 +4498,7 @@ function paginaProduto(pc) {
         <a class="btn sm" href="#/peca/${pc.id}">${ic('dress')}<span class="tx">Peça</span></a>
         <a class="btn sm" href="#/${ehBaila(pc) ? 'etapas-baila' : 'etapas'}/${pc.id}">${ic('flow')}<span class="tx">Etapas</span></a>
         <a class="btn sm" href="#/ficha-tecnica/${pc.id}">${ic('file')}<span class="tx">Ficha técnica</span></a>
-        <button type="button" class="btn sm" id="prod-print">${ic('download')}<span class="tx">Imprimir</span></button>
+        <button type="button" class="btn sm" id="prod-print">${ic('printer')}<span class="tx">Imprimir</span></button>
         <button type="button" class="btn sm primary" id="prod-pdf">${ic('download')}<span class="tx">Baixar PDF</span></button>
       </div>
     </div>
@@ -4935,7 +4936,7 @@ function folhaFicha(tipo, pecaId) {
       <div class="r">
         <a class="btn sm" href="#/peca/${pc.id}">${ic('dress')}<span class="tx">Peça</span></a>
         <button type="button" class="btn sm" id="ir-consumo">${ic('tag')}<span class="tx">Ir para o consumo</span></button>
-        <button type="button" class="btn sm" id="f-print">${ic('download')}<span class="tx">Imprimir / PDF</span></button>
+        <button type="button" class="btn sm" id="f-print">${ic('printer')}<span class="tx">Imprimir / PDF</span></button>
         <button type="button" class="btn sm primary" id="f-img">${ic('download')}<span class="tx">Baixar PDF</span></button>
       </div>
     </div>
@@ -5576,6 +5577,8 @@ async function iniciar(sess) {
   S.backupErro = ''; S.backupIndo = backupDiario().catch(e => { S.backupErro = msgErro(e); }).then(() => { S.backupIndo = null; });
   renderShell();
   window.onhashchange = () => { $$('.modal-bg').forEach(b => b.remove()); route(true); };
+  // linha do tempo das etapas: o degradê da direita some quando chega ao fim
+  document.addEventListener('scroll', e => { const w = e.target; if (w.classList && w.classList.contains('fx-wrap')) w.classList.toggle('no-fim', w.scrollLeft + w.clientWidth >= w.scrollWidth - 4); }, true);
   route(true);
 }
 

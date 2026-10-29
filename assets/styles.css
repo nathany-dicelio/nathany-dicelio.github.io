@@ -1773,3 +1773,29 @@ a.chip { text-decoration: none; }
 input[type=date] { color: var(--ink); }
 input[type=date]::-webkit-calendar-picker-indicator { opacity: .45; cursor: pointer; }
 :root[data-theme="dark"] input[type=date]::-webkit-calendar-picker-indicator { filter: invert(1); }
+
+/* lista de produtos vira cartão no celular */
+@media (max-width: 900px) {
+  .tbl-prod td.quando, .tbl-prod td.x { display: none; }
+  .tbl-prod td.c-ref { grid-column: 1 / -1; }
+  .tbl-prod .ref-cel > div { min-width: 0; }
+  .tbl-prod .ref-cel small.desc { max-width: 100%; }
+  .tbl-prod td[data-l] { min-width: 0; overflow-wrap: anywhere; }
+}
+
+/* etapas: degradê na direita mostra que tem mais etapas; nomes e responsáveis alinhados */
+.fx-wrap { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); }
+.fx-wrap.no-fim { -webkit-mask-image: none; mask-image: none; }
+.fx th { min-width: 110px; }
+.fx thead th { padding-bottom: 30px; }
+.fx th .fx-rp { position: absolute; left: 6px; right: 6px; bottom: 10px; margin: 0 auto; }
+
+/* catálogo no celular: só os filtros que têm peça */
+@media (max-width: 640px) { .chip.sem-itens:not(.on) { display: none; } }
+
+/* medição e engenharia no celular: sem o vão entre os blocos */
+@media (max-width: 760px) {
+  .md-tab .md-gap { display: none; }
+  .md-tab td input.md-desc { min-width: 150px; }
+}
+:root[data-theme="dark"] .btn.primary { box-shadow: none; }
