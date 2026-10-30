@@ -4366,14 +4366,14 @@ function viewProduto(arg) {
     lista.forEach(pc => { const d = inData(pc.criado_em); porDia[d] = (porDia[d] || 0) + 1; });
     let ultimo = '';
     const temSt = lista.some(pc => (((fichaDe(pc.id) || {}).tecnica) || {}).status), nCol = temSt ? 6 : 5;
-    $('#pl').innerHTML = `<table class="tbl tbl-ped tbl-prod"><thead><tr><th>Criado</th><th>Referência</th><th>De</th>${temSt ? '<th>Status</th>' : ''}<th>Etapa</th><th></th></tr></thead><tbody>${lista.slice(0, f.lim).map(pc => {
+    $('#pl').innerHTML = `<table class="tbl tbl-ped tbl-prod"><thead><tr><th>Criado</th><th>Referência</th><th>Criado por</th>${temSt ? '<th>Status</th>' : ''}<th>Etapa</th><th></th></tr></thead><tbody>${lista.slice(0, f.lim).map(pc => {
       const d = inData(pc.criado_em), d0 = new Date(pc.criado_em), t = ((fichaDe(pc.id) || {}).tecnica) || {}, ops = opsDaPeca(pc), sf = situacaoFluxo(pc), por = porDoProduto(pc);
       const sep = d !== ultimo ? `<tr class="dia-sep"><td colspan="${nCol}"><b>${fDia(pc.criado_em)}</b><span>${DIAS[d0.getDay()]}${mesmoDia(d0, new Date()) ? ' · hoje' : ''}</span>${porDia[d] > 1 ? `<span class="dia-n">${plural(porDia[d], 'produto')}</span>` : ''}</td></tr>` : '';
       ultimo = d;
       return `${sep}<tr class="lin-prod" data-href="#/produto/${pc.id}">
         <td class="quando"><b>${fDia(pc.criado_em)}</b><small>${fHora(pc.criado_em)}</small></td>
         <td class="c-ref"><div class="ref-cel">${thumb(capa(pc) || imgsCons(pc)[0])}<div><b>${esc(pc.ref)}</b><small>${cbadge(pc.cliente_id)}${ops.length ? `<span>OP ${esc(ops.join(', '))}</span>` : ''}</small>${pc.descricao ? `<small class="desc">${esc(pc.descricao)}</small>` : ''}</div></div></td>
-        <td data-l="De">${por ? chipPor(por) : '<span class="pchip nada">—</span>'}</td>
+        <td data-l="Criado por">${por ? chipPor(por) : '<span class="pchip nada">—</span>'}</td>
         ${temSt ? `<td data-l="Status">${t.status ? `<span class="tag ${t.status === 'Cancelado' ? 'gray' : t.status === 'Vendido' || t.status === 'Entregue' ? 'green' : 'brand'} sem">${esc(t.status)}</span>` : '<span class="muted">—</span>'}</td>` : ''}
         <td class="small" data-l="Etapa">${sf.atual ? esc(nomeFluxo(sf.atual)) : sf.fl ? '<span class="c-green">Concluído</span>' : '<span class="muted">—</span>'}</td>
         <td class="x">${ic('chevR')}</td></tr>`;
