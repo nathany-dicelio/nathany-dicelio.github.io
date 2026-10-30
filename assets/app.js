@@ -5059,7 +5059,7 @@ function folhaTecnicaHtml(E) {
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="tecnica.medidas">${ic('plus')}Adicionar medida</button>
       ${poms ? `<span class="small muted">Digite o código (ex.: ${esc(Object.keys(poms).slice(0, 1)[0] || 'B6')}) e a descrição vem do guia de medidas da ${esc(cli.nome)}.</span>` : ''}
       <span class="small muted">Em <b>Grad.</b>, coloque quanto muda de um tamanho para o outro (ex.: 1,5 ou 3 4 4 5) e os tamanhos saem do ${esc(piloto)}.</span></div>
-    <div class="ft-minis">${miniTabela(E, 'Medidas de acabamento', 'tecnica.acabamento', grade, '', true)}${miniTabela(E, 'Consumos de aviamentos', 'tecnica.avi_tam', grade, 'dl-avi')}</div>
+    <div class="ft-minis">${miniTabela(E, 'Medidas de acabamento', 'tecnica.acabamento', grade, '', true)}${miniTabela(E, 'Consumos de aviamentos', 'tecnica.avi_tam', grade, 'dl-avi', true)}</div>
   </section></div>
   ${poms ? `<datalist id="dl-pom">${Object.entries(poms).map(([c, n]) => `<option value="${esc(c)}">${esc(n)}</option>`).join('')}</datalist>` : ''}
   <datalist id="dl-avi">${avis.map(a => `<option value="${esc(a)}">`).join('')}</datalist>`;
@@ -5324,7 +5324,7 @@ function ligarFolha(E) {
       const r = E.F.tecnica.medidas[i];
       if (poms && poms[cod] && !r.desc) { r.desc = poms[cod].toUpperCase(); const d = el.querySelector(`[data-k="tecnica.medidas.${i}.desc"]`); if (d) d.value = r.desc; mudouFicha(E, `tecnica.medidas.${i}.desc`); }
     }
-    const gm = (t.dataset.k || '').match(/^(tecnica\.(?:medidas|acabamento)\.\d+)\.(grad|v\.(.+))$/);
+    const gm = (t.dataset.k || '').match(/^(tecnica\.(?:medidas|acabamento|avi_tam)\.\d+)\.(grad|v\.(.+))$/);
     if (gm) {
       const grade = gradeDe(E.F), pil = E.F.tecnica.piloto, base = grade.includes(pil) ? pil : (grade.includes('P') ? 'P' : grade[0]);
       if (gm[2] === 'grad' || gm[3] === base) graduarLinha(getPath(E.F, gm[1]), grade, base).forEach(g => {
