@@ -900,6 +900,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .ft-tab th.n, .ft-tab td.n { text-align: right; }
 .ft-tab input.num { text-align: right; font-variant-numeric: tabular-nums; min-width: 54px; }
 .ft-tab input.cod { font-weight: 700; color: var(--brand); min-width: 54px; }
+.ft-tab input.grad { text-align: center; min-width: 76px; color: var(--mute); }
 .ft-tab .pil { background: var(--brand-50); }
 .ft-tab th.pil { color: var(--brand); }
 .ft-tab td.x { width: 34px; }

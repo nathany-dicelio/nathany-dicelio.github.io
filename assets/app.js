@@ -4977,11 +4977,31 @@ const tituloFolha = (E, nome, cls = '') => {
     <div class="ft-atual">${fi ? `Atualizada em ${fData(fi.atualizado_em)} às ${fHora(fi.atualizado_em)}` : 'Ainda não preenchida'}</div>
   </div>`;
 };
-function miniTabela(E, titulo, key, grade, lista = '') {
+// graduação: quanto a medida muda de um tamanho para o seguinte. Um número vale para todos;
+// vários (ex.: 3 4 4 5 5 5) vão do primeiro tamanho da grade ao último. Parte do tamanho base.
+const DICA_GRAD = 'Graduação: quanto muda de um tamanho para o outro. Um número vale para todos; vários (ex.: 3 4 4 5) vão do primeiro tamanho ao último. Os outros tamanhos saem do tamanho base.';
+const numBR = v => { const x = parseFloat(String(v ?? '').replace(',', '.')); return isNaN(x) ? null : x; };
+function graduarLinha(r, grade, base) {
+  const saltos = String(r.grad || '').trim().split(/[\s/;|]+/).map(numBR).filter(x => x != null);
+  const b = grade.indexOf(base), v0 = numBR((r.v || {})[base]);
+  if (!saltos.length || b < 0 || v0 == null) return [];
+  const salto = i => saltos[Math.min(i, saltos.length - 1)]; // salto entre grade[i] e grade[i + 1]
+  const txt = String(r.v[base]).trim(), m = txt.match(/[.,](\d+)$/);
+  const casas = Math.max(m ? m[1].length : 0, ...saltos.map(s => (String(s).split('.')[1] || '').length));
+  const fmt = n => m ? fmtNum(n, casas) : String(Math.round(n * 100) / 100).replace('.', ',');
+  const vals = { [base]: v0 };
+  for (let j = b + 1; j < grade.length; j++) vals[grade[j]] = vals[grade[j - 1]] + salto(j - 1);
+  for (let j = b - 1; j >= 0; j--) vals[grade[j]] = vals[grade[j + 1]] - salto(j);
+  r.v = r.v || {};
+  return grade.filter(g => g !== base).map(g => { r.v[g] = fmt(vals[g]); return g; });
+}
+
+function miniTabela(E, titulo, key, grade, lista = '', grad = false) {
   const linhas = getPath(E.F, key) || [];
   return `<div class="mini-tab"><div class="fs-sub">${titulo}</div>
-    <table class="ft-tab"><thead><tr><th>Descrição</th>${grade.map(g => `<th class="n">${esc(g)}</th>`).join('')}<th class="no-print"></th></tr></thead>
+    <table class="ft-tab"><thead><tr><th>Descrição</th>${grad ? `<th class="n no-print" title="${DICA_GRAD}">Grad.</th>` : ''}${grade.map(g => `<th class="n">${esc(g)}</th>`).join('')}<th class="no-print"></th></tr></thead>
     <tbody>${linhas.map((r, i) => `<tr><td><input data-k="${key}.${i}.desc" value="${esc(r.desc || '')}"${lista ? ` list="${lista}"` : ''}></td>
+      ${grad ? `<td class="n no-print"><input class="num grad" data-k="${key}.${i}.grad" value="${esc(r.grad || '')}" placeholder="—" title="${DICA_GRAD}" autocomplete="off"></td>` : ''}
       ${grade.map(g => `<td class="n"><input class="num" data-k="${key}.${i}.v.${g}" value="${esc((r.v || {})[g] ?? '')}" inputmode="decimal"></td>`).join('')}
       <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="${key}.${i}" title="Tirar linha">${ic('x')}</button></td></tr>`).join('')}${Array.from({ length: Math.max(0, 8 - linhas.length) }, () => `<tr class="so-print"><td></td>${grade.map(() => '<td></td>').join('')}</tr>`).join('')}</tbody></table>
     <button type="button" class="btn sm add-linha no-print" data-add="${key}">${ic('plus')}Linha</button></div>`;
@@ -5001,6 +5021,7 @@ function folhaTecnicaHtml(E) {
     <td><select data-k="tecnica.medidas.${i}.critica">${opcoes([['Não', 'Não'], ['Sim', 'Sim']], r.critica || 'Não')}</select></td>
     <td class="n"><input class="num" data-k="tecnica.medidas.${i}.tmenos" value="${esc(r.tmenos ?? '')}" inputmode="decimal"></td>
     <td class="n"><input class="num" data-k="tecnica.medidas.${i}.tmais" value="${esc(r.tmais ?? '')}" inputmode="decimal"></td>
+    <td class="n no-print"><input class="num grad" data-k="tecnica.medidas.${i}.grad" value="${esc(r.grad || '')}" placeholder="—" title="${DICA_GRAD}" autocomplete="off"></td>
     ${grade.map(g => `<td class="n${g === piloto ? ' pil' : ''}"><input class="num" data-k="tecnica.medidas.${i}.v.${g}" value="${esc((r.v || {})[g] ?? '')}" inputmode="decimal"></td>`).join('')}
     <td class="x no-print"><button type="button" class="icon-btn danger" data-rm="tecnica.medidas.${i}" title="Tirar medida">${ic('x')}</button></td></tr>`;
   return `<div class="pg1">${tituloFolha(E, 'Ficha técnica do produto')}
@@ -5033,11 +5054,12 @@ function folhaTecnicaHtml(E) {
     <div class="ft-bloco ft-b-cotas"><div class="fs-sub no-print">Desenho das cotas</div>${slotHtml('tecnica.img_cotas', t.img_cotas, 'Desenho com as cotas', 'cotas', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
     <div class="ft-bloco ft-b-tab"><div class="fs-sub">Tabela</div>${slotHtml('tecnica.img_tabela', t.img_tabela, 'Foto ou print da tabela de medidas', 'livre', 'clique para escolher ou cole a imagem (Ctrl+V)')}</div>
     <div class="ft-bloco ft-b-dig"><div class="fs-sub">Medidas digitadas <span class="muted no-print" style="text-transform:none;letter-spacing:0;font-weight:500">· opcional, se preferir digitar em vez da foto</span></div></div>
-    <div class="tbl-wrap"><table class="ft-tab ft-med"><thead><tr><th>Dim</th><th>Descrição</th><th>Descrição (inglês)</th><th>Tipo de cota</th><th>Crítica</th><th class="n">Tol −</th><th class="n">Tol +</th>${grade.map(g => `<th class="n${g === piloto ? ' pil' : ''}">${esc(g)}</th>`).join('')}<th class="no-print"></th></tr></thead>
+    <div class="tbl-wrap"><table class="ft-tab ft-med"><thead><tr><th>Dim</th><th>Descrição</th><th>Descrição (inglês)</th><th>Tipo de cota</th><th>Crítica</th><th class="n">Tol −</th><th class="n">Tol +</th><th class="n no-print" title="${DICA_GRAD}">Grad.</th>${grade.map(g => `<th class="n${g === piloto ? ' pil' : ''}">${esc(g)}</th>`).join('')}<th class="no-print"></th></tr></thead>
       <tbody>${(t.medidas || []).map(linhaMed).join('')}</tbody></table></div>
     <div class="fs-pe no-print"><button type="button" class="btn sm" data-add="tecnica.medidas">${ic('plus')}Adicionar medida</button>
-      ${poms ? `<span class="small muted">Digite o código (ex.: ${esc(Object.keys(poms).slice(0, 1)[0] || 'B6')}) e a descrição vem do guia de medidas da ${esc(cli.nome)}.</span>` : ''}</div>
-    <div class="ft-minis">${miniTabela(E, 'Medidas de acabamento', 'tecnica.acabamento', grade)}${miniTabela(E, 'Consumos de aviamentos', 'tecnica.avi_tam', grade, 'dl-avi')}</div>
+      ${poms ? `<span class="small muted">Digite o código (ex.: ${esc(Object.keys(poms).slice(0, 1)[0] || 'B6')}) e a descrição vem do guia de medidas da ${esc(cli.nome)}.</span>` : ''}
+      <span class="small muted">Em <b>Grad.</b>, coloque quanto muda de um tamanho para o outro (ex.: 1,5 ou 3 4 4 5) e os tamanhos saem do ${esc(piloto)}.</span></div>
+    <div class="ft-minis">${miniTabela(E, 'Medidas de acabamento', 'tecnica.acabamento', grade, '', true)}${miniTabela(E, 'Consumos de aviamentos', 'tecnica.avi_tam', grade, 'dl-avi')}</div>
   </section></div>
   ${poms ? `<datalist id="dl-pom">${Object.entries(poms).map(([c, n]) => `<option value="${esc(c)}">${esc(n)}</option>`).join('')}</datalist>` : ''}
   <datalist id="dl-avi">${avis.map(a => `<option value="${esc(a)}">`).join('')}</datalist>`;
@@ -5301,6 +5323,15 @@ function ligarFolha(E) {
       const poms = pomsDoCliente(E.pc.cliente_id), i = t.dataset.pom, cod = t.value.trim().toUpperCase();
       const r = E.F.tecnica.medidas[i];
       if (poms && poms[cod] && !r.desc) { r.desc = poms[cod].toUpperCase(); const d = el.querySelector(`[data-k="tecnica.medidas.${i}.desc"]`); if (d) d.value = r.desc; mudouFicha(E, `tecnica.medidas.${i}.desc`); }
+    }
+    const gm = (t.dataset.k || '').match(/^(tecnica\.(?:medidas|acabamento)\.\d+)\.(grad|v\.(.+))$/);
+    if (gm) {
+      const grade = gradeDe(E.F), pil = E.F.tecnica.piloto, base = grade.includes(pil) ? pil : (grade.includes('P') ? 'P' : grade[0]);
+      if (gm[2] === 'grad' || gm[3] === base) graduarLinha(getPath(E.F, gm[1]), grade, base).forEach(g => {
+        const k = `${gm[1]}.v.${g}`;
+        el.querySelectorAll(`[data-k="${k}"]`).forEach(o => { o.value = getPath(E.F, k); });
+        mudouFicha(E, k);
+      });
     }
     if (t.dataset.k === 'tecnica.piloto') desenharFolha(E);
     if (t.dataset.grade !== undefined) {
